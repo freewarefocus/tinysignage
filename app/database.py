@@ -51,10 +51,10 @@ def _run_migrations() -> None:
         # Existing v3 database — stamp it at the initial revision
         log.info("Existing database detected — stamping Alembic revision")
         command.stamp(cfg, "cba88a050e57")
-    else:
-        # Fresh database or already Alembic-managed — run upgrade
-        command.upgrade(cfg, "head")
-        log.info("Alembic migrations applied")
+
+    # Always run upgrade to apply any pending migrations
+    command.upgrade(cfg, "head")
+    log.info("Alembic migrations applied")
 
 
 async def get_session():

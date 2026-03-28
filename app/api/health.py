@@ -33,7 +33,7 @@ async def player_heartbeat(
     if not device:
         return {"error": "device not found"}
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     device.last_heartbeat = now
     device.last_seen = now
     device.status = "online"
@@ -48,7 +48,9 @@ async def player_heartbeat(
     player_time_str = body.get("player_time")
     if player_time_str:
         try:
-            player_time = datetime.fromisoformat(player_time_str.replace("Z", "+00:00"))
+            player_time = datetime.fromisoformat(
+                player_time_str.replace("Z", "+00:00")
+            ).replace(tzinfo=None)
             drift = (now - player_time).total_seconds()
             device.clock_drift_seconds = round(drift, 1)
         except (ValueError, TypeError):

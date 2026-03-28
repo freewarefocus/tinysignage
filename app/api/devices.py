@@ -204,8 +204,8 @@ async def get_device_playlist(
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
 
-    # Update last_seen
-    device.last_seen = datetime.now(timezone.utc)
+    # Update last_seen (strip tzinfo — SQLite stores naive datetimes)
+    device.last_seen = datetime.now(timezone.utc).replace(tzinfo=None)
     device.status = "online"
     await session.commit()
 
