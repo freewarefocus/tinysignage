@@ -27,54 +27,24 @@ Upload images and videos through a web-based CMS, arrange them into a playlist, 
 
 ## Quick start
 
-### Option 1: Python (any OS)
-
 ```bash
 git clone https://github.com/freewarefocus/tinysignage.git
 cd tinysignage
-
-python -m venv venv
-source venv/bin/activate        # Linux / macOS
-# venv\Scripts\activate         # Windows
-
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
 
-Open `http://localhost:8080/setup` to name your device, then `http://localhost:8080/cms` to manage content and `http://localhost:8080/player` for the display.
+Then pick your path:
 
-### Option 2: Docker
+| Method | Command | Guide |
+|--------|---------|-------|
+| **Docker** | `docker compose up -d` | — |
+| **Python** | `pip install -r requirements.txt` then `uvicorn app.main:app --host 0.0.0.0 --port 8080` | — |
+| **Raspberry Pi** | `bash install/install.sh` | [Full guide](docs/install-raspberry-pi.md) |
+| **Windows** | Same as Python, see guide for details | [Full guide](docs/install-windows.md) |
+| **macOS** | Same as Python, see guide for details | [Full guide](docs/install-macos.md) |
 
-```bash
-git clone https://github.com/freewarefocus/tinysignage.git
-cd tinysignage
-docker compose up -d
-```
+Open `http://localhost:8080/setup` to name your device, then `/cms` to manage content and `/player` for the display.
 
-Same URLs. Data lives in `./media` and `./db` next to the compose file — visible, portable, easy to back up. Uninstall is `docker compose down` and deleting the folder.
-
-### Option 3: Raspberry Pi (dedicated display)
-
-```bash
-git clone https://github.com/freewarefocus/tinysignage.git
-cd tinysignage
-bash install/install.sh
-```
-
-This runs two shell scripts — both readable in `install/` before you execute them:
-
-| Script | What it does |
-|--------|-------------|
-| `install/01-system.sh` | Installs apt packages, creates a dedicated `tinysignage` service user, enables mDNS (`tinysignage.local`), installs systemd units, sets GPU memory on Pi |
-| `install/02-app.sh` | Creates a Python venv, installs pip dependencies, creates directories, generates a random `SECRET_KEY`, initializes the database |
-
-After install:
-
-```bash
-sudo systemctl start signage-app signage-player
-```
-
-The CMS is at `http://tinysignage.local:8080/cms`. The player launches in kiosk mode automatically.
+Docker data lives in `./media` and `./db` next to the compose file — visible, portable, easy to back up.
 
 ---
 
@@ -128,7 +98,7 @@ The final image contains Python, the pip dependencies above, `curl` (for the hea
 
 ### What the Pi installer adds
 
-The install scripts are in `install/` and do exactly what they say in their comments. System packages installed via apt: `python3`, `python3-venv`, `chromium-browser`, `ffmpeg`, `avahi-daemon`, `curl`. A dedicated `tinysignage` service user is created — no application code runs as root. Systemd units include security hardening: `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, and a 512MB memory ceiling.
+The install scripts are in `install/` and do exactly what they say in their comments. See the [Raspberry Pi install guide](docs/install-raspberry-pi.md) for details.
 
 ---
 
@@ -219,7 +189,7 @@ TinySignage does not sell hardware and does not require proprietary devices. It 
 | 32GB SD card | ~$9 |
 | **Total** | **~$100** |
 
-Also works on: any x86 mini PC, retired office PC, Mac, Linux server, or a Docker host. If it can run Python 3.11+ or Docker, it can run TinySignage.
+Also works on: any x86 mini PC, retired office PC, Mac, Linux server, or a Docker host. If it can run Python and a browser, or Docker, it can run TinySignage.
 
 ---
 
