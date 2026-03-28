@@ -79,6 +79,8 @@ class Device(Base):
     player_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
     player_timezone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     clock_drift_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    registration_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    registration_expires: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )
@@ -109,6 +111,28 @@ class Playlist(Base):
         order_by="PlaylistItem.order"
     )
     devices: Mapped[list["Device"]] = relationship(back_populates="playlist")
+
+
+class ApiToken(Base):
+    __tablename__ = "api_tokens"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # "admin" or "device"
+    device_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("devices.id"), nullable=True
+    )
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+    device: Mapped["Device | None"] = relationship()
 
 
 class PlaylistItem(Base):

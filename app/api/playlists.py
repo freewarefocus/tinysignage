@@ -5,8 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.auth import require_admin, require_token
 from app.database import get_session
-from app.models import Asset, Playlist, PlaylistItem
+from app.models import ApiToken, Asset, Playlist, PlaylistItem
 
 router = APIRouter()
 
@@ -46,7 +47,10 @@ def _item_to_dict(item: PlaylistItem) -> dict:
 
 
 @router.get("/playlists")
-async def list_playlists(session: AsyncSession = Depends(get_session)):
+async def list_playlists(
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
     result = await session.execute(
         select(Playlist).options(
             selectinload(Playlist.items).selectinload(PlaylistItem.asset)
@@ -68,7 +72,11 @@ async def list_playlists(session: AsyncSession = Depends(get_session)):
 
 
 @router.post("/playlists", status_code=201)
-async def create_playlist(body: dict, session: AsyncSession = Depends(get_session)):
+async def create_playlist(
+    body: dict,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
     name = body.get("name")
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
@@ -87,7 +95,11 @@ async def create_playlist(body: dict, session: AsyncSession = Depends(get_sessio
 
 
 @router.get("/playlists/{playlist_id}")
-async def get_playlist(playlist_id: str, session: AsyncSession = Depends(get_session)):
+async def get_playlist(
+    playlist_id: str,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
     result = await session.execute(
         select(Playlist)
         .where(Playlist.id == playlist_id)
@@ -111,7 +123,10 @@ async def get_playlist(playlist_id: str, session: AsyncSession = Depends(get_ses
 
 @router.patch("/playlists/{playlist_id}")
 async def update_playlist(
-    playlist_id: str, body: dict, session: AsyncSession = Depends(get_session)
+    playlist_id: str,
+    body: dict,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
 ):
     playlist = await session.get(Playlist, playlist_id)
     if not playlist:
@@ -124,7 +139,11 @@ async def update_playlist(
 
 
 @router.delete("/playlists/{playlist_id}")
-async def delete_playlist(playlist_id: str, session: AsyncSession = Depends(get_session)):
+async def delete_playlist(
+    playlist_id: str,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
     playlist = await session.get(Playlist, playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
@@ -136,7 +155,11 @@ async def delete_playlist(playlist_id: str, session: AsyncSession = Depends(get_
 
 
 @router.get("/playlists/{playlist_id}/hash")
-async def get_playlist_hash(playlist_id: str, session: AsyncSession = Depends(get_session)):
+async def get_playlist_hash(
+    playlist_id: str,
+    _token: ApiToken = Depends(require_token),
+    session: AsyncSession = Depends(get_session),
+):
     result = await session.execute(
         select(Playlist)
         .where(Playlist.id == playlist_id)
@@ -152,7 +175,10 @@ async def get_playlist_hash(playlist_id: str, session: AsyncSession = Depends(ge
 
 @router.post("/playlists/{playlist_id}/items", status_code=201)
 async def add_item_to_playlist(
-    playlist_id: str, body: dict, session: AsyncSession = Depends(get_session)
+    playlist_id: str,
+    body: dict,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
 ):
     playlist = await session.get(Playlist, playlist_id)
     if not playlist:
@@ -191,7 +217,10 @@ async def add_item_to_playlist(
 
 @router.delete("/playlists/{playlist_id}/items/{item_id}")
 async def remove_item_from_playlist(
-    playlist_id: str, item_id: str, session: AsyncSession = Depends(get_session)
+    playlist_id: str,
+    item_id: str,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
         select(PlaylistItem).where(
@@ -209,7 +238,10 @@ async def remove_item_from_playlist(
 
 @router.post("/playlists/{playlist_id}/reorder")
 async def reorder_playlist_items(
-    playlist_id: str, body: dict, session: AsyncSession = Depends(get_session)
+    playlist_id: str,
+    body: dict,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
 ):
     """Reorder items. Body: {"item_ids": ["id1", "id2", ...]} in desired order."""
     item_ids = body.get("item_ids", [])

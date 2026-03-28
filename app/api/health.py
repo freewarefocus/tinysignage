@@ -4,16 +4,24 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import require_admin, require_device
 from app.database import get_session
-from app.models import Device
+from app.models import ApiToken, Device
 
 router = APIRouter()
+
+
+@router.get("/health")
+async def health_check():
+    """Public health check — no auth required."""
+    return {"status": "ok"}
 
 
 @router.post("/player/heartbeat")
 async def player_heartbeat(
     body: dict,
     request: Request,
+    token: ApiToken = Depends(require_device),
     session: AsyncSession = Depends(get_session),
 ):
     """Receive heartbeat from a player device."""
@@ -51,7 +59,10 @@ async def player_heartbeat(
 
 
 @router.get("/health/dashboard")
-async def health_dashboard(session: AsyncSession = Depends(get_session)):
+async def health_dashboard(
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
     """Return per-device health summary."""
     result = await session.execute(select(Device))
     devices = result.scalars().all()

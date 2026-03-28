@@ -14,6 +14,18 @@
             <h1>TinySignage</h1>
             <p>Waiting for content...</p>
         </div>
+        <div id="pairing-overlay" class="hidden">
+            <div class="pairing-card">
+                <h1>Enter Pairing Code</h1>
+                <p>Get a code from your TinySignage admin to register this display.</p>
+                <form id="pairing-form">
+                    <input type="text" id="pairing-code-input" maxlength="6" autocomplete="off"
+                           placeholder="ABC123" spellcheck="false">
+                    <button type="submit">Pair Display</button>
+                    <div id="pairing-error" class="hidden"></div>
+                </form>
+            </div>
+        </div>
         <div id="status-indicator" class="status-online" title="Connected"></div>
     </div>
     <script src="/static/player.js"></script>

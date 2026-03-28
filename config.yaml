@@ -11,4 +11,7 @@ display:
 player:
   browser: auto
   kiosk: true
+cors:
+  allowed_origins:
+  - '*'
 device_id: 9659bdba-1b72-408d-9cad-21716ba4c285

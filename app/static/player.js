@@ -14,7 +14,15 @@
     const HEARTBEAT_INTERVAL = 60000; // 60s between heartbeats
     const MAX_VIDEO_DURATION = 300;   // 5 min cap for videos with duration=0
     const PRELOAD_AHEAD = 1;          // Number of assets to preload ahead
-    const PLAYER_VERSION = '0.2.0';
+    const PLAYER_VERSION = '0.4.0';
+
+    // Base URL for split deployment — read from <meta name="server-url">
+    const serverMeta = document.querySelector('meta[name="server-url"]');
+    const baseUrl = (serverMeta ? serverMeta.content : '').replace(/\/+$/, '');
+
+    function apiUrl(path) {
+        return baseUrl + path;
+    }
 
     // --- State ---
     let currentLayer = 'a';
@@ -27,12 +35,148 @@
     let playbackTimer = null;
     let online = false;
     let deviceId = '';
+    let deviceToken = '';
     let startTime = Date.now();
     let heartbeatTimer = null;
 
+    // --- Auth ---
+    function authHeaders() {
+        const headers = { 'Content-Type': 'application/json' };
+        if (deviceToken) {
+            headers['Authorization'] = 'Bearer ' + deviceToken;
+        }
+        return headers;
+    }
+
+    function authFetch(url, options = {}) {
+        if (deviceToken) {
+            options.headers = options.headers || {};
+            options.headers['Authorization'] = 'Bearer ' + deviceToken;
+        }
+        return fetch(url, options);
+    }
+
+    function storeCredentials(id, token) {
+        deviceId = id;
+        deviceToken = token;
+        localStorage.setItem('tinysignage_device_id', id);
+        localStorage.setItem('tinysignage_device_token', token);
+    }
+
+    function cleanUrl() {
+        const url = new URL(window.location);
+        url.search = '';
+        history.replaceState(null, '', url);
+    }
+
+    // --- Pairing ---
+    async function pairWithCode(code) {
+        const resp = await fetch(apiUrl('/api/devices/register'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: code }),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || 'Pairing failed');
+        }
+        return await resp.json();
+    }
+
+    function showPairingOverlay() {
+        const overlay = document.getElementById('pairing-overlay');
+        overlay.classList.remove('hidden');
+
+        const form = document.getElementById('pairing-form');
+        const input = document.getElementById('pairing-code-input');
+        const errorEl = document.getElementById('pairing-error');
+
+        input.focus();
+
+        // Force uppercase as user types
+        input.addEventListener('input', () => {
+            input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const code = input.value.trim();
+            if (!code) return;
+
+            errorEl.classList.add('hidden');
+            const btn = form.querySelector('button');
+            btn.disabled = true;
+            btn.textContent = 'Pairing...';
+
+            try {
+                const data = await pairWithCode(code);
+                storeCredentials(data.device_id, data.token);
+                cleanUrl();
+                overlay.classList.add('hidden');
+                startPlayer();
+            } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.classList.remove('hidden');
+                btn.disabled = false;
+                btn.textContent = 'Pair Display';
+            }
+        });
+    }
+
+    function hidePairingOverlay() {
+        document.getElementById('pairing-overlay').classList.add('hidden');
+    }
+
     // --- Startup ---
     async function init() {
-        deviceId = await fetchDeviceId();
+        const params = new URLSearchParams(window.location.search);
+
+        // Priority a: ?token=<token>&device=<id> — fully provisioned
+        const urlToken = params.get('token');
+        const urlDevice = params.get('device');
+        if (urlToken && urlDevice) {
+            storeCredentials(urlDevice, urlToken);
+            cleanUrl();
+            startPlayer();
+            return;
+        }
+
+        // Priority b: ?pair=<CODE> — pairing mode
+        const pairCode = params.get('pair');
+        if (pairCode) {
+            try {
+                const data = await pairWithCode(pairCode);
+                storeCredentials(data.device_id, data.token);
+                cleanUrl();
+                startPlayer();
+            } catch (err) {
+                // Show overlay with error pre-filled
+                showPairingOverlay();
+                const errorEl = document.getElementById('pairing-error');
+                errorEl.textContent = err.message;
+                errorEl.classList.remove('hidden');
+                const input = document.getElementById('pairing-code-input');
+                input.value = pairCode.toUpperCase();
+            }
+            return;
+        }
+
+        // Priority c: localStorage fallback
+        const storedId = localStorage.getItem('tinysignage_device_id');
+        const storedToken = localStorage.getItem('tinysignage_device_token');
+        if (storedId && storedToken) {
+            deviceId = storedId;
+            deviceToken = storedToken;
+            startPlayer();
+            return;
+        }
+
+        // Priority d: No identity — show pairing prompt
+        showPairingOverlay();
+    }
+
+    function startPlayer() {
+        hidePairingOverlay();
         loadCachedPlaylist();
         poll();                       // First poll immediately
         schedulePoll();
@@ -42,18 +186,6 @@
             currentIndex = 0;
             playCurrentAsset();
         }
-    }
-
-    async function fetchDeviceId() {
-        try {
-            const resp = await fetch('/api/devices');
-            if (resp.ok) {
-                const devices = await resp.json();
-                if (devices.length > 0) return devices[0].id;
-            }
-        } catch (e) { /* offline — will retry on next poll */ }
-        // Fall back to cached device ID
-        return localStorage.getItem('tinysignage_device_id') || '';
     }
 
     // --- Cache ---
@@ -75,9 +207,6 @@
     function cachePlaylist(data) {
         try {
             localStorage.setItem('tinysignage_playlist', JSON.stringify(data));
-            if (deviceId) {
-                localStorage.setItem('tinysignage_device_id', deviceId);
-            }
         } catch (e) {
             console.warn('[TinySignage] Failed to cache playlist:', e);
         }
@@ -94,15 +223,12 @@
 
     async function poll() {
         if (!deviceId) {
-            deviceId = await fetchDeviceId();
-            if (!deviceId) {
-                setOnlineStatus(false);
-                return;
-            }
+            setOnlineStatus(false);
+            return;
         }
 
         try {
-            const resp = await fetch(`/api/devices/${deviceId}/playlist`);
+            const resp = await authFetch(apiUrl(`/api/devices/${deviceId}/playlist`));
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
             setOnlineStatus(true);
@@ -212,7 +338,7 @@
                 console.warn('[TinySignage] Image load failed:', asset.uri);
                 setTimeout(() => doTransition(nextLayer, currentLayerEl, nextLayerId), 300);
             };
-            element.src = `/media/${asset.uri}`;
+            element.src = `${baseUrl}/media/${asset.uri}`;
         } else if (asset.asset_type === 'video') {
             element = document.createElement('video');
             element.autoplay = true;
@@ -233,7 +359,7 @@
                 advance();
             };
 
-            element.src = `/media/${asset.uri}`;
+            element.src = `${baseUrl}/media/${asset.uri}`;
         } else if (asset.asset_type === 'url') {
             element = document.createElement('iframe');
             element.onload = () => {
@@ -257,7 +383,7 @@
 
             if (asset.asset_type === 'image') {
                 const img = new Image();
-                img.src = `/media/${asset.uri}`;
+                img.src = `${baseUrl}/media/${asset.uri}`;
             }
             // Videos and iframes will be loaded on-demand
         }
@@ -359,9 +485,9 @@
     async function sendHeartbeat() {
         if (!deviceId) return;
         try {
-            await fetch('/api/player/heartbeat', {
+            await authFetch(apiUrl('/api/player/heartbeat'), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({
                     device_id: deviceId,
                     player_time: new Date().toISOString(),

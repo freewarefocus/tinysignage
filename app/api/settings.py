@@ -1,14 +1,18 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import require_admin
 from app.database import get_session
-from app.models import Settings
+from app.models import ApiToken, Settings
 
 router = APIRouter()
 
 
 @router.get("/settings")
-async def get_settings(session: AsyncSession = Depends(get_session)):
+async def get_settings(
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
     settings = await session.get(Settings, 1)
     return {
         "transition_duration": settings.transition_duration,
@@ -19,7 +23,11 @@ async def get_settings(session: AsyncSession = Depends(get_session)):
 
 
 @router.patch("/settings")
-async def update_settings(data: dict, session: AsyncSession = Depends(get_session)):
+async def update_settings(
+    data: dict,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
     settings = await session.get(Settings, 1)
     allowed = {"transition_duration", "transition_type", "default_duration", "shuffle"}
     for key, value in data.items():
@@ -30,7 +38,7 @@ async def update_settings(data: dict, session: AsyncSession = Depends(get_sessio
 
 
 @router.get("/status")
-async def get_status():
+async def get_status(_admin: ApiToken = Depends(require_admin)):
     from app.scheduler import scheduler
 
     return {
@@ -41,7 +49,7 @@ async def get_status():
 
 
 @router.post("/control/next")
-async def control_next():
+async def control_next(_admin: ApiToken = Depends(require_admin)):
     from app.scheduler import scheduler
 
     scheduler.skip_to_next()
@@ -49,7 +57,7 @@ async def control_next():
 
 
 @router.post("/control/previous")
-async def control_previous():
+async def control_previous(_admin: ApiToken = Depends(require_admin)):
     from app.scheduler import scheduler
 
     scheduler.skip_to_previous()
@@ -57,7 +65,7 @@ async def control_previous():
 
 
 @router.post("/control/asset/{asset_id}")
-async def control_jump(asset_id: str):
+async def control_jump(asset_id: str, _admin: ApiToken = Depends(require_admin)):
     from app.scheduler import scheduler
 
     scheduler.jump_to(asset_id)

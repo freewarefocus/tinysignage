@@ -4,7 +4,8 @@ from pathlib import Path
 
 import yaml
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.assets import router as assets_router
@@ -13,6 +14,7 @@ from app.api.health import router as health_router
 from app.api.playlists import router as playlists_router
 from app.api.settings import router as settings_router
 from app.api.setup import router as setup_router
+from app.api.tokens import router as tokens_router
 from app.database import engine, init_db
 from app.scheduler import scheduler
 from app.watchdog import watchdog
@@ -24,9 +26,11 @@ logging.basicConfig(
 )
 log = logging.getLogger("tinysignage")
 
-_config = yaml.safe_load(Path("config.yaml").read_text())
+_config_path = Path("config.yaml")
+_config = yaml.safe_load(_config_path.read_text())
 _media_dir = Path(_config["storage"]["media_dir"])
 _cms_dir = Path("app/static/cms")
+_player_html = Path("app/static/player.html")
 
 
 @asynccontextmanager
@@ -44,6 +48,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="TinySignage", lifespan=lifespan)
+
+# CORS for split deployment (player on a different machine than CMS)
+_cors_origins = _config.get("cors", {}).get("allowed_origins", ["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.middleware("http")
@@ -67,6 +81,7 @@ app.include_router(playlists_router, prefix="/api")
 app.include_router(devices_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(tokens_router, prefix="/api")
 app.include_router(setup_router, prefix="/api")
 # Also mount setup routes without /api prefix for the wizard UI
 app.include_router(setup_router)
@@ -74,7 +89,13 @@ app.include_router(setup_router)
 
 @app.get("/player")
 async def player_page():
-    return FileResponse(Path("app/static/player.html"))
+    config = yaml.safe_load(_config_path.read_text())
+    server_url = config.get("server_url", "")
+    html = _player_html.read_text(encoding="utf-8")
+    # Inject server-url meta tag after <head> so player.js can read it
+    meta_tag = f'<meta name="server-url" content="{server_url}">'
+    html = html.replace("<head>", f"<head>\n    {meta_tag}", 1)
+    return HTMLResponse(html)
 
 
 @app.get("/admin")

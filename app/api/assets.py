@@ -7,9 +7,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import require_admin
 from app.database import get_session
 from app.media import compute_content_hash, generate_thumbnail
-from app.models import Asset, Playlist, PlaylistItem
+from app.models import ApiToken, Asset, Playlist, PlaylistItem
 
 _config = yaml.safe_load(Path("config.yaml").read_text())
 _media_dir = Path(_config["storage"]["media_dir"])
@@ -19,7 +20,10 @@ router = APIRouter()
 
 
 @router.get("/assets")
-async def list_assets(session: AsyncSession = Depends(get_session)):
+async def list_assets(
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
     result = await session.execute(select(Asset).order_by(Asset.play_order))
     assets = result.scalars().all()
     return [_asset_to_dict(a) for a in assets]
@@ -32,6 +36,7 @@ async def create_asset(
     asset_type: str = Form(None),
     url: str = Form(None),
     duration: int = Form(None),
+    _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
     # Determine next play_order
@@ -118,7 +123,11 @@ async def create_asset(
 
 
 @router.get("/assets/{asset_id}")
-async def get_asset(asset_id: str, session: AsyncSession = Depends(get_session)):
+async def get_asset(
+    asset_id: str,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
     asset = await session.get(Asset, asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
@@ -127,7 +136,9 @@ async def get_asset(asset_id: str, session: AsyncSession = Depends(get_session))
 
 @router.get("/assets/{asset_id}/thumbnail")
 async def get_asset_thumbnail(
-    asset_id: str, session: AsyncSession = Depends(get_session)
+    asset_id: str,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
 ):
     asset = await session.get(Asset, asset_id)
     if not asset:
@@ -144,7 +155,10 @@ async def get_asset_thumbnail(
 
 @router.patch("/assets/{asset_id}")
 async def update_asset(
-    asset_id: str, body: dict, session: AsyncSession = Depends(get_session)
+    asset_id: str,
+    body: dict,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
 ):
     asset = await session.get(Asset, asset_id)
     if not asset:
@@ -164,6 +178,7 @@ async def update_asset(
 async def replace_asset(
     asset_id: str,
     file: UploadFile = File(...),
+    _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
     """Replace the file for an existing asset. Keeps metadata, playlist slot, and order."""
@@ -213,7 +228,9 @@ async def replace_asset(
 
 @router.post("/assets/{asset_id}/duplicate", status_code=201)
 async def duplicate_asset(
-    asset_id: str, session: AsyncSession = Depends(get_session)
+    asset_id: str,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
 ):
     """Duplicate an asset. Copies the file, creates a new asset and playlist item."""
     asset = await session.get(Asset, asset_id)
@@ -280,7 +297,11 @@ async def duplicate_asset(
 
 
 @router.delete("/assets/{asset_id}")
-async def delete_asset(asset_id: str, session: AsyncSession = Depends(get_session)):
+async def delete_asset(
+    asset_id: str,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
     asset = await session.get(Asset, asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
@@ -301,7 +322,9 @@ async def delete_asset(asset_id: str, session: AsyncSession = Depends(get_sessio
 
 @router.post("/assets/reorder")
 async def reorder_assets(
-    items: list[dict], session: AsyncSession = Depends(get_session)
+    items: list[dict],
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
 ):
     for item in items:
         asset = await session.get(Asset, item["id"])
