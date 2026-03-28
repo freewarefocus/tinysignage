@@ -10,8 +10,10 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.assets import router as assets_router
 from app.api.devices import router as devices_router
+from app.api.groups import router as groups_router
 from app.api.health import router as health_router
 from app.api.playlists import router as playlists_router
+from app.api.schedules import router as schedules_router
 from app.api.settings import router as settings_router
 from app.api.setup import router as setup_router
 from app.api.tokens import router as tokens_router
@@ -79,6 +81,8 @@ if _cms_dir.exists():
 app.include_router(assets_router, prefix="/api")
 app.include_router(playlists_router, prefix="/api")
 app.include_router(devices_router, prefix="/api")
+app.include_router(groups_router, prefix="/api")
+app.include_router(schedules_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
 app.include_router(tokens_router, prefix="/api")

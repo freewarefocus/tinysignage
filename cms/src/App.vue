@@ -9,17 +9,25 @@
           <i class="pi pi-images"></i>
           <span>Media</span>
         </router-link>
-        <router-link to="/playlist" class="nav-item" active-class="active">
+        <router-link to="/playlists" class="nav-item" active-class="active">
           <i class="pi pi-list"></i>
-          <span>Playlist</span>
+          <span>Playlists</span>
+        </router-link>
+        <router-link to="/groups" class="nav-item" active-class="active">
+          <i class="pi pi-sitemap"></i>
+          <span>Groups</span>
+        </router-link>
+        <router-link to="/schedules" class="nav-item" active-class="active">
+          <i class="pi pi-calendar"></i>
+          <span>Schedules</span>
         </router-link>
         <router-link to="/settings" class="nav-item" active-class="active">
           <i class="pi pi-cog"></i>
           <span>Settings</span>
         </router-link>
-        <router-link to="/device" class="nav-item" active-class="active">
+        <router-link to="/devices" class="nav-item" active-class="active">
           <i class="pi pi-desktop"></i>
-          <span>Device</span>
+          <span>Devices</span>
         </router-link>
       </nav>
       <div class="sidebar-footer">

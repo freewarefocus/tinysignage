@@ -57,18 +57,23 @@ async def list_playlists(
         )
     )
     playlists = result.scalars().all()
-    return [
-        {
-            "id": p.id,
-            "name": p.name,
-            "is_default": p.is_default,
-            "item_count": len(p.items),
-            "hash": _playlist_hash(p.items),
-            "created_at": p.created_at.isoformat() if p.created_at else None,
-            "updated_at": p.updated_at.isoformat() if p.updated_at else None,
-        }
-        for p in playlists
-    ]
+    return [_playlist_summary(p) for p in playlists]
+
+
+def _playlist_summary(p: Playlist) -> dict:
+    return {
+        "id": p.id,
+        "name": p.name,
+        "is_default": p.is_default,
+        "item_count": len(p.items),
+        "hash": _playlist_hash(p.items),
+        "transition_type": p.transition_type,
+        "transition_duration": p.transition_duration,
+        "default_duration": p.default_duration,
+        "shuffle": p.shuffle,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+    }
 
 
 @router.post("/playlists", status_code=201)
@@ -116,6 +121,10 @@ async def get_playlist(
         "is_default": playlist.is_default,
         "hash": _playlist_hash(playlist.items),
         "items": [_item_to_dict(item) for item in playlist.items],
+        "transition_type": playlist.transition_type,
+        "transition_duration": playlist.transition_duration,
+        "default_duration": playlist.default_duration,
+        "shuffle": playlist.shuffle,
         "created_at": playlist.created_at.isoformat() if playlist.created_at else None,
         "updated_at": playlist.updated_at.isoformat() if playlist.updated_at else None,
     }
@@ -131,11 +140,21 @@ async def update_playlist(
     playlist = await session.get(Playlist, playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
-    if "name" in body:
-        playlist.name = body["name"]
+    allowed = {"name", "transition_type", "transition_duration", "default_duration", "shuffle"}
+    for key, value in body.items():
+        if key in allowed:
+            setattr(playlist, key, value)
     await session.commit()
     await session.refresh(playlist)
-    return {"id": playlist.id, "name": playlist.name, "is_default": playlist.is_default}
+    return {
+        "id": playlist.id,
+        "name": playlist.name,
+        "is_default": playlist.is_default,
+        "transition_type": playlist.transition_type,
+        "transition_duration": playlist.transition_duration,
+        "default_duration": playlist.default_duration,
+        "shuffle": playlist.shuffle,
+    }
 
 
 @router.delete("/playlists/{playlist_id}")

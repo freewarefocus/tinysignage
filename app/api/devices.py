@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.playlists import _item_to_dict, _playlist_hash
+from app.api.schedules import evaluate_schedule_for_device
 from app.auth import (
     generate_pairing_code,
     generate_token,
@@ -208,12 +209,18 @@ async def get_device_playlist(
     device.status = "online"
     await session.commit()
 
-    if not device.playlist_id:
+    # Evaluate schedules: highest-priority active schedule wins,
+    # falls back to device's directly assigned playlist
+    effective_playlist_id = await evaluate_schedule_for_device(device_id, session)
+    if not effective_playlist_id:
+        effective_playlist_id = device.playlist_id
+
+    if not effective_playlist_id:
         return {"hash": "", "items": [], "settings": _get_default_settings()}
 
     result = await session.execute(
         select(Playlist)
-        .where(Playlist.id == device.playlist_id)
+        .where(Playlist.id == effective_playlist_id)
         .options(
             selectinload(Playlist.items).selectinload(PlaylistItem.asset)
         )
@@ -236,18 +243,25 @@ async def get_device_playlist(
             continue
         active_items.append(item)
 
-    # Get settings for the response
+    # Get settings: per-playlist overrides take precedence over global
     from app.models import Settings
     settings = await session.get(Settings, 1)
+
+    def _resolve(field: str, default):
+        """Per-playlist override wins, then global, then hardcoded default."""
+        pl_val = getattr(playlist, field, None)
+        if pl_val is not None:
+            return pl_val
+        return getattr(settings, field, default) if settings else default
 
     return {
         "hash": _playlist_hash(active_items),
         "items": [_item_to_dict(item) for item in active_items],
         "settings": {
-            "transition_duration": settings.transition_duration if settings else 1.0,
-            "transition_type": settings.transition_type if settings else "fade",
-            "default_duration": settings.default_duration if settings else 10,
-            "shuffle": settings.shuffle if settings else False,
+            "transition_duration": _resolve("transition_duration", 1.0),
+            "transition_type": _resolve("transition_type", "fade"),
+            "default_duration": _resolve("default_duration", 10),
+            "shuffle": _resolve("shuffle", False),
         },
     }
 

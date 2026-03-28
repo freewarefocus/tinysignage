@@ -97,6 +97,10 @@ class Playlist(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    transition_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    transition_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
+    default_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    shuffle: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )
@@ -111,6 +115,42 @@ class Playlist(Base):
         order_by="PlaylistItem.order"
     )
     devices: Mapped[list["Device"]] = relationship(back_populates="playlist")
+
+
+class DeviceGroup(Base):
+    __tablename__ = "device_groups"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    memberships: Mapped[list["DeviceGroupMembership"]] = relationship(
+        back_populates="group", cascade="all, delete-orphan"
+    )
+
+
+class DeviceGroupMembership(Base):
+    __tablename__ = "device_group_memberships"
+
+    device_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("devices.id"), primary_key=True
+    )
+    group_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("device_groups.id"), primary_key=True
+    )
+
+    device: Mapped["Device"] = relationship()
+    group: Mapped["DeviceGroup"] = relationship(back_populates="memberships")
 
 
 class ApiToken(Base):
@@ -133,6 +173,47 @@ class ApiToken(Base):
     )
 
     device: Mapped["Device | None"] = relationship()
+
+
+class Schedule(Base):
+    __tablename__ = "schedules"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    playlist_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("playlists.id"), nullable=False
+    )
+    target_type: Mapped[str] = mapped_column(
+        String(20), nullable=False  # "device", "group", or "all"
+    )
+    target_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True  # device or group id; null when target_type="all"
+    )
+    start_time: Mapped[str | None] = mapped_column(
+        String(5), nullable=True  # "HH:MM" (24h) — null means all day
+    )
+    end_time: Mapped[str | None] = mapped_column(
+        String(5), nullable=True  # "HH:MM" (24h) — null means all day
+    )
+    days_of_week: Mapped[str | None] = mapped_column(
+        String(20), nullable=True  # comma-separated: "0,1,2,3,4,5,6" (Mon=0..Sun=6); null means every day
+    )
+    start_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    end_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    playlist: Mapped["Playlist"] = relationship()
 
 
 class PlaylistItem(Base):
