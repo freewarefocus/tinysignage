@@ -1,0 +1,12 @@
+services:
+  signage:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./media:/app/media
+      - ./db:/app/db
+      - ./config.yaml:/app/config.yaml
+    restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m

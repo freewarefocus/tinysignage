@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinySignage Admin</title>
+    <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>TinySignage</h1>
+            <nav>
+                <a href="/player" target="_blank">Open Player</a>
+            </nav>
+        </header>
+
+        <section id="upload-section">
+            <div id="dropzone">
+                <p>Drop images or videos here or click to browse</p>
+                <input type="file" id="file-input" accept="image/*,video/mp4,video/webm" multiple>
+            </div>
+            <form id="url-form">
+                <input type="text" placeholder="Name" id="url-name" required>
+                <input type="url" placeholder="https://..." id="url-input" required>
+                <input type="number" placeholder="Duration (s)" id="url-duration" value="10" min="1">
+                <button type="submit">Add URL</button>
+            </form>
+        </section>
+
+        <section id="controls-section">
+            <h2>Now Playing</h2>
+            <p id="current-asset">&mdash;</p>
+            <div class="playback-controls">
+                <button id="prev-btn">&#9198; Previous</button>
+                <button id="next-btn">Next &#9197;</button>
+            </div>
+            <p class="player-count">Connected players: <span id="player-count">0</span></p>
+        </section>
+
+        <section id="playlist-section">
+            <h2>Playlist</h2>
+            <div id="playlist"></div>
+        </section>
+
+        <section id="settings-section">
+            <h2>Settings</h2>
+            <form id="settings-form">
+                <label>
+                    Transition Duration (s)
+                    <input type="number" id="transition-duration" step="0.1" min="0" value="1.0">
+                </label>
+                <label>
+                    Transition Type
+                    <select id="transition-type">
+                        <option value="fade">Fade</option>
+                        <option value="cut">Cut</option>
+                    </select>
+                </label>
+                <label>
+                    Default Duration (s)
+                    <input type="number" id="default-duration" min="1" value="10">
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="shuffle">
+                    Shuffle playlist
+                </label>
+                <button type="submit">Save Settings</button>
+            </form>
+        </section>
+    </div>
+
+    <!-- Edit modal -->
+    <div id="edit-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Edit Asset</h3>
+            <form id="edit-form">
+                <input type="hidden" id="edit-id">
+                <label>Name
+                    <input type="text" id="edit-name" required>
+                </label>
+                <label>Duration (seconds, 0 = video natural length)
+                    <input type="number" id="edit-duration" min="0" required>
+                </label>
+                <label>Start Date
+                    <input type="datetime-local" id="edit-start">
+                </label>
+                <label>End Date
+                    <input type="datetime-local" id="edit-end">
+                </label>
+                <div class="modal-actions">
+                    <button type="submit">Save</button>
+                    <button type="button" id="edit-cancel">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/admin.js"></script>
+</body>
+</html>

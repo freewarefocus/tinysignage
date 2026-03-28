@@ -4,9 +4,24 @@
 # Local scripts
 ccdsp.bat
 
-# Node
-node_modules/
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
 dist/
+build/
+
+# App data
+media/*
+!media/.gitkeep
+db/*
+!db/.gitkeep
+*.db
+
+# Environment
 .env
 .env.*
 !.env.example
@@ -21,3 +36,9 @@ Desktop.ini
 .idea/
 *.swp
 *.swo
+
+# Node / Vue CMS
+node_modules/
+cms/node_modules/
+cms/dist/
+app/static/cms/

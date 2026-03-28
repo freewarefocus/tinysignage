@@ -1,0 +1,115 @@
+<template>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1>TinySignage</h1>
+      </div>
+      <nav>
+        <router-link to="/media" class="nav-item" active-class="active">
+          <i class="pi pi-images"></i>
+          <span>Media</span>
+        </router-link>
+        <router-link to="/playlist" class="nav-item" active-class="active">
+          <i class="pi pi-list"></i>
+          <span>Playlist</span>
+        </router-link>
+        <router-link to="/settings" class="nav-item" active-class="active">
+          <i class="pi pi-cog"></i>
+          <span>Settings</span>
+        </router-link>
+        <router-link to="/device" class="nav-item" active-class="active">
+          <i class="pi pi-desktop"></i>
+          <span>Device</span>
+        </router-link>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="/player" target="_blank" class="nav-item">
+          <i class="pi pi-external-link"></i>
+          <span>Open Player</span>
+        </a>
+      </div>
+    </aside>
+    <main class="content">
+      <router-view />
+    </main>
+  </div>
+</template>
+
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0f1117;
+  color: #e0e0e0;
+}
+
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 220px;
+  background: #1a1d27;
+  border-right: 1px solid #2a2d3a;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.sidebar-header {
+  padding: 1.2rem 1rem;
+  border-bottom: 1px solid #2a2d3a;
+}
+
+.sidebar-header h1 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+nav {
+  flex: 1;
+  padding: 0.5rem 0;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem;
+  color: #999;
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-item:hover {
+  background: #252836;
+  color: #fff;
+}
+
+.nav-item.active {
+  background: #252836;
+  color: #7c83ff;
+  border-right: 3px solid #7c83ff;
+}
+
+.nav-item i {
+  font-size: 1rem;
+  width: 1.2rem;
+  text-align: center;
+}
+
+.sidebar-footer {
+  border-top: 1px solid #2a2d3a;
+  padding: 0.5rem 0;
+}
+
+.content {
+  flex: 1;
+  padding: 1.5rem 2rem;
+  overflow-y: auto;
+}
+</style>

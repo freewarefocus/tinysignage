@@ -1,0 +1,14 @@
+server:
+  host: 0.0.0.0
+  port: 8080
+storage:
+  media_dir: ./media
+  db_path: ./db/signage.db
+display:
+  transition_duration: 1.0
+  transition_type: fade
+  default_duration: 10
+player:
+  browser: auto
+  kiosk: true
+device_id: 9659bdba-1b72-408d-9cad-21716ba4c285

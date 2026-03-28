@@ -1,0 +1,88 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body, #player { width: 100%; height: 100%; overflow: hidden; background: #000; }
+
+.layer {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity var(--transition-duration, 1s) ease-in-out;
+    transform: translateZ(0);  /* Force GPU compositing — prevents flicker */
+    z-index: 1;
+}
+
+.layer.active {
+    opacity: 1;
+    z-index: 2;
+}
+
+.layer img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.layer video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+}
+
+.layer iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+#splash {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    background: #000;
+    color: #fff;
+    opacity: 1;
+    transition: opacity var(--transition-duration, 1s) ease-in-out;
+    transform: translateZ(0);
+}
+
+#splash.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#splash h1 {
+    font-family: system-ui, sans-serif;
+    font-size: 3rem;
+    font-weight: 300;
+    margin-bottom: 0.5rem;
+}
+
+#splash p {
+    font-family: system-ui, sans-serif;
+    font-size: 1.2rem;
+    color: #888;
+}
+
+#status-indicator {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    z-index: 20;
+    opacity: 0.6;
+    transition: background 0.3s;
+}
+
+.status-online {
+    background: #4caf50;
+}
+
+.status-offline {
+    background: #f44336;
+}

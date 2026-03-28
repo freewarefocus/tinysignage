@@ -1,0 +1,22 @@
+[Unit]
+Description=TinySignage Backend
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/TinySignage
+ExecStart=/home/pi/TinySignage/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/pi/TinySignage/media /home/pi/TinySignage/db /home/pi/TinySignage/config.yaml
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
