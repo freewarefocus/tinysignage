@@ -100,6 +100,17 @@
           </select>
         </div>
 
+        <!-- Layout assignment -->
+        <div class="detail-section">
+          <label>Layout (Split-Screen)</label>
+          <select v-model="detailLayoutId" @change="assignLayout" class="select-input full">
+            <option value="">None (single zone)</option>
+            <option v-for="l in layouts" :key="l.id" :value="l.id">
+              {{ l.name }} ({{ l.zone_count }} zone{{ l.zone_count !== 1 ? 's' : '' }})
+            </option>
+          </select>
+        </div>
+
         <!-- Health info -->
         <div v-if="deviceHealth" class="detail-section">
           <label>Health</label>
@@ -194,6 +205,7 @@ import { relativeTime, parseUTC } from '../utils/date.js'
 
 const devices = ref([])
 const playlists = ref([])
+const layouts = ref([])
 const loading = ref(true)
 const lastRefresh = ref(null)
 let refreshInterval = null
@@ -211,6 +223,7 @@ const editingName = ref(false)
 const nameInput = ref('')
 const nameEditInput = ref(null)
 const detailPlaylistId = ref('')
+const detailLayoutId = ref('')
 const devicePairing = ref(null)
 const deviceHealth = ref(null)
 
@@ -266,6 +279,10 @@ async function loadPlaylists() {
   playlists.value = await api.get('/playlists')
 }
 
+async function loadLayouts() {
+  layouts.value = await api.get('/layouts')
+}
+
 async function createDevice() {
   if (creating.value) return
   creating.value = true
@@ -289,6 +306,7 @@ function closeAddDevice() {
 async function openDevice(d) {
   selectedDevice.value = d
   detailPlaylistId.value = d.playlist_id || ''
+  detailLayoutId.value = d.layout_id || ''
   devicePairing.value = null
   deviceHealth.value = null
   editingName.value = false
@@ -337,6 +355,13 @@ async function assignPlaylist() {
   await loadDevices()
 }
 
+async function assignLayout() {
+  const layoutId = detailLayoutId.value || null
+  const updated = await api.patch(`/devices/${selectedDevice.value.id}`, { layout_id: layoutId })
+  selectedDevice.value = updated
+  await loadDevices()
+}
+
 async function regeneratePairingCode() {
   const result = await api.post(`/devices/${selectedDevice.value.id}/pairing-code`)
   devicePairing.value = result
@@ -347,7 +372,7 @@ async function regeneratePairingCode() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadDevices(), loadPlaylists()])
+  await Promise.all([loadDevices(), loadPlaylists(), loadLayouts()])
   // Auto-refresh every 30 seconds
   refreshInterval = setInterval(loadDevices, 30000)
 })

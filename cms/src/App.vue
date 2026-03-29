@@ -35,6 +35,10 @@
           <i class="pi pi-database"></i>
           <span>Storage</span>
         </router-link>
+        <router-link v-if="canEdit" to="/layouts" class="nav-item" active-class="active">
+          <i class="pi pi-th-large"></i>
+          <span>Layouts</span>
+        </router-link>
         <router-link to="/devices" class="nav-item" active-class="active">
           <i class="pi pi-desktop"></i>
           <span>Devices</span>
@@ -61,6 +65,12 @@
           <i class="pi pi-external-link"></i>
           <span>Open Player</span>
         </a>
+        <div class="theme-toggle-row">
+          <button class="theme-toggle-btn" @click="toggleTheme" :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'">
+            <i :class="isDark ? 'pi pi-sun' : 'pi pi-moon'"></i>
+            <span>{{ isDark ? 'Light Mode' : 'Dark Mode' }}</span>
+          </button>
+        </div>
         <div v-if="currentUser" class="user-info">
           <div class="user-details">
             <span class="user-name">{{ currentUser.display_name || currentUser.username }}</span>
@@ -84,13 +94,15 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import Toast from 'primevue/toast'
-import { errorBus } from './api/client'
+import { errorBus, api } from './api/client'
+import './assets/theme-light.css'
 
 const toast = useToast()
 const route = useRoute()
 const router = useRouter()
 
 const currentUser = ref(null)
+const isDark = ref(true)
 
 const isLoginPage = computed(() => route.name === 'login')
 const isAdmin = computed(() => currentUser.value?.role === 'admin')
@@ -98,6 +110,30 @@ const canEdit = computed(() => {
   const role = currentUser.value?.role
   return role === 'admin' || role === 'editor'
 })
+
+function applyTheme(theme) {
+  isDark.value = theme === 'dark'
+  document.documentElement.setAttribute('data-theme', theme)
+  localStorage.setItem('tinysignage_theme', theme)
+}
+
+function toggleTheme() {
+  const newTheme = isDark.value ? 'light' : 'dark'
+  applyTheme(newTheme)
+  // Persist to server (fire and forget)
+  api.patch('/users/me/preferences', { theme_preference: newTheme }).catch(() => {})
+}
+
+async function loadThemeFromServer() {
+  try {
+    const prefs = await api.get('/users/me/preferences')
+    if (prefs.theme_preference) {
+      applyTheme(prefs.theme_preference)
+    }
+  } catch {
+    // Server unavailable or not logged in — keep localStorage theme
+  }
+}
 
 function loadUser() {
   const stored = localStorage.getItem('tinysignage_user')
@@ -149,8 +185,15 @@ function onApiError(event) {
 watch(() => route.name, loadUser)
 
 onMounted(() => {
+  // Apply cached theme instantly to prevent flash
+  const cached = localStorage.getItem('tinysignage_theme') || 'dark'
+  applyTheme(cached)
+
   loadUser()
   errorBus.addEventListener('api-error', onApiError)
+
+  // Confirm theme from server (may update if changed on another device)
+  loadThemeFromServer()
 })
 
 onUnmounted(() => {
@@ -313,5 +356,35 @@ nav {
   flex: 1;
   padding: 1.5rem 2rem;
   overflow-y: auto;
+}
+
+.theme-toggle-row {
+  padding: 0.3rem 0.5rem;
+}
+
+.theme-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.55rem 0.5rem;
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 0.9rem;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.theme-toggle-btn:hover {
+  background: #252836;
+  color: #fff;
+}
+
+.theme-toggle-btn i {
+  font-size: 1rem;
+  width: 1.2rem;
+  text-align: center;
 }
 </style>

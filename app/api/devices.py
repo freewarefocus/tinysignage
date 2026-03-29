@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from app.auth import (
     require_viewer,
 )
 from app.database import get_session
-from app.models import ApiToken, Device, DeviceGroupMembership, Override, Playlist, PlaylistItem, Schedule, Settings
+from app.models import ApiToken, Device, DeviceGroupMembership, Layout, LayoutZone, Override, Playlist, PlaylistItem, Schedule, Settings
 
 PAIRING_CODE_TTL = timedelta(minutes=10)
 _config_path = Path("config.yaml")
@@ -123,7 +124,7 @@ async def update_device(
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
 
-    allowed = {"name", "playlist_id"}
+    allowed = {"name", "playlist_id", "layout_id"}
     for key, value in body.items():
         if key in allowed:
             setattr(device, key, value)
@@ -340,12 +341,27 @@ async def get_device_playlist(
                 }
 
     # --- Normal flow: evaluate schedules, then device default ---
-    effective_playlist_id = await evaluate_schedule_for_device(device_id, session)
+    effective_playlist_id, transition_playlist_id = await evaluate_schedule_for_device(device_id, session)
     if not effective_playlist_id:
         effective_playlist_id = device.playlist_id
+        transition_playlist_id = None
+
+    # --- Multi-zone layout support ---
+    zones_data = None
+    if device.layout_id:
+        zones_data = await _build_zones_payload(device.layout_id, session)
+
+    if not effective_playlist_id and not zones_data:
+        return {"hash": "", "items": [], "settings": await _get_default_settings(session)}
 
     if not effective_playlist_id:
-        return {"hash": "", "items": [], "settings": await _get_default_settings(session)}
+        # Layout assigned but no default playlist — return empty main with zones
+        return {
+            "hash": _zones_hash(zones_data),
+            "items": [],
+            "settings": await _get_default_settings(session),
+            "zones": zones_data,
+        }
 
     result = await session.execute(
         select(Playlist)
@@ -373,7 +389,6 @@ async def get_device_playlist(
         active_items.append(item)
 
     # Get settings: per-playlist overrides take precedence over global
-    from app.models import Settings
     settings = await session.get(Settings, 1)
 
     def _resolve(field: str, default):
@@ -383,7 +398,7 @@ async def get_device_playlist(
             return pl_val
         return getattr(settings, field, default) if settings else default
 
-    return {
+    resp = {
         "hash": _playlist_hash(active_items),
         "items": [_item_to_dict(item) for item in active_items],
         "settings": {
@@ -393,6 +408,114 @@ async def get_device_playlist(
             "shuffle": _resolve("shuffle", False),
         },
     }
+
+    # Include transition playlist for schedule-change bumpers
+    if transition_playlist_id:
+        tp_result = await session.execute(
+            select(Playlist)
+            .where(Playlist.id == transition_playlist_id)
+            .options(selectinload(Playlist.items).selectinload(PlaylistItem.asset))
+        )
+        tp = tp_result.scalars().first()
+        if tp:
+            now_tp = datetime.now(timezone.utc).replace(tzinfo=None)
+            tp_items = [
+                item for item in tp.items
+                if item.asset and item.asset.is_enabled
+                and (not item.asset.start_date or item.asset.start_date <= now_tp)
+                and (not item.asset.end_date or item.asset.end_date >= now_tp)
+            ]
+            resp["transition_playlist"] = {
+                "id": tp.id,
+                "name": tp.name,
+                "items": [_item_to_dict(item) for item in tp_items],
+            }
+            resp["hash"] += f"-tp{tp.id[:8]}"
+
+    if zones_data:
+        resp["zones"] = zones_data
+        resp["hash"] = _playlist_hash(active_items) + "-" + _zones_hash(zones_data)
+
+    return resp
+
+
+async def _build_zones_payload(layout_id: str, session: AsyncSession) -> list[dict]:
+    """Build zone payload with each zone's playlist items resolved."""
+    result = await session.execute(
+        select(LayoutZone).where(LayoutZone.layout_id == layout_id)
+    )
+    zones = result.scalars().all()
+    if not zones:
+        return []
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    global_settings = await session.get(Settings, 1)
+
+    # Batch-load all zone playlists in a single query (avoids N+1)
+    playlist_ids = [z.playlist_id for z in zones if z.playlist_id]
+    playlists_by_id = {}
+    if playlist_ids:
+        pl_result = await session.execute(
+            select(Playlist)
+            .where(Playlist.id.in_(playlist_ids))
+            .options(selectinload(Playlist.items).selectinload(PlaylistItem.asset))
+        )
+        for pl in pl_result.scalars().all():
+            playlists_by_id[pl.id] = pl
+
+    zones_out = []
+    for zone in zones:
+        zone_dict = {
+            "id": zone.id,
+            "name": zone.name,
+            "zone_type": zone.zone_type,
+            "x_percent": zone.x_percent,
+            "y_percent": zone.y_percent,
+            "width_percent": zone.width_percent,
+            "height_percent": zone.height_percent,
+            "z_index": zone.z_index,
+            "playlist_id": zone.playlist_id,
+            "items": [],
+            "settings": {},
+        }
+
+        pl = playlists_by_id.get(zone.playlist_id) if zone.playlist_id else None
+        if pl:
+            active_items = [
+                item for item in pl.items
+                if item.asset and item.asset.is_enabled
+                and (not item.asset.start_date or item.asset.start_date <= now)
+                and (not item.asset.end_date or item.asset.end_date >= now)
+            ]
+            zone_dict["items"] = [_item_to_dict(item) for item in active_items]
+
+            def _zr(field, default, _pl=pl):
+                val = getattr(_pl, field, None)
+                if val is not None:
+                    return val
+                return getattr(global_settings, field, default) if global_settings else default
+
+            zone_dict["settings"] = {
+                "transition_duration": _zr("transition_duration", 1.0),
+                "transition_type": _zr("transition_type", "fade"),
+                "default_duration": _zr("default_duration", 10),
+                "shuffle": _zr("shuffle", False),
+            }
+
+        zones_out.append(zone_dict)
+
+    return zones_out
+
+
+def _zones_hash(zones_data: list[dict] | None) -> str:
+    """Compute a short hash for zone configuration."""
+    if not zones_data:
+        return ""
+    parts = []
+    for z in zones_data:
+        item_ids = "|".join(i["id"] for i in z.get("items", []))
+        parts.append(f"{z['id']}:{z['playlist_id']}:{item_ids}")
+    return hashlib.sha256(";".join(parts).encode()).hexdigest()[:12]
 
 
 async def _get_default_settings(session: AsyncSession) -> dict:
@@ -424,6 +547,7 @@ def _device_to_dict(device: Device) -> dict:
         "id": device.id,
         "name": device.name,
         "playlist_id": device.playlist_id,
+        "layout_id": device.layout_id,
         "last_seen": device.last_seen.isoformat() if device.last_seen else None,
         "ip_address": device.ip_address,
         "status": device.status,

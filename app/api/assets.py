@@ -1,5 +1,6 @@
 import hashlib
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -15,6 +16,24 @@ from app.media import compute_content_hash, generate_thumbnail
 from app.models import ApiToken, Asset, AssetTag, Playlist, PlaylistItem, Tag
 
 MAX_HTML_SIZE = 65536  # 64 KB
+
+# Map MIME types to safe file extensions — prevents storing files with
+# a spoofed extension (e.g. Content-Type image/png + filename evil.html).
+_MIME_TO_EXT = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/bmp": ".bmp",
+    "image/svg+xml": ".svg",
+    "image/tiff": ".tiff",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "video/ogg": ".ogv",
+    "video/quicktime": ".mov",
+    "video/x-msvideo": ".avi",
+    "video/x-matroska": ".mkv",
+}
 
 _config = yaml.safe_load(Path("config.yaml").read_text())
 _media_dir = Path(_config["storage"]["media_dir"])
@@ -102,7 +121,7 @@ async def create_asset(
         if not mimetype.startswith("image/") and not mimetype.startswith("video/"):
             raise HTTPException(status_code=400, detail="Unsupported file type")
 
-        suffix = Path(file.filename).suffix
+        suffix = _MIME_TO_EXT.get(mimetype, Path(file.filename).suffix)
         filename = f"{uuid.uuid4()}{suffix}"
         filepath = _media_dir / filename
 
@@ -237,11 +256,23 @@ async def update_asset(
         if field in body and (body[field] is None or body[field] == ""):
             body[field] = None
 
+    # Parse date strings into datetime objects for DateTime columns
+    for field in ("start_date", "end_date"):
+        if field in body:
+            val = body[field]
+            if val is None or val == "":
+                body[field] = None
+            elif isinstance(val, str):
+                try:
+                    body[field] = datetime.fromisoformat(val)
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid date format for {field}")
+
     changes = {}
     for key, value in body.items():
         if key in allowed:
             setattr(asset, key, value)
-            changes[key] = value
+            changes[key] = str(value) if isinstance(value, datetime) else value
     if "content" in body and asset.asset_type == "html":
         changes["content"] = "(updated)"
 
@@ -297,7 +328,7 @@ async def replace_asset(
     old_path.unlink(missing_ok=True)
 
     # Write new file
-    suffix = Path(file.filename).suffix
+    suffix = _MIME_TO_EXT.get(mimetype, Path(file.filename).suffix)
     filename = f"{uuid.uuid4()}{suffix}"
     filepath = _media_dir / filename
 
@@ -447,6 +478,7 @@ async def delete_asset(
 @router.post("/assets/reorder")
 async def reorder_assets(
     items: list[dict],
+    request: Request,
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -454,6 +486,8 @@ async def reorder_assets(
         asset = await session.get(Asset, item["id"])
         if asset:
             asset.play_order = item["play_order"]
+    await audit(session, action="reorder", entity_type="asset", entity_id=None,
+                details={"count": len(items)}, token=_admin, request=request)
     await session.commit()
     return {"ok": True}
 

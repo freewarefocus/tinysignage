@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.audit import record as audit
 from app.auth import require_editor, require_token, require_viewer
 from app.database import get_session
-from app.models import ApiToken, Asset, Device, Override, Playlist, PlaylistItem, Schedule
+from app.models import ApiToken, Asset, Device, LayoutZone, Override, Playlist, PlaylistItem, Schedule
 
 router = APIRouter()
 
@@ -181,7 +181,7 @@ async def delete_playlist(
     if playlist.is_default:
         raise HTTPException(status_code=400, detail="Cannot delete the default playlist")
 
-    # Bug #1: Check if any schedules reference this playlist
+    # Check if any schedules reference this playlist (as primary or transition)
     result = await session.execute(
         select(Schedule).where(Schedule.playlist_id == playlist_id)
     )
@@ -191,6 +191,17 @@ async def delete_playlist(
         raise HTTPException(
             status_code=409,
             detail=f"Playlist is used by schedule(s): {names}",
+        )
+
+    result = await session.execute(
+        select(Schedule).where(Schedule.transition_playlist_id == playlist_id)
+    )
+    transition_schedules = result.scalars().all()
+    if transition_schedules:
+        names = ", ".join(s.name for s in transition_schedules)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Playlist is used as transition playlist by schedule(s): {names}",
         )
 
     # Check if any overrides reference this playlist
@@ -218,6 +229,18 @@ async def delete_playlist(
         raise HTTPException(
             status_code=409,
             detail=f"Playlist is assigned to device(s): {names}",
+        )
+
+    # Check if any layout zones reference this playlist
+    result = await session.execute(
+        select(LayoutZone).where(LayoutZone.playlist_id == playlist_id)
+    )
+    referencing_zones = result.scalars().all()
+    if referencing_zones:
+        names = ", ".join(z.name for z in referencing_zones)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Playlist is used by layout zone(s): {names}",
         )
 
     await audit(session, action="delete", entity_type="playlist", entity_id=playlist_id,
@@ -320,6 +343,7 @@ async def remove_item_from_playlist(
 async def reorder_playlist_items(
     playlist_id: str,
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -335,5 +359,7 @@ async def reorder_playlist_items(
         item = result.scalars().first()
         if item:
             item.order = order
+    await audit(session, action="reorder", entity_type="playlist", entity_id=playlist_id,
+                details={"item_count": len(item_ids)}, token=_admin, request=request)
     await session.commit()
     return {"ok": True}

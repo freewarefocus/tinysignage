@@ -2,9 +2,54 @@
   <div>
     <div class="page-header">
       <h2>Schedules</h2>
-      <button class="btn-primary" @click="openCreate">
-        <i class="pi pi-plus"></i> New Schedule
-      </button>
+      <div class="header-actions">
+        <button class="btn-secondary" @click="showPreviewPanel = !showPreviewPanel">
+          <i class="pi pi-eye"></i> {{ showPreviewPanel ? 'Hide' : 'Show' }} Preview
+        </button>
+        <button class="btn-primary" @click="openCreate">
+          <i class="pi pi-plus"></i> New Schedule
+        </button>
+      </div>
+    </div>
+
+    <!-- 24-hour Preview Panel -->
+    <div v-if="showPreviewPanel" class="preview-panel">
+      <div class="preview-header">
+        <h3>24-Hour Timeline Preview</h3>
+        <div class="preview-controls">
+          <select v-model="previewDeviceId" class="select-input preview-select" @change="loadPreview">
+            <option value="">Select a device...</option>
+            <option v-for="d in devices" :key="d.id" :value="d.id">{{ d.name }}</option>
+          </select>
+          <input v-model="previewDate" type="date" class="preview-date" @change="loadPreview" />
+        </div>
+      </div>
+      <div v-if="previewLoading" class="loading">Loading timeline...</div>
+      <div v-else-if="!previewDeviceId" class="preview-hint">Select a device to preview its schedule timeline.</div>
+      <div v-else-if="previewSlots.length > 0" class="timeline-container">
+        <div class="timeline-bar">
+          <div
+            v-for="(block, idx) in timelineBlocks"
+            :key="idx"
+            class="timeline-block"
+            :style="{ left: block.left + '%', width: block.width + '%', background: block.color }"
+            :title="block.label"
+          >
+            <span v-if="block.width > 4" class="timeline-block-label">{{ block.shortLabel }}</span>
+          </div>
+        </div>
+        <div class="timeline-hours">
+          <span v-for="h in [0,3,6,9,12,15,18,21]" :key="h" class="timeline-tick" :style="{ left: (h / 24 * 100) + '%' }">
+            {{ h.toString().padStart(2, '0') }}:00
+          </span>
+        </div>
+        <div class="timeline-legend">
+          <div v-for="entry in timelineLegend" :key="entry.name" class="legend-item">
+            <span class="legend-dot" :style="{ background: entry.color }"></span>
+            {{ entry.name }}
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Create / Edit dialog -->
@@ -64,7 +109,23 @@
         </div>
         <p class="form-hint">Leave both blank for all-day.</p>
 
+        <!-- Recurrence mode toggle -->
         <div class="form-group">
+          <label>Recurrence</label>
+          <div class="recurrence-toggle">
+            <button
+              :class="['toggle-btn', { active: !useRecurrenceRule }]"
+              @click="useRecurrenceRule = false"
+            >Simple (days)</button>
+            <button
+              :class="['toggle-btn', { active: useRecurrenceRule }]"
+              @click="useRecurrenceRule = true"
+            >Advanced (RRULE)</button>
+          </div>
+        </div>
+
+        <!-- Simple day picker -->
+        <div v-if="!useRecurrenceRule" class="form-group">
           <label>Days of Week</label>
           <div class="day-picker">
             <button
@@ -75,6 +136,46 @@
             >{{ label }}</button>
           </div>
           <p class="form-hint">Select none for every day.</p>
+        </div>
+
+        <!-- Advanced recurrence rule builder -->
+        <div v-if="useRecurrenceRule" class="form-group recurrence-builder">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Frequency</label>
+              <select v-model="rruleFreq" class="select-input" @change="buildRrule">
+                <option value="DAILY">Daily</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="MONTHLY">Monthly</option>
+                <option value="YEARLY">Yearly</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Every N</label>
+              <input v-model.number="rruleInterval" type="number" min="1" max="52" @input="buildRrule" />
+              <p class="form-hint">{{ intervalLabel }}</p>
+            </div>
+          </div>
+          <div v-if="rruleFreq === 'WEEKLY'" class="form-group">
+            <label>On days</label>
+            <div class="day-picker">
+              <button
+                v-for="(label, abbr) in rruleDayOptions"
+                :key="abbr"
+                :class="['day-btn', { active: rruleDays.includes(abbr) }]"
+                @click="toggleRruleDay(abbr)"
+              >{{ label }}</button>
+            </div>
+          </div>
+          <div v-if="rruleFreq === 'MONTHLY'" class="form-group">
+            <label>Day of month</label>
+            <input v-model.number="rruleMonthDay" type="number" min="1" max="31" @input="buildRrule" />
+          </div>
+          <div class="form-group">
+            <label>Rule</label>
+            <input v-model="form.recurrence_rule" readonly class="rule-preview" />
+            <p class="form-hint">iCal RRULE format. Auto-generated from selections above.</p>
+          </div>
         </div>
 
         <div class="form-row">
@@ -95,12 +196,29 @@
             <p class="form-hint">Higher priority wins when schedules overlap.</p>
           </div>
           <div class="form-group">
-            <label>Active</label>
-            <label class="toggle-label">
-              <input type="checkbox" v-model="form.is_active" />
-              <span>{{ form.is_active ? 'Enabled' : 'Disabled' }}</span>
-            </label>
+            <label>Weight</label>
+            <input v-model.number="form.priority_weight" type="number" min="0.1" max="100" step="0.1" />
+            <p class="form-hint">Weighted random selection among same-priority schedules.</p>
           </div>
+        </div>
+
+        <div class="form-group">
+          <label>Transition Playlist (optional)</label>
+          <select v-model="form.transition_playlist_id" class="select-input">
+            <option :value="null">None — direct switch</option>
+            <option v-for="pl in playlists" :key="pl.id" :value="pl.id">
+              {{ pl.name }}
+            </option>
+          </select>
+          <p class="form-hint">Bumper content played before switching to this schedule's playlist.</p>
+        </div>
+
+        <div class="form-group">
+          <label>Active</label>
+          <label class="toggle-label">
+            <input type="checkbox" v-model="form.is_active" />
+            <span>{{ form.is_active ? 'Enabled' : 'Disabled' }}</span>
+          </label>
         </div>
 
         <div class="dialog-actions">
@@ -170,6 +288,7 @@
               <span class="dot" :style="{ background: scheduleColor(s) }"></span>
               {{ s.name }}
               <span v-if="!s.is_active" class="badge-inactive">OFF</span>
+              <span v-if="s.recurrence_rule" class="badge-rrule" title="Recurrence rule active">RRULE</span>
             </div>
             <div class="row-details">
               <span class="detail-tag"><i class="pi pi-list"></i> {{ s.playlist_name || '—' }}</span>
@@ -177,6 +296,10 @@
               <span class="detail-tag"><i class="pi pi-clock"></i> {{ timeLabel(s) }}</span>
               <span class="detail-tag"><i class="pi pi-calendar"></i> {{ daysLabel(s) }}</span>
               <span class="detail-tag">Priority: {{ s.priority }}</span>
+              <span v-if="s.priority_weight !== 1.0" class="detail-tag">Weight: {{ s.priority_weight }}</span>
+              <span v-if="s.transition_playlist_name" class="detail-tag">
+                <i class="pi pi-replay"></i> {{ s.transition_playlist_name }}
+              </span>
             </div>
           </div>
           <div class="row-actions">
@@ -194,7 +317,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '../api/client.js'
 
 const schedules = ref([])
@@ -206,8 +329,32 @@ const showDialog = ref(false)
 const editing = ref(null)
 const deleteTarget = ref(null)
 
+// Preview panel state
+const showPreviewPanel = ref(false)
+const previewDeviceId = ref('')
+const previewDate = ref(new Date().toISOString().split('T')[0])
+const previewSlots = ref([])
+const previewLoading = ref(false)
+const previewMeta = ref({})
+
+// Recurrence builder state
+const useRecurrenceRule = ref(false)
+const rruleFreq = ref('WEEKLY')
+const rruleInterval = ref(1)
+const rruleDays = ref([])
+const rruleMonthDay = ref(1)
+
 const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const hours = Array.from({ length: 24 }, (_, i) => i)
+
+const rruleDayOptions = {
+  MO: 'Mon', TU: 'Tue', WE: 'Wed', TH: 'Thu', FR: 'Fri', SA: 'Sat', SU: 'Sun',
+}
+
+const intervalLabel = computed(() => {
+  const labels = { DAILY: 'day(s)', WEEKLY: 'week(s)', MONTHLY: 'month(s)', YEARLY: 'year(s)' }
+  return labels[rruleFreq.value] || ''
+})
 
 const defaultForm = () => ({
   name: '',
@@ -220,6 +367,9 @@ const defaultForm = () => ({
   start_date: '',
   end_date: '',
   priority: 0,
+  priority_weight: 1.0,
+  recurrence_rule: '',
+  transition_playlist_id: null,
   is_active: true,
 })
 
@@ -245,10 +395,49 @@ function toggleDay(idx) {
   }
 }
 
+function toggleRruleDay(abbr) {
+  const i = rruleDays.value.indexOf(abbr)
+  if (i >= 0) {
+    rruleDays.value.splice(i, 1)
+  } else {
+    rruleDays.value.push(abbr)
+  }
+  buildRrule()
+}
+
+function buildRrule() {
+  let parts = [`FREQ=${rruleFreq.value}`]
+  if (rruleInterval.value > 1) parts.push(`INTERVAL=${rruleInterval.value}`)
+  if (rruleFreq.value === 'WEEKLY' && rruleDays.value.length > 0) {
+    parts.push(`BYDAY=${rruleDays.value.join(',')}`)
+  }
+  if (rruleFreq.value === 'MONTHLY' && rruleMonthDay.value) {
+    parts.push(`BYMONTHDAY=${rruleMonthDay.value}`)
+  }
+  form.value.recurrence_rule = parts.join(';')
+}
+
+function parseRruleToBuilder(rule) {
+  if (!rule) return
+  const parts = rule.split(';')
+  for (const part of parts) {
+    const [key, val] = part.split('=')
+    if (key === 'FREQ') rruleFreq.value = val
+    if (key === 'INTERVAL') rruleInterval.value = parseInt(val) || 1
+    if (key === 'BYDAY') rruleDays.value = val.split(',')
+    if (key === 'BYMONTHDAY') rruleMonthDay.value = parseInt(val) || 1
+  }
+}
+
 function openCreate() {
   editing.value = null
   form.value = defaultForm()
   selectedDays.value = []
+  useRecurrenceRule.value = false
+  rruleFreq.value = 'WEEKLY'
+  rruleInterval.value = 1
+  rruleDays.value = []
+  rruleMonthDay.value = 1
   showDialog.value = true
 }
 
@@ -265,11 +454,20 @@ function openEdit(s) {
     start_date: s.start_date ? s.start_date.split('T')[0] : '',
     end_date: s.end_date ? s.end_date.split('T')[0] : '',
     priority: s.priority,
+    priority_weight: s.priority_weight ?? 1.0,
+    recurrence_rule: s.recurrence_rule || '',
+    transition_playlist_id: s.transition_playlist_id || null,
     is_active: s.is_active,
   }
-  selectedDays.value = s.days_of_week
-    ? s.days_of_week.split(',').map(Number)
-    : []
+  if (s.recurrence_rule) {
+    useRecurrenceRule.value = true
+    parseRruleToBuilder(s.recurrence_rule)
+  } else {
+    useRecurrenceRule.value = false
+    selectedDays.value = s.days_of_week
+      ? s.days_of_week.split(',').map(Number)
+      : []
+  }
   showDialog.value = true
 }
 
@@ -281,14 +479,22 @@ function closeDialog() {
 async function saveSchedule() {
   const payload = {
     ...form.value,
-    days_of_week: selectedDays.value.length > 0
-      ? selectedDays.value.sort((a, b) => a - b).join(',')
-      : null,
     start_time: form.value.start_time || null,
     end_time: form.value.end_time || null,
     start_date: form.value.start_date || null,
     end_date: form.value.end_date || null,
     target_id: form.value.target_type === 'all' ? null : form.value.target_id,
+    transition_playlist_id: form.value.transition_playlist_id || null,
+  }
+
+  if (useRecurrenceRule.value) {
+    payload.days_of_week = null
+    payload.recurrence_rule = form.value.recurrence_rule || null
+  } else {
+    payload.recurrence_rule = null
+    payload.days_of_week = selectedDays.value.length > 0
+      ? selectedDays.value.sort((a, b) => a - b).join(',')
+      : null
   }
 
   if (editing.value) {
@@ -298,6 +504,7 @@ async function saveSchedule() {
   }
   closeDialog()
   await loadSchedules()
+  if (showPreviewPanel.value && previewDeviceId.value) loadPreview()
 }
 
 async function confirmDelete() {
@@ -316,8 +523,19 @@ function schedulesAt(dayIdx, hour) {
   return schedules.value.filter(s => {
     if (!s.is_active) return false
 
-    // Check day
-    if (s.days_of_week) {
+    // Check recurrence rule or simple days
+    if (s.recurrence_rule) {
+      // For the week grid, check BYDAY if FREQ=WEEKLY
+      const rule = parseSimpleRrule(s.recurrence_rule)
+      if (rule.freq === 'WEEKLY' && rule.byday.length > 0) {
+        const dayAbbrs = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
+        if (!rule.byday.includes(dayAbbrs[dayIdx])) return false
+      } else if (rule.freq === 'DAILY') {
+        // Daily matches all days in the grid
+      } else {
+        // Monthly/yearly — show on all days in the grid (can't determine exact dates)
+      }
+    } else if (s.days_of_week) {
       const days = s.days_of_week.split(',').map(Number)
       if (!days.includes(dayIdx)) return false
     }
@@ -339,6 +557,18 @@ function schedulesAt(dayIdx, hour) {
   })
 }
 
+function parseSimpleRrule(rule) {
+  const result = { freq: '', byday: [], interval: 1 }
+  if (!rule) return result
+  for (const part of rule.split(';')) {
+    const [key, val] = part.split('=')
+    if (key === 'FREQ') result.freq = val
+    if (key === 'BYDAY') result.byday = val.split(',')
+    if (key === 'INTERVAL') result.interval = parseInt(val) || 1
+  }
+  return result
+}
+
 const colorPalette = [
   '#7c83ff', '#ff6b8a', '#4ecdc4', '#ff9f43', '#a78bfa',
   '#22d3ee', '#f472b6', '#34d399', '#fbbf24', '#6366f1',
@@ -347,6 +577,12 @@ const colorPalette = [
 function scheduleColor(s) {
   const idx = schedules.value.findIndex(x => x.id === s.id)
   return colorPalette[idx % colorPalette.length]
+}
+
+function playlistColor(playlistId) {
+  if (!playlistId) return '#3a3a5a'
+  const plIdx = playlists.value.findIndex(p => p.id === playlistId)
+  return colorPalette[plIdx >= 0 ? plIdx % colorPalette.length : 0]
 }
 
 function targetLabel(s) {
@@ -370,6 +606,13 @@ function timeLabel(s) {
 }
 
 function daysLabel(s) {
+  if (s.recurrence_rule) {
+    const rule = parseSimpleRrule(s.recurrence_rule)
+    let label = rule.freq.charAt(0) + rule.freq.slice(1).toLowerCase()
+    if (rule.interval > 1) label = `Every ${rule.interval} ${label.toLowerCase()}s`
+    if (rule.byday.length > 0) label += ` (${rule.byday.join(',')})`
+    return label
+  }
   if (!s.days_of_week) return 'Every day'
   const days = s.days_of_week.split(',').map(Number)
   if (days.length === 7) return 'Every day'
@@ -377,6 +620,68 @@ function daysLabel(s) {
   if (days.length === 2 && [5,6].every(d => days.includes(d))) return 'Weekends'
   return days.map(d => dayLabels[d]).join(', ')
 }
+
+// --- Preview timeline ---
+async function loadPreview() {
+  if (!previewDeviceId.value) return
+  previewLoading.value = true
+  try {
+    const params = new URLSearchParams({ device_id: previewDeviceId.value })
+    if (previewDate.value) params.append('date', previewDate.value)
+    const data = await api.get(`/schedules/preview/timeline?${params}`)
+    previewSlots.value = data.slots || []
+    previewMeta.value = data
+  } catch (e) {
+    previewSlots.value = []
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+const timelineBlocks = computed(() => {
+  if (previewSlots.value.length === 0) return []
+  // Merge consecutive slots with same playlist into blocks
+  const blocks = []
+  let current = null
+  for (const slot of previewSlots.value) {
+    if (current && current.playlist_id === slot.playlist_id && current.schedule_id === slot.schedule_id) {
+      current.endIdx++
+    } else {
+      if (current) blocks.push(current)
+      current = {
+        playlist_id: slot.playlist_id,
+        playlist_name: slot.playlist_name,
+        schedule_id: slot.schedule_id,
+        schedule_name: slot.schedule_name,
+        startIdx: previewSlots.value.indexOf(slot),
+        endIdx: previewSlots.value.indexOf(slot),
+      }
+    }
+  }
+  if (current) blocks.push(current)
+
+  return blocks.map(b => ({
+    left: (b.startIdx / 48) * 100,
+    width: ((b.endIdx - b.startIdx + 1) / 48) * 100,
+    color: b.schedule_id ? playlistColor(b.playlist_id) : '#3a3a5a',
+    label: `${b.schedule_name || 'Default'}: ${b.playlist_name || 'None'}`,
+    shortLabel: b.playlist_name || 'Default',
+  }))
+})
+
+const timelineLegend = computed(() => {
+  const seen = new Map()
+  for (const slot of previewSlots.value) {
+    const key = slot.playlist_id || 'default'
+    if (!seen.has(key)) {
+      seen.set(key, {
+        name: slot.playlist_name || 'No playlist',
+        color: slot.schedule_id ? playlistColor(slot.playlist_id) : '#3a3a5a',
+      })
+    }
+  }
+  return Array.from(seen.values())
+})
 
 async function loadSchedules() {
   try {
@@ -407,6 +712,8 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
   margin-bottom: 1.5rem;
 }
 
+.header-actions { display: flex; gap: 0.5rem; }
+
 /* Buttons */
 .btn-primary {
   display: flex; align-items: center; gap: 0.4rem;
@@ -418,6 +725,7 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 .btn-primary:disabled { opacity: 0.5; cursor: default; }
 
 .btn-secondary {
+  display: flex; align-items: center; gap: 0.4rem;
   background: #3a3a5a; color: #ccc; border: none;
   padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
 }
@@ -450,7 +758,7 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 }
 
 .schedule-dialog {
-  width: 540px; max-height: 85vh; overflow-y: auto;
+  width: 580px; max-height: 85vh; overflow-y: auto;
 }
 
 .dialog p { color: #aaa; font-size: 0.9rem; margin-bottom: 0.75rem; line-height: 1.5; }
@@ -483,6 +791,25 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 
 .form-hint { color: #666; font-size: 0.75rem; margin: 0.2rem 0 0.5rem; }
 
+/* Recurrence toggle */
+.recurrence-toggle { display: flex; gap: 0; }
+
+.toggle-btn {
+  background: #0f1117; border: 1px solid #3a3a5a; color: #999;
+  padding: 0.4rem 0.8rem; cursor: pointer; font-size: 0.8rem;
+  transition: all 0.15s;
+}
+.toggle-btn:first-child { border-radius: 6px 0 0 6px; }
+.toggle-btn:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+.toggle-btn.active { background: #7c83ff; border-color: #7c83ff; color: #fff; }
+
+.recurrence-builder { padding: 0.5rem; background: rgba(124,131,255,0.05); border-radius: 8px; }
+
+.rule-preview {
+  font-family: monospace; font-size: 0.8rem !important;
+  background: #0a0b0f !important; color: #7c83ff !important;
+}
+
 /* Day picker */
 .day-picker { display: flex; gap: 0.3rem; }
 
@@ -503,6 +830,71 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 
 .toggle-label input[type="checkbox"] {
   width: auto; accent-color: #7c83ff;
+}
+
+/* Preview panel */
+.preview-panel {
+  background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 10px;
+  padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+}
+
+.preview-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;
+}
+
+.preview-controls { display: flex; gap: 0.5rem; align-items: center; }
+
+.preview-select { width: 200px; }
+
+.preview-date {
+  background: #0f1117; border: 1px solid #3a3a5a; color: #eee;
+  padding: 0.4rem 0.6rem; border-radius: 6px; font-size: 0.85rem;
+}
+
+.preview-hint { color: #666; font-size: 0.85rem; padding: 0.5rem 0; }
+
+.timeline-container { padding: 0.5rem 0; }
+
+.timeline-bar {
+  position: relative; height: 36px; background: #0f1117;
+  border-radius: 6px; overflow: hidden; margin-bottom: 0.25rem;
+}
+
+.timeline-block {
+  position: absolute; top: 0; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  border-right: 1px solid #1a1d27; transition: opacity 0.15s;
+  cursor: default;
+}
+.timeline-block:hover { opacity: 0.85; }
+
+.timeline-block-label {
+  color: #fff; font-size: 0.65rem; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding: 0 4px;
+}
+
+.timeline-hours {
+  position: relative; height: 18px; margin-bottom: 0.5rem;
+}
+
+.timeline-tick {
+  position: absolute; font-size: 0.65rem; color: #666;
+  transform: translateX(-50%);
+}
+
+.timeline-legend {
+  display: flex; flex-wrap: wrap; gap: 0.5rem;
+}
+
+.legend-item {
+  display: flex; align-items: center; gap: 0.3rem;
+  font-size: 0.75rem; color: #aaa;
+}
+
+.legend-dot {
+  width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
 }
 
 /* Week grid */
@@ -572,6 +964,11 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 .badge-inactive {
   background: #3a3a5a; color: #999; font-size: 0.65rem;
   padding: 1px 6px; border-radius: 3px; font-weight: 400;
+}
+
+.badge-rrule {
+  background: rgba(124,131,255,0.2); color: #7c83ff; font-size: 0.6rem;
+  padding: 1px 5px; border-radius: 3px; font-weight: 600; letter-spacing: 0.5px;
 }
 
 .row-details {

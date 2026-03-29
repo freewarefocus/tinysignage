@@ -64,6 +64,58 @@ class Settings(Base):
     shuffle: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class Layout(Base):
+    __tablename__ = "layouts"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+
+    zones: Mapped[list["LayoutZone"]] = relationship(
+        back_populates="layout", cascade="all, delete-orphan"
+    )
+    devices: Mapped[list["Device"]] = relationship(back_populates="layout")
+
+
+class LayoutZone(Base):
+    __tablename__ = "layout_zones"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    layout_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("layouts.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    zone_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="main"
+    )  # "main", "ticker", "sidebar", "pip"
+    x_percent: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    y_percent: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    width_percent: Mapped[float] = mapped_column(Float, nullable=False, default=100.0)
+    height_percent: Mapped[float] = mapped_column(Float, nullable=False, default=100.0)
+    z_index: Mapped[int] = mapped_column(Integer, default=0)
+    playlist_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("playlists.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+
+    layout: Mapped["Layout"] = relationship(back_populates="zones")
+    playlist: Mapped["Playlist | None"] = relationship()
+
+
 class Device(Base):
     __tablename__ = "devices"
     # tenant_id: deferred until SaaS work begins
@@ -73,7 +125,10 @@ class Device(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, default="Default Player")
     playlist_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("playlists.id"), nullable=True
+        String(36), ForeignKey("playlists.id", ondelete="SET NULL"), nullable=True
+    )
+    layout_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("layouts.id", ondelete="SET NULL"), nullable=True
     )
     last_seen: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
@@ -89,6 +144,7 @@ class Device(Base):
     )
 
     playlist: Mapped["Playlist | None"] = relationship(back_populates="devices")
+    layout: Mapped["Layout | None"] = relationship(back_populates="devices")
 
 
 class Playlist(Base):
@@ -146,10 +202,10 @@ class DeviceGroupMembership(Base):
     __tablename__ = "device_group_memberships"
 
     device_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("devices.id"), primary_key=True
+        String(36), ForeignKey("devices.id", ondelete="CASCADE"), primary_key=True
     )
     group_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("device_groups.id"), primary_key=True
+        String(36), ForeignKey("device_groups.id", ondelete="CASCADE"), primary_key=True
     )
 
     device: Mapped["Device"] = relationship()
@@ -173,6 +229,9 @@ class User(Base):
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )
     last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    theme_preference: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="dark", server_default="dark"
+    )
 
 
 class ApiToken(Base):
@@ -209,7 +268,7 @@ class Schedule(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     playlist_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("playlists.id"), nullable=False
+        String(36), ForeignKey("playlists.id", ondelete="CASCADE"), nullable=False
     )
     target_type: Mapped[str] = mapped_column(
         String(20), nullable=False  # "device", "group", or "all"
@@ -229,6 +288,11 @@ class Schedule(Base):
     start_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     end_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     priority: Mapped[int] = mapped_column(Integer, default=0)
+    recurrence_rule: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    priority_weight: Mapped[float] = mapped_column(Float, default=1.0)
+    transition_playlist_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("playlists.id", ondelete="SET NULL"), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
@@ -239,7 +303,8 @@ class Schedule(Base):
         onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
     )
 
-    playlist: Mapped["Playlist"] = relationship()
+    playlist: Mapped["Playlist"] = relationship(foreign_keys=[playlist_id])
+    transition_playlist: Mapped["Playlist | None"] = relationship(foreign_keys=[transition_playlist_id])
 
 
 class AuditLog(Base):
@@ -334,10 +399,10 @@ class PlaylistItem(Base):
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     playlist_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("playlists.id"), nullable=False
+        String(36), ForeignKey("playlists.id", ondelete="CASCADE"), nullable=False
     )
     asset_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("assets.id"), nullable=False
+        String(36), ForeignKey("assets.id", ondelete="CASCADE"), nullable=False
     )
     order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(

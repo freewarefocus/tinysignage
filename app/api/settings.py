@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import record as audit
@@ -7,6 +7,8 @@ from app.database import get_session
 from app.models import ApiToken, Settings
 
 router = APIRouter()
+
+VALID_TRANSITION_TYPES = {"fade", "slide", "none"}
 
 
 @router.get("/settings")
@@ -23,6 +25,40 @@ async def get_settings(
     }
 
 
+def _validate_settings(data: dict) -> dict:
+    """Validate and coerce settings values. Returns cleaned dict."""
+    allowed = {"transition_duration", "transition_type", "default_duration", "shuffle"}
+    changes = {}
+    for key, value in data.items():
+        if key not in allowed:
+            continue
+        if key == "transition_duration":
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="transition_duration must be a number")
+            if value < 0:
+                raise HTTPException(status_code=400, detail="transition_duration must be non-negative")
+        elif key == "transition_type":
+            if not isinstance(value, str) or value not in VALID_TRANSITION_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"transition_type must be one of: {', '.join(sorted(VALID_TRANSITION_TYPES))}",
+                )
+        elif key == "default_duration":
+            try:
+                value = int(value)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="default_duration must be an integer")
+            if value < 1:
+                raise HTTPException(status_code=400, detail="default_duration must be at least 1")
+        elif key == "shuffle":
+            if not isinstance(value, bool):
+                raise HTTPException(status_code=400, detail="shuffle must be a boolean")
+        changes[key] = value
+    return changes
+
+
 @router.patch("/settings")
 async def update_settings(
     data: dict,
@@ -31,8 +67,7 @@ async def update_settings(
     session: AsyncSession = Depends(get_session),
 ):
     settings = await session.get(Settings, 1)
-    allowed = {"transition_duration", "transition_type", "default_duration", "shuffle"}
-    changes = {k: v for k, v in data.items() if k in allowed}
+    changes = _validate_settings(data)
     for key, value in changes.items():
         setattr(settings, key, value)
     await audit(session, action="update", entity_type="settings", entity_id="global",

@@ -250,6 +250,15 @@ WIDGETS = [
 _WIDGET_MAP = {w["id"]: w for w in WIDGETS}
 
 
+def _safe_value(val: str) -> str:
+    """Sanitize a string for safe embedding in CSS property values and JS string literals."""
+    val = val.replace("\\", "\\\\").replace("'", "\\'")
+    val = val.replace("</", "<\\/")
+    # Strip chars that could break out of CSS value contexts
+    val = val.replace(";", "").replace("{", "").replace("}", "")
+    return val
+
+
 def _render(widget_id: str, overrides: dict | None = None) -> str:
     """Render a widget template, replacing placeholders with param values."""
     w = _WIDGET_MAP[widget_id]
@@ -261,7 +270,7 @@ def _render(widget_id: str, overrides: dict | None = None) -> str:
         if isinstance(val, bool):
             html = html.replace("{{" + key + "}}", "true" if val else "false")
         else:
-            html = html.replace("{{" + key + "}}", str(val))
+            html = html.replace("{{" + key + "}}", _safe_value(str(val)))
     return html
 
 

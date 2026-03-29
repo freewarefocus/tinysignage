@@ -36,6 +36,7 @@ def _user_dict(user: User) -> dict:
         "is_active": user.is_active,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "last_login": user.last_login.isoformat() if user.last_login else None,
+        "theme_preference": user.theme_preference,
     }
 
 
@@ -200,7 +201,11 @@ async def update_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     if "display_name" in body:
-        user.display_name = body["display_name"].strip() or None
+        dn = body["display_name"]
+        user.display_name = dn.strip() or None if isinstance(dn, str) else None
+
+    if "is_active" in body and not isinstance(body["is_active"], bool):
+        raise HTTPException(status_code=400, detail="is_active must be a boolean")
 
     if "role" in body:
         new_role = body["role"]
@@ -275,3 +280,44 @@ async def delete_user(
 
     log.info("User %s deleted", username)
     return {"ok": True}
+
+
+VALID_THEMES = ("dark", "light")
+
+
+@router.get("/users/me/preferences")
+async def get_preferences(
+    token: ApiToken = Depends(require_token),
+    session: AsyncSession = Depends(get_session),
+):
+    """Get the current user's preferences."""
+    if not token.user_id:
+        return {"theme_preference": "dark"}
+    user = await session.get(User, token.user_id)
+    if not user:
+        return {"theme_preference": "dark"}
+    return {"theme_preference": user.theme_preference}
+
+
+@router.patch("/users/me/preferences")
+async def update_preferences(
+    body: dict,
+    token: ApiToken = Depends(require_token),
+    session: AsyncSession = Depends(get_session),
+):
+    """Update the current user's preferences."""
+    if not token.user_id:
+        raise HTTPException(status_code=400, detail="API tokens do not have user preferences")
+    user = await session.get(User, token.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if "theme_preference" in body:
+        theme = body["theme_preference"]
+        if theme not in VALID_THEMES:
+            raise HTTPException(status_code=400, detail=f"Theme must be one of: {', '.join(VALID_THEMES)}")
+        user.theme_preference = theme
+
+    await session.commit()
+    await session.refresh(user)
+    return {"theme_preference": user.theme_preference}

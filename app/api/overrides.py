@@ -25,6 +25,8 @@ router = APIRouter()
 
 
 def _override_to_dict(override: Override) -> dict:
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    effective_active = override.is_active and not (override.expires_at and override.expires_at <= now)
     return {
         "id": override.id,
         "name": override.name,
@@ -37,7 +39,7 @@ def _override_to_dict(override: Override) -> dict:
             override.creator.display_name or override.creator.username
             if override.creator else None
         ),
-        "is_active": override.is_active,
+        "is_active": effective_active,
         "created_at": override.created_at.isoformat() if override.created_at else None,
         "expires_at": override.expires_at.isoformat() if override.expires_at else None,
     }
@@ -54,17 +56,7 @@ async def list_overrides(
         .order_by(Override.created_at.desc())
     )
     overrides = result.scalars().all()
-
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    out = []
-    for o in overrides:
-        d = _override_to_dict(o)
-        # Compute effective is_active considering expiry, without modifying DB
-        if o.is_active and o.expires_at and o.expires_at <= now:
-            d["is_active"] = False
-        out.append(d)
-
-    return out
+    return [_override_to_dict(o) for o in overrides]
 
 
 @router.post("/overrides", status_code=201)

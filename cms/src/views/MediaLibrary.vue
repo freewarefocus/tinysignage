@@ -171,7 +171,7 @@ import { api } from '../api/client.js'
 import UploadZone from '../components/UploadZone.vue'
 import AssetCard from '../components/AssetCard.vue'
 
-const userRole = localStorage.getItem('role') || 'viewer'
+const userRole = (() => { try { return JSON.parse(localStorage.getItem('tinysignage_user') || '{}').role } catch { return 'viewer' } })()
 const canEdit = ['admin', 'editor'].includes(userRole)
 
 const assets = ref([])

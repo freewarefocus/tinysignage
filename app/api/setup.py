@@ -154,6 +154,13 @@ async def complete_setup(body: dict, session: AsyncSession = Depends(get_session
     if len(admin_password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
+    # Guard against duplicate admin creation if marker was deleted
+    existing_user = await session.execute(
+        select(User).where(User.username == admin_username)
+    )
+    if existing_user.scalars().first():
+        raise HTTPException(status_code=409, detail="Admin user already exists")
+
     # Update the default device name
     result = await session.execute(select(Device))
     device = result.scalars().first()

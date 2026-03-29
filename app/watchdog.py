@@ -37,12 +37,15 @@ class Watchdog:
             devices = result.scalars().all()
 
             for device in devices:
-                if device.last_heartbeat:
-                    seconds_since = (now - device.last_heartbeat).total_seconds()
+                # Use last_heartbeat if available, fall back to last_seen
+                # (polling updates last_seen; heartbeat updates both)
+                last_contact = device.last_heartbeat or device.last_seen
+                if last_contact:
+                    seconds_since = (now - last_contact).total_seconds()
                     if seconds_since > STALE_THRESHOLD and device.status == "online":
                         device.status = "offline"
                         log.info(
-                            "Device %s (%s) marked offline — no heartbeat for %ds",
+                            "Device %s (%s) marked offline — no contact for %ds",
                             device.name,
                             device.id[:8],
                             int(seconds_since),

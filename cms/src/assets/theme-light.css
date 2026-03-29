@@ -1,0 +1,225 @@
+/*
+ * Light theme overrides — applied when html[data-theme="light"].
+ * Dark theme is the default; these variables remap the dark palette.
+ */
+
+html[data-theme="light"] body {
+  background: #f4f5f7;
+  color: #1a1a2e;
+}
+
+html[data-theme="light"] .app-layout .sidebar {
+  background: #ffffff;
+  border-right-color: #e0e0e0;
+}
+
+html[data-theme="light"] .sidebar-header {
+  border-bottom-color: #e0e0e0;
+}
+
+html[data-theme="light"] .sidebar-header h1 {
+  color: #1a1a2e;
+}
+
+html[data-theme="light"] .nav-item {
+  color: #666;
+}
+
+html[data-theme="light"] .nav-item:hover {
+  background: #f0f1f5;
+  color: #1a1a2e;
+}
+
+html[data-theme="light"] .nav-item.active {
+  background: #eef0ff;
+  color: #5a61d6;
+  border-right-color: #5a61d6;
+}
+
+html[data-theme="light"] .sidebar-footer {
+  border-top-color: #e0e0e0;
+}
+
+html[data-theme="light"] .user-info {
+  border-top-color: #e0e0e0;
+}
+
+html[data-theme="light"] .user-name {
+  color: #333;
+}
+
+html[data-theme="light"] .user-role {
+  color: #888;
+}
+
+html[data-theme="light"] .logout-btn {
+  color: #888;
+}
+
+html[data-theme="light"] .logout-btn:hover {
+  color: #ef5350;
+  background: #ef535015;
+}
+
+html[data-theme="light"] .content {
+  background: #f4f5f7;
+}
+
+/* ---- Common component overrides ---- */
+
+/* Cards / panels */
+html[data-theme="light"] .playlist-row,
+html[data-theme="light"] .settings-panel,
+html[data-theme="light"] .playlist-header,
+html[data-theme="light"] .add-card,
+html[data-theme="light"] .card,
+html[data-theme="light"] .panel {
+  background: #ffffff;
+  border-color: #e0e0e0;
+}
+
+html[data-theme="light"] .playlist-row:hover,
+html[data-theme="light"] .add-card:hover {
+  background: #f8f9fb;
+}
+
+/* Inputs */
+html[data-theme="light"] .breadcrumb-edit input,
+html[data-theme="light"] .setting-select,
+html[data-theme="light"] .setting-number,
+html[data-theme="light"] input[type="text"],
+html[data-theme="light"] input[type="number"],
+html[data-theme="light"] input[type="password"],
+html[data-theme="light"] input[type="search"],
+html[data-theme="light"] textarea,
+html[data-theme="light"] select {
+  background: #ffffff;
+  border-color: #ccc;
+  color: #1a1a2e;
+}
+
+html[data-theme="light"] .breadcrumb-edit input:focus,
+html[data-theme="light"] .setting-select:focus,
+html[data-theme="light"] .setting-number:focus,
+html[data-theme="light"] input:focus,
+html[data-theme="light"] textarea:focus,
+html[data-theme="light"] select:focus {
+  border-color: #5a61d6;
+}
+
+/* Text colors */
+html[data-theme="light"] .breadcrumb-current,
+html[data-theme="light"] .row-name,
+html[data-theme="light"] h1, html[data-theme="light"] h2,
+html[data-theme="light"] h3, html[data-theme="light"] h4 {
+  color: #1a1a2e;
+}
+
+html[data-theme="light"] .breadcrumb-link {
+  color: #5a61d6;
+}
+
+html[data-theme="light"] .item-count,
+html[data-theme="light"] .row-meta,
+html[data-theme="light"] .settings-hint,
+html[data-theme="light"] .hash-label,
+html[data-theme="light"] .loading,
+html[data-theme="light"] .empty,
+html[data-theme="light"] .empty-hint {
+  color: #888;
+}
+
+html[data-theme="light"] .setting-field label {
+  color: #666;
+}
+
+/* Badges & chips */
+html[data-theme="light"] .default-badge,
+html[data-theme="light"] .type-badge {
+  background: #eef0ff;
+  color: #5a61d6;
+}
+
+/* Buttons */
+html[data-theme="light"] .btn-toggle {
+  background: #eef0ff;
+  color: #666;
+}
+
+html[data-theme="light"] .btn-toggle:hover {
+  background: #dde0f5;
+  color: #1a1a2e;
+}
+
+html[data-theme="light"] .btn-clear {
+  background: #e8e8f0;
+  color: #888;
+}
+
+html[data-theme="light"] .btn-clear:hover {
+  background: #d0d0dd;
+  color: #333;
+}
+
+html[data-theme="light"] .btn-remove {
+  border-color: #ccc;
+  color: #888;
+}
+
+html[data-theme="light"] .btn-remove:hover {
+  color: #f44336;
+  border-color: #f44336;
+}
+
+/* Thumbnails / placeholders */
+html[data-theme="light"] .row-thumb,
+html[data-theme="light"] .add-thumb {
+  background: #eef0f4;
+}
+
+html[data-theme="light"] .thumb-placeholder i,
+html[data-theme="light"] .add-icon {
+  color: #bbb;
+}
+
+html[data-theme="light"] .add-name {
+  color: #444;
+}
+
+/* Drag handle */
+html[data-theme="light"] .drag-handle {
+  color: #bbb;
+}
+
+/* Dividers */
+html[data-theme="light"] .add-section {
+  border-top-color: #e0e0e0;
+}
+
+/* Emergency overrides - keep red tones */
+html[data-theme="light"] .emergency-btn {
+  background: rgba(220, 53, 69, 0.1);
+}
+
+/* Scrollbar */
+html[data-theme="light"] ::-webkit-scrollbar {
+  width: 8px;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #f0f0f0;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
+
+/* Mini-player dark frame stays dark in both themes */
+html[data-theme="light"] .mini-player-frame {
+  background: #111;
+}

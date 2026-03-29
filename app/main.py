@@ -1,3 +1,4 @@
+import html
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,6 +15,7 @@ from app.api.backup import router as backup_router
 from app.api.devices import router as devices_router
 from app.api.groups import router as groups_router
 from app.api.health import router as health_router
+from app.api.layouts import router as layouts_router
 from app.api.logs import router as logs_router
 from app.api.overrides import router as overrides_router
 from app.api.playlists import router as playlists_router
@@ -98,6 +100,7 @@ app.include_router(devices_router, prefix="/api")
 app.include_router(groups_router, prefix="/api")
 app.include_router(schedules_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
+app.include_router(layouts_router, prefix="/api")
 app.include_router(logs_router, prefix="/api")
 app.include_router(overrides_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
@@ -132,14 +135,14 @@ async def player_page():
                 break
     except Exception:
         pass
-    html = _player_html.read_text(encoding="utf-8")
+    html_content = _player_html.read_text(encoding="utf-8")
     # Inject server-url meta tag after <head> so player.js can read it
-    meta_tag = f'<meta name="server-url" content="{server_url}">'
-    html = html.replace("<head>", f"<head>\n    {meta_tag}", 1)
+    meta_tag = f'<meta name="server-url" content="{html.escape(server_url, quote=True)}">'
+    html_content = html_content.replace("<head>", f"<head>\n    {meta_tag}", 1)
     # Cache-bust CSS and JS with version query parameter
-    html = html.replace("/static/player.css", f"/static/player.css?v={player_version}")
-    html = html.replace("/static/player.js", f"/static/player.js?v={player_version}")
-    return HTMLResponse(html)
+    html_content = html_content.replace("/static/player.css", f"/static/player.css?v={player_version}")
+    html_content = html_content.replace("/static/player.js", f"/static/player.js?v={player_version}")
+    return HTMLResponse(html_content)
 
 
 @app.get("/admin")

@@ -32,6 +32,11 @@ const routes = [
     redirect: '/playlists',
   },
   {
+    path: '/layouts',
+    name: 'layouts',
+    component: () => import('../views/LayoutEditor.vue'),
+  },
+  {
     path: '/groups',
     name: 'groups',
     component: () => import('../views/DeviceGroups.vue'),

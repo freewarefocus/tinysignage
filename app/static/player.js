@@ -1,9 +1,12 @@
 /**
- * TinySignage Player — Polling Architecture
+ * TinySignage Player — Polling Architecture with Multi-Zone Support
  *
  * Polls the server for playlist updates, caches playlist JSON in localStorage,
  * relies on browser HTTP cache for media files. Owns its own playback timer.
  * Survives indefinitely without a network connection.
+ *
+ * When a layout with zones is assigned, each zone runs its own independent
+ * playback loop with its own dual-layer crossfade engine.
  */
 
 (function () {
@@ -14,7 +17,7 @@
     const HEARTBEAT_INTERVAL = 60000; // 60s between heartbeats
     const MAX_VIDEO_DURATION = 300;   // 5 min cap for videos with duration=0
     const PRELOAD_AHEAD = 1;          // Number of assets to preload ahead
-    const PLAYER_VERSION = '0.4.0';
+    const PLAYER_VERSION = '0.6.0';
 
     // Base URL for split deployment — read from <meta name="server-url">
     const serverMeta = document.querySelector('meta[name="server-url"]');
@@ -27,7 +30,7 @@
     // --- State ---
     let currentLayer = 'a';
     let currentTransitionType = 'fade';
-    let playlist = [];                // Active playlist items
+    let playlist = [];                // Active playlist items (main/fallback)
     let playlistHash = '';
     let currentIndex = -1;
     let settings = {};
@@ -38,9 +41,21 @@
     let deviceToken = '';
     let startTime = Date.now();
     let heartbeatTimer = null;
-    let activeOverride = null;  // Current emergency override from server
+    let activeOverride = null;
     let overrideExpiryTimer = null;
-    let pairingBound = false;   // Guard to prevent duplicate pairing listeners
+    let pairingBound = false;
+
+    // --- Transition playlist state ---
+    let transitionPlaylist = null;    // Bumper content between schedule changes
+    let playingTransition = false;    // Whether we're currently playing a transition playlist
+    let transitionIndex = -1;
+    let pendingPlaylist = null;       // Main playlist to switch to after transition
+    let pendingHash = '';
+    let pendingSettings = {};
+
+    // --- Multi-zone state ---
+    let activeZones = [];             // Array of zone playback controllers
+    let zonesActive = false;          // Whether we're in multi-zone mode
 
     // --- Auth ---
     function authHeaders() {
@@ -99,7 +114,6 @@
         if (pairingBound) return;
         pairingBound = true;
 
-        // Force uppercase as user types
         input.addEventListener('input', () => {
             input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
         });
@@ -130,7 +144,7 @@
 
     function showPairingSuccess(deviceName) {
         const overlay = document.getElementById('pairing-overlay');
-        const inner = overlay.querySelector('.pairing-inner') || overlay;
+        const inner = overlay.querySelector('.pairing-card') || overlay;
         inner.innerHTML = '<div style="text-align:center;padding:2rem;">' +
             '<div style="font-size:2rem;margin-bottom:0.5rem;">&#10003;</div>' +
             '<div style="font-size:1.2rem;color:#fff;">Paired as ' +
@@ -151,7 +165,6 @@
     async function init() {
         const params = new URLSearchParams(window.location.search);
 
-        // Priority a: ?token=<token>&device=<id> — fully provisioned
         const urlToken = params.get('token');
         const urlDevice = params.get('device');
         if (urlToken && urlDevice) {
@@ -161,7 +174,6 @@
             return;
         }
 
-        // Priority b: ?pair=<CODE> — pairing mode
         const pairCode = params.get('pair');
         if (pairCode) {
             try {
@@ -170,7 +182,6 @@
                 cleanUrl();
                 showPairingSuccess(data.device_name || 'Device');
             } catch (err) {
-                // Show overlay with error pre-filled
                 showPairingOverlay();
                 const errorEl = document.getElementById('pairing-error');
                 errorEl.textContent = err.message;
@@ -181,7 +192,6 @@
             return;
         }
 
-        // Priority c: localStorage fallback
         const storedId = localStorage.getItem('tinysignage_device_id');
         const storedToken = localStorage.getItem('tinysignage_device_token');
         if (storedId && storedToken) {
@@ -191,14 +201,13 @@
             return;
         }
 
-        // Priority d: No identity — show pairing prompt
         showPairingOverlay();
     }
 
     function startPlayer() {
         hidePairingOverlay();
         loadCachedPlaylist();
-        poll();                       // First poll immediately
+        poll();
         schedulePoll();
         scheduleHeartbeat();
 
@@ -249,6 +258,17 @@
 
         try {
             const resp = await authFetch(apiUrl(`/api/devices/${deviceId}/playlist`));
+            if (resp.status === 401) {
+                console.warn('[TinySignage] Token rejected (401), clearing credentials');
+                localStorage.removeItem('tinysignage_device_id');
+                localStorage.removeItem('tinysignage_device_token');
+                deviceId = '';
+                deviceToken = '';
+                cancelPlayback();
+                teardownZones();
+                showPairingOverlay();
+                return;
+            }
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
             setOnlineStatus(true);
@@ -261,13 +281,12 @@
                     scheduleOverrideExpiry(data.override);
                     playlistHash = data.hash;
                     cachePlaylist(data);
+                    teardownZones();
                     return;
                 }
-                // Playlist override: falls through to normal playlist update below
                 activeOverride = data.override;
                 scheduleOverrideExpiry(data.override);
             } else if (activeOverride) {
-                // Override was removed — return to normal
                 console.log('[TinySignage] Override ended, resuming normal playback');
                 activeOverride = null;
                 if (overrideExpiryTimer) { clearTimeout(overrideExpiryTimer); overrideExpiryTimer = null; }
@@ -282,9 +301,26 @@
             if (data.hash !== playlistHash) {
                 console.log('[TinySignage] Playlist updated:', data.hash);
                 const wasEmpty = playlist.length === 0;
+                const hadContent = playlist.length > 0;
 
-                // Clear emergency message if switching to playlist content
                 hideEmergencyMessage();
+
+                // --- Transition playlist: play bumper before switching ---
+                if (hadContent && !playingTransition && data.transition_playlist
+                    && data.transition_playlist.items && data.transition_playlist.items.length > 0) {
+                    console.log('[TinySignage] Playing transition playlist before switch');
+                    pendingPlaylist = data.items || [];
+                    pendingHash = data.hash;
+                    pendingSettings = data.settings || {};
+                    transitionPlaylist = data.transition_playlist.items;
+                    playingTransition = true;
+                    transitionIndex = 0;
+                    cancelPlayback();
+                    teardownZones();
+                    cachePlaylist(data);
+                    playTransitionAsset();
+                    return;
+                }
 
                 playlist = data.items || [];
                 playlistHash = data.hash;
@@ -292,7 +328,14 @@
                 applySettings(settings);
                 cachePlaylist(data);
 
-                // Preload new assets
+                // --- Multi-zone handling ---
+                if (data.zones && data.zones.length > 0) {
+                    setupZones(data.zones, data.items);
+                    return;
+                } else {
+                    teardownZones();
+                }
+
                 preloadAssets();
 
                 if (wasEmpty && playlist.length > 0) {
@@ -321,14 +364,270 @@
         }
     }
 
-    // --- Playback ---
+    // ===================================================================
+    // MULTI-ZONE ENGINE
+    // Each zone gets its own dual-layer container and independent playback
+    // ===================================================================
+
+    function setupZones(zonesData, mainItems) {
+        teardownZones();
+        zonesActive = true;
+
+        // Hide single-mode layers
+        const layerA = document.getElementById('layer-a');
+        const layerB = document.getElementById('layer-b');
+        layerA.classList.remove('active');
+        layerB.classList.remove('active');
+        layerA.style.display = 'none';
+        layerB.style.display = 'none';
+        cancelPlayback();
+        hideSplash();
+
+        const container = document.getElementById('zones-container');
+        container.classList.remove('hidden');
+        container.innerHTML = '';
+
+        zonesData.forEach(zone => {
+            const items = zone.items && zone.items.length > 0 ? zone.items : [];
+            const zoneSettings = zone.settings || settings;
+
+            const zoneEl = document.createElement('div');
+            zoneEl.className = 'zone';
+            zoneEl.style.left = zone.x_percent + '%';
+            zoneEl.style.top = zone.y_percent + '%';
+            zoneEl.style.width = zone.width_percent + '%';
+            zoneEl.style.height = zone.height_percent + '%';
+            zoneEl.style.zIndex = zone.z_index || 0;
+            zoneEl.dataset.zoneId = zone.id;
+            zoneEl.dataset.zoneName = zone.name;
+
+            // Dual-layer crossfade per zone
+            const layerAEl = document.createElement('div');
+            layerAEl.className = 'zone-layer';
+            const layerBEl = document.createElement('div');
+            layerBEl.className = 'zone-layer';
+
+            zoneEl.appendChild(layerAEl);
+            zoneEl.appendChild(layerBEl);
+            container.appendChild(zoneEl);
+
+            // Zone controller
+            const ctrl = {
+                id: zone.id,
+                name: zone.name,
+                el: zoneEl,
+                layerA: layerAEl,
+                layerB: layerBEl,
+                currentLayer: 'a',
+                items: items,
+                currentIndex: -1,
+                settings: zoneSettings,
+                timer: null,
+                transitionType: zoneSettings.transition_type || 'fade',
+            };
+
+            activeZones.push(ctrl);
+
+            if (items.length > 0) {
+                ctrl.currentIndex = 0;
+                zonePlayAsset(ctrl);
+            }
+        });
+
+        console.log('[TinySignage] Multi-zone mode active with', activeZones.length, 'zones');
+    }
+
+    function teardownZones() {
+        if (!zonesActive) return;
+
+        activeZones.forEach(ctrl => {
+            if (ctrl.timer) clearTimeout(ctrl.timer);
+            zoneCleanupLayer(ctrl.layerA);
+            zoneCleanupLayer(ctrl.layerB);
+        });
+        activeZones = [];
+        zonesActive = false;
+
+        const container = document.getElementById('zones-container');
+        container.classList.add('hidden');
+        container.innerHTML = '';
+
+        // Restore single-mode layers
+        const layerA = document.getElementById('layer-a');
+        const layerB = document.getElementById('layer-b');
+        layerA.style.display = '';
+        layerB.style.display = '';
+    }
+
+    function zonePlayAsset(ctrl) {
+        if (ctrl.items.length === 0) return;
+
+        if (ctrl.currentIndex >= ctrl.items.length) ctrl.currentIndex = 0;
+        if (ctrl.currentIndex < 0) ctrl.currentIndex = ctrl.items.length - 1;
+
+        const item = ctrl.items[ctrl.currentIndex];
+        const asset = item.asset;
+        if (!asset) {
+            zoneAdvance(ctrl);
+            return;
+        }
+
+        zoneLoadAsset(ctrl, asset);
+
+        const duration = zoneGetDuration(ctrl, asset);
+        if (ctrl.timer) clearTimeout(ctrl.timer);
+        ctrl.timer = setTimeout(() => zoneAdvance(ctrl), duration * 1000);
+    }
+
+    function zoneGetDuration(ctrl, asset) {
+        if (asset.duration === 0 && asset.asset_type === 'video') {
+            return MAX_VIDEO_DURATION;
+        }
+        return asset.duration || ctrl.settings.default_duration || settings.default_duration || 10;
+    }
+
+    function zoneAdvance(ctrl) {
+        if (ctrl.timer) { clearTimeout(ctrl.timer); ctrl.timer = null; }
+        if (ctrl.settings.shuffle && ctrl.items.length > 1) {
+            let next;
+            do { next = Math.floor(Math.random() * ctrl.items.length); } while (next === ctrl.currentIndex);
+            ctrl.currentIndex = next;
+        } else {
+            ctrl.currentIndex++;
+            if (ctrl.currentIndex >= ctrl.items.length) ctrl.currentIndex = 0;
+        }
+        zonePlayAsset(ctrl);
+    }
+
+    function zoneLoadAsset(ctrl, asset) {
+        const isLayerA = ctrl.currentLayer === 'a';
+        const nextLayer = isLayerA ? ctrl.layerB : ctrl.layerA;
+        const outLayer = isLayerA ? ctrl.layerA : ctrl.layerB;
+
+        zoneCleanupLayer(nextLayer);
+
+        const transition = getEffectiveTransition(asset);
+        const doTx = () => zoneDoTransition(ctrl, nextLayer, outLayer, isLayerA ? 'b' : 'a', transition);
+
+        let element;
+        if (asset.asset_type === 'image') {
+            element = document.createElement('img');
+            element.onload = () => { setTimeout(doTx, 300); };
+            element.onerror = () => { setTimeout(doTx, 300); };
+            element.src = `${baseUrl}/media/${asset.uri}`;
+        } else if (asset.asset_type === 'video') {
+            element = document.createElement('video');
+            element.autoplay = true;
+            element.muted = true;
+            element.playsInline = true;
+            element.loop = false;
+            const videoLoadTimeout = setTimeout(() => {
+                if (element.readyState < 2) {
+                    console.warn('[TinySignage] Video load timeout (zone):', asset.uri);
+                    element.oncanplay = null;
+                    element.onerror = null;
+                    element.onended = null;
+                    zoneAdvance(ctrl);
+                }
+            }, 10000);
+            element.oncanplay = () => { clearTimeout(videoLoadTimeout); setTimeout(doTx, 300); };
+            element.onerror = () => { clearTimeout(videoLoadTimeout); zoneAdvance(ctrl); };
+            element.onended = () => { zoneAdvance(ctrl); };
+            element.src = `${baseUrl}/media/${asset.uri}`;
+        } else if (asset.asset_type === 'html') {
+            element = document.createElement('iframe');
+            element.onload = () => { setTimeout(doTx, 300); };
+            element.src = `${baseUrl}/media/${asset.uri}`;
+            element.sandbox = 'allow-scripts allow-same-origin';
+        } else if (asset.asset_type === 'url') {
+            element = document.createElement('iframe');
+            element.onload = () => { setTimeout(doTx, 500); };
+            element.src = asset.uri;
+            element.sandbox = 'allow-scripts allow-same-origin';
+        }
+
+        if (element) {
+            nextLayer.appendChild(element);
+        }
+    }
+
+    function zoneDoTransition(ctrl, inLayer, outLayer, newCurrentId, transition) {
+        const inContent = inLayer.querySelector('video, img, iframe');
+        const outContent = outLayer.querySelector('video, img, iframe');
+        const isVideoToVideo = inContent?.tagName === 'VIDEO' && outContent?.tagName === 'VIDEO';
+
+        const txType = transition ? transition.type : ctrl.transitionType;
+        const txDuration = transition ? transition.duration : null;
+        const useCut = txType === 'cut' || isVideoToVideo;
+
+        if (useCut) {
+            inLayer.style.transition = 'none';
+            outLayer.style.transition = 'none';
+            inLayer.classList.add('active');
+            outLayer.classList.remove('active');
+            zoneCleanupLayer(outLayer);
+            requestAnimationFrame(() => {
+                inLayer.style.transition = '';
+                outLayer.style.transition = '';
+            });
+        } else {
+            if (txDuration != null) {
+                inLayer.style.transitionDuration = txDuration + 's';
+                outLayer.style.transitionDuration = txDuration + 's';
+            }
+            inLayer.classList.add('active');
+            outLayer.classList.remove('active');
+            const onEnd = () => {
+                outLayer.removeEventListener('transitionend', onEnd);
+                zoneCleanupLayer(outLayer);
+                inLayer.style.transitionDuration = '';
+                outLayer.style.transitionDuration = '';
+            };
+            outLayer.addEventListener('transitionend', onEnd);
+            const dur = txDuration != null ? txDuration : 1;
+            setTimeout(() => {
+                outLayer.removeEventListener('transitionend', onEnd);
+                zoneCleanupLayer(outLayer);
+                inLayer.style.transitionDuration = '';
+                outLayer.style.transitionDuration = '';
+            }, (dur + 0.5) * 1000);
+        }
+
+        ctrl.currentLayer = newCurrentId;
+    }
+
+    function zoneCleanupLayer(layer) {
+        const video = layer.querySelector('video');
+        if (video) {
+            video.onended = null;
+            video.onerror = null;
+            video.oncanplay = null;
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+        }
+        const img = layer.querySelector('img');
+        if (img) {
+            img.onload = null;
+            img.onerror = null;
+        }
+        const iframe = layer.querySelector('iframe');
+        if (iframe) {
+            iframe.onload = null;
+        }
+        layer.innerHTML = '';
+    }
+
+    // ===================================================================
+    // SINGLE-MODE PLAYBACK (original dual-layer engine)
+    // ===================================================================
+
     function playCurrentAsset() {
         if (playlist.length === 0) {
             showSplash();
             return;
         }
 
-        // Wrap index
         if (currentIndex >= playlist.length) currentIndex = 0;
         if (currentIndex < 0) currentIndex = playlist.length - 1;
 
@@ -341,16 +640,14 @@
 
         loadAsset(asset);
 
-        // Schedule next advance based on duration
         const duration = getAssetDuration(asset);
         cancelPlayback();
         playbackTimer = setTimeout(() => advance(), duration * 1000);
-        // For videos with duration=0, onended will fire first (before the 300s cap)
     }
 
     function getAssetDuration(asset) {
         if (asset.duration === 0 && asset.asset_type === 'video') {
-            return MAX_VIDEO_DURATION;  // Safety cap; onended will fire first
+            return MAX_VIDEO_DURATION;
         }
         return asset.duration || settings.default_duration || 10;
     }
@@ -377,7 +674,6 @@
 
     // --- Per-asset transition overrides ---
     function getEffectiveTransition(asset) {
-        // Per-asset overrides > playlist/global settings
         const type = asset.transition_type || currentTransitionType;
         const duration = (asset.transition_duration != null)
             ? asset.transition_duration
@@ -412,9 +708,20 @@
             element.playsInline = true;
             element.loop = false;
 
-            element.oncanplay = () => { setTimeout(doTx, 300); };
+            const videoLoadTimeout = setTimeout(() => {
+                if (element.readyState < 2) {
+                    console.warn('[TinySignage] Video load timeout:', asset.uri);
+                    element.oncanplay = null;
+                    element.onerror = null;
+                    element.onended = null;
+                    advance();
+                }
+            }, 10000);
+
+            element.oncanplay = () => { clearTimeout(videoLoadTimeout); setTimeout(doTx, 300); };
 
             element.onerror = () => {
+                clearTimeout(videoLoadTimeout);
                 console.warn('[TinySignage] Video load failed:', asset.uri);
                 advance();
             };
@@ -452,7 +759,6 @@
                 const img = new Image();
                 img.src = `${baseUrl}/media/${asset.uri}`;
             }
-            // Videos and iframes will be loaded on-demand
         }
     }
 
@@ -483,7 +789,6 @@
                 outLayer.style.transition = '';
             });
         } else {
-            // Apply per-asset transition duration if set
             if (txDuration != null) {
                 inLayer.style.transitionDuration = txDuration + 's';
                 outLayer.style.transitionDuration = txDuration + 's';
@@ -494,7 +799,6 @@
             const onTransitionEnd = () => {
                 outLayer.removeEventListener('transitionend', onTransitionEnd);
                 cleanupLayer(outLayer);
-                // Restore default transition duration
                 inLayer.style.transitionDuration = '';
                 outLayer.style.transitionDuration = '';
             };
@@ -560,7 +864,7 @@
     // --- Heartbeat ---
     function scheduleHeartbeat() {
         if (heartbeatTimer) clearInterval(heartbeatTimer);
-        sendHeartbeat();  // Send immediately
+        sendHeartbeat();
         heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
     }
 
@@ -589,7 +893,6 @@
         const messageEl = document.getElementById('emergency-message');
         const nameEl = document.getElementById('emergency-name');
 
-        // Escape HTML to prevent injection
         const escaped = override.message
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
@@ -616,7 +919,6 @@
         const expiresAt = new Date(override.expires_at.endsWith('Z') ? override.expires_at : override.expires_at + 'Z');
         const msUntilExpiry = expiresAt.getTime() - Date.now();
         if (msUntilExpiry <= 0) {
-            // Already expired — clear immediately
             console.log('[TinySignage] Override already expired client-side, clearing');
             activeOverride = null;
             hideEmergencyMessage();
@@ -630,6 +932,64 @@
             overrideExpiryTimer = null;
             if (playlist.length > 0) { playCurrentAsset(); } else { showSplash(); }
         }, msUntilExpiry);
+    }
+
+    // ===================================================================
+    // TRANSITION PLAYLIST PLAYBACK
+    // Plays bumper/transition content once, then switches to the pending
+    // scheduled playlist.
+    // ===================================================================
+
+    function playTransitionAsset() {
+        if (!playingTransition || !transitionPlaylist || transitionPlaylist.length === 0) {
+            finishTransition();
+            return;
+        }
+
+        if (transitionIndex >= transitionPlaylist.length) {
+            finishTransition();
+            return;
+        }
+
+        const item = transitionPlaylist[transitionIndex];
+        const asset = item.asset;
+        if (!asset) {
+            transitionIndex++;
+            playTransitionAsset();
+            return;
+        }
+
+        loadAsset(asset);
+
+        const duration = getAssetDuration(asset);
+        cancelPlayback();
+        playbackTimer = setTimeout(() => {
+            transitionIndex++;
+            playTransitionAsset();
+        }, duration * 1000);
+    }
+
+    function finishTransition() {
+        console.log('[TinySignage] Transition playlist complete, switching to new content');
+        playingTransition = false;
+        transitionPlaylist = null;
+        transitionIndex = -1;
+
+        playlist = pendingPlaylist || [];
+        playlistHash = pendingHash;
+        settings = pendingSettings || {};
+        applySettings(settings);
+        pendingPlaylist = null;
+        pendingHash = '';
+        pendingSettings = {};
+
+        if (playlist.length > 0) {
+            currentIndex = 0;
+            preloadAssets();
+            playCurrentAsset();
+        } else {
+            showSplash();
+        }
     }
 
     // --- Go ---
