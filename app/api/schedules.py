@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,6 +18,33 @@ from app.models import (
 )
 
 router = APIRouter()
+
+
+def _validate_time_format(value: str | None, field_name: str):
+    """Validate HH:MM format with range checks."""
+    if value is None:
+        return
+    if not re.match(r"^\d{2}:\d{2}$", value):
+        raise HTTPException(status_code=400, detail=f"{field_name} must be HH:MM format")
+    hh, mm = int(value[:2]), int(value[3:])
+    if hh < 0 or hh > 23:
+        raise HTTPException(status_code=400, detail=f"{field_name} hour must be 00-23")
+    if mm < 0 or mm > 59:
+        raise HTTPException(status_code=400, detail=f"{field_name} minute must be 00-59")
+
+
+def _validate_days_of_week(value: str | None):
+    """Validate comma-separated day digits 0-6."""
+    if value is None:
+        return
+    parts = value.split(",")
+    for part in parts:
+        part = part.strip()
+        if not part.isdigit() or int(part) < 0 or int(part) > 6:
+            raise HTTPException(
+                status_code=400,
+                detail=f"days_of_week must be comma-separated digits 0-6, got '{part}'",
+            )
 
 
 def _schedule_to_dict(schedule: Schedule) -> dict:
@@ -85,6 +113,10 @@ async def create_schedule(
         if not await session.get(DeviceGroup, target_id):
             raise HTTPException(status_code=404, detail="Target group not found")
 
+    _validate_time_format(body.get("start_time"), "start_time")
+    _validate_time_format(body.get("end_time"), "end_time")
+    _validate_days_of_week(body.get("days_of_week"))
+
     schedule = Schedule(
         name=name,
         playlist_id=playlist_id,
@@ -138,6 +170,13 @@ async def update_schedule(
     schedule = await session.get(Schedule, schedule_id)
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
+
+    if "start_time" in body:
+        _validate_time_format(body["start_time"], "start_time")
+    if "end_time" in body:
+        _validate_time_format(body["end_time"], "end_time")
+    if "days_of_week" in body:
+        _validate_days_of_week(body["days_of_week"])
 
     simple_fields = {"name", "start_time", "end_time", "days_of_week", "priority", "is_active"}
     for key in simple_fields:

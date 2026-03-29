@@ -34,7 +34,7 @@
             <label>Or open this URL on the player:</label>
             <code>{{ newDevice.pairing_url }}</code>
           </div>
-          <p class="pairing-expires">Code expires in 10 minutes.</p>
+          <p class="pairing-expires">Code expires in {{ formatCountdown(pairingCountdown) }}</p>
           <div class="dialog-actions">
             <button class="btn-primary" @click="closeAddDevice">Done</button>
           </div>
@@ -106,7 +106,7 @@
           <div v-if="devicePairing">
             <div class="pairing-code small">{{ devicePairing.code }}</div>
             <code class="pairing-url-inline">{{ devicePairing.pairing_url }}</code>
-            <p class="pairing-expires">Expires in {{ Math.round(devicePairing.expires_in / 60) }} minutes.</p>
+            <p class="pairing-expires">Expires in {{ formatCountdown(pairingCountdown) }}</p>
           </div>
           <div v-else-if="selectedDevice.has_pairing_code" class="pairing-active">
             <span>Active pairing code exists.</span>
@@ -180,6 +180,29 @@ const nameEditInput = ref(null)
 const detailPlaylistId = ref('')
 const devicePairing = ref(null)
 
+// Pairing countdown
+const pairingCountdown = ref(0)
+let countdownInterval = null
+
+function startCountdown(seconds) {
+  if (countdownInterval) clearInterval(countdownInterval)
+  pairingCountdown.value = seconds
+  countdownInterval = setInterval(() => {
+    pairingCountdown.value--
+    if (pairingCountdown.value <= 0) {
+      clearInterval(countdownInterval)
+      countdownInterval = null
+    }
+  }, 1000)
+}
+
+function formatCountdown(totalSeconds) {
+  if (totalSeconds <= 0) return 'expired'
+  const m = Math.floor(totalSeconds / 60)
+  const s = totalSeconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
 watch(showAddDevice, async (val) => {
   if (val) {
     newDeviceName.value = ''
@@ -231,6 +254,7 @@ async function createDevice() {
     const name = newDeviceName.value.trim() || 'New Player'
     const result = await api.post('/devices', { name })
     newDevice.value = result
+    startCountdown(600)
     await loadDevices()
   } finally {
     creating.value = false
@@ -240,6 +264,7 @@ async function createDevice() {
 function closeAddDevice() {
   showAddDevice.value = false
   newDevice.value = null
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null }
 }
 
 async function openDevice(d) {
@@ -252,6 +277,7 @@ async function openDevice(d) {
 function closeDetail() {
   selectedDevice.value = null
   devicePairing.value = null
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null }
 }
 
 function startEditName() {
@@ -280,6 +306,7 @@ async function assignPlaylist() {
 async function regeneratePairingCode() {
   const result = await api.post(`/devices/${selectedDevice.value.id}/pairing-code`)
   devicePairing.value = result
+  startCountdown(result.expires_in)
   // Refresh device to update has_pairing_code
   const updated = await api.get(`/devices/${selectedDevice.value.id}`)
   selectedDevice.value = updated
@@ -293,6 +320,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval)
+  if (countdownInterval) clearInterval(countdownInterval)
 })
 </script>
 

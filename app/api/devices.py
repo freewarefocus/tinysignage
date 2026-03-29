@@ -18,7 +18,7 @@ from app.auth import (
     require_device,
 )
 from app.database import get_session
-from app.models import ApiToken, Device, Playlist, PlaylistItem
+from app.models import ApiToken, Device, DeviceGroupMembership, Playlist, PlaylistItem, Schedule
 
 PAIRING_CODE_TTL = timedelta(minutes=10)
 _config_path = Path("config.yaml")
@@ -124,6 +124,47 @@ async def update_device(
     await session.commit()
     await session.refresh(device)
     return _device_to_dict(device)
+
+
+@router.delete("/devices/{device_id}")
+async def delete_device(
+    device_id: str,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    device = await session.get(Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    # Delete schedules targeting this device
+    result = await session.execute(
+        select(Schedule).where(
+            Schedule.target_type == "device",
+            Schedule.target_id == device_id,
+        )
+    )
+    for schedule in result.scalars().all():
+        await session.delete(schedule)
+
+    # Delete group memberships
+    result = await session.execute(
+        select(DeviceGroupMembership).where(
+            DeviceGroupMembership.device_id == device_id
+        )
+    )
+    for membership in result.scalars().all():
+        await session.delete(membership)
+
+    # Delete API tokens
+    result = await session.execute(
+        select(ApiToken).where(ApiToken.device_id == device_id)
+    )
+    for token in result.scalars().all():
+        await session.delete(token)
+
+    await session.delete(device)
+    await session.commit()
+    return {"ok": True}
 
 
 @router.post("/devices", status_code=201)

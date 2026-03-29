@@ -112,8 +112,7 @@
                 const data = await pairWithCode(code);
                 storeCredentials(data.device_id, data.token);
                 cleanUrl();
-                overlay.classList.add('hidden');
-                startPlayer();
+                showPairingSuccess(data.device_name || 'Device');
             } catch (err) {
                 errorEl.textContent = err.message;
                 errorEl.classList.remove('hidden');
@@ -121,6 +120,21 @@
                 btn.textContent = 'Pair Display';
             }
         });
+    }
+
+    function showPairingSuccess(deviceName) {
+        const overlay = document.getElementById('pairing-overlay');
+        const inner = overlay.querySelector('.pairing-inner') || overlay;
+        inner.innerHTML = '<div style="text-align:center;padding:2rem;">' +
+            '<div style="font-size:2rem;margin-bottom:0.5rem;">&#10003;</div>' +
+            '<div style="font-size:1.2rem;color:#fff;">Paired as ' +
+            deviceName.replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+            '!</div></div>';
+        overlay.classList.remove('hidden');
+        setTimeout(function () {
+            overlay.classList.add('hidden');
+            startPlayer();
+        }, 2000);
     }
 
     function hidePairingOverlay() {
@@ -148,7 +162,7 @@
                 const data = await pairWithCode(pairCode);
                 storeCredentials(data.device_id, data.token);
                 cleanUrl();
-                startPlayer();
+                showPairingSuccess(data.device_name || 'Device');
             } catch (err) {
                 // Show overlay with error pre-filled
                 showPairingOverlay();

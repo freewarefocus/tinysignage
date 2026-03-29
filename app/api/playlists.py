@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.auth import require_admin, require_token
 from app.database import get_session
-from app.models import ApiToken, Asset, Playlist, PlaylistItem
+from app.models import ApiToken, Asset, Device, Playlist, PlaylistItem, Schedule
 
 router = APIRouter()
 
@@ -18,7 +18,7 @@ def _playlist_hash(items: list[PlaylistItem]) -> str:
     for item in sorted(items, key=lambda i: i.order):
         asset = item.asset
         content = asset.content_hash or asset.id
-        parts.append(f"{item.order}:{asset.id}:{content}")
+        parts.append(f"{item.order}:{asset.id}:{content}:{asset.duration}:{asset.is_enabled}")
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
 
@@ -168,6 +168,31 @@ async def delete_playlist(
         raise HTTPException(status_code=404, detail="Playlist not found")
     if playlist.is_default:
         raise HTTPException(status_code=400, detail="Cannot delete the default playlist")
+
+    # Bug #1: Check if any schedules reference this playlist
+    result = await session.execute(
+        select(Schedule).where(Schedule.playlist_id == playlist_id)
+    )
+    referencing_schedules = result.scalars().all()
+    if referencing_schedules:
+        names = ", ".join(s.name for s in referencing_schedules)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Playlist is used by schedule(s): {names}",
+        )
+
+    # Bug #2: Check if any devices are assigned this playlist
+    result = await session.execute(
+        select(Device).where(Device.playlist_id == playlist_id)
+    )
+    referencing_devices = result.scalars().all()
+    if referencing_devices:
+        names = ", ".join(d.name for d in referencing_devices)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Playlist is assigned to device(s): {names}",
+        )
+
     await session.delete(playlist)
     await session.commit()
     return {"ok": True}

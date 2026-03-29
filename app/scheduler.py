@@ -18,6 +18,12 @@ class Scheduler:
     Players now self-advance via polling; the scheduler no longer broadcasts
     over WebSocket. It still cycles through the playlist to maintain
     current_asset_id/name for the /api/status endpoint.
+
+    Known limitation: This scheduler only tracks the *default* playlist.
+    It does not reflect per-device playlist assignments or scheduled playlist
+    overrides. The status endpoint therefore shows the default playlist's
+    current asset, which may differ from what individual devices are actually
+    displaying.
     """
 
     def __init__(self):

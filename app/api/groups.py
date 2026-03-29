@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from app.auth import require_admin
 from app.database import get_session
-from app.models import ApiToken, Device, DeviceGroup, DeviceGroupMembership
+from app.models import ApiToken, Device, DeviceGroup, DeviceGroupMembership, Playlist, Schedule
 
 router = APIRouter()
 
@@ -122,6 +122,17 @@ async def delete_group(
     group = await session.get(DeviceGroup, group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
+
+    # Bug #3: Delete schedules targeting this group (they're inert once group is gone)
+    result = await session.execute(
+        select(Schedule).where(
+            Schedule.target_type == "group",
+            Schedule.target_id == group_id,
+        )
+    )
+    for schedule in result.scalars().all():
+        await session.delete(schedule)
+
     await session.delete(group)
     await session.commit()
     return {"ok": True}
@@ -182,6 +193,11 @@ async def assign_playlist_to_group(
     playlist_id = body.get("playlist_id")
     if not playlist_id:
         raise HTTPException(status_code=400, detail="playlist_id is required")
+
+    # Bug #11: Validate playlist exists
+    playlist = await session.get(Playlist, playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
 
     result = await session.execute(
         select(DeviceGroup)
