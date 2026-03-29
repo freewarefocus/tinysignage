@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from app.audit import record as audit
 from app.auth import require_admin, require_viewer
 from app.database import get_session
-from app.models import ApiToken, Device, DeviceGroup, DeviceGroupMembership, Playlist, Schedule
+from app.models import ApiToken, Device, DeviceGroup, DeviceGroupMembership, Override, Playlist, Schedule
 
 router = APIRouter()
 
@@ -141,6 +141,16 @@ async def delete_group(
     )
     for schedule in result.scalars().all():
         await session.delete(schedule)
+
+    # Delete overrides targeting this group
+    result = await session.execute(
+        select(Override).where(
+            Override.target_type == "group",
+            Override.target_id == group_id,
+        )
+    )
+    for override in result.scalars().all():
+        await session.delete(override)
 
     await audit(session, action="delete", entity_type="group", entity_id=group_id,
                 details={"name": group.name}, token=_admin, request=request)

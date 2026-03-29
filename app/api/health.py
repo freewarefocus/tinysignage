@@ -29,6 +29,9 @@ async def player_heartbeat(
     if not device_id:
         raise HTTPException(status_code=400, detail="device_id required")
 
+    if device_id != token.device_id:
+        raise HTTPException(status_code=403, detail="Token not authorized for this device")
+
     device = await session.get(Device, device_id)
     if not device:
         raise HTTPException(status_code=404, detail="device not found")

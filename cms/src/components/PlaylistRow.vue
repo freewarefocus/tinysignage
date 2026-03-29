@@ -39,6 +39,7 @@ const typeIcon = computed(() => {
   switch (props.item.asset?.asset_type) {
     case 'video': return 'pi pi-video'
     case 'url': return 'pi pi-globe'
+    case 'html': return 'pi pi-code'
     default: return 'pi pi-image'
   }
 })

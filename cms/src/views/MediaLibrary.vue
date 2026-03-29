@@ -2,7 +2,7 @@
   <div>
     <div class="header-row">
       <h2>Media Library</h2>
-      <button class="tag-mgmt-btn" @click="showTagManager = true" title="Manage tags">
+      <button v-if="canEdit" class="tag-mgmt-btn" @click="showTagManager = true" title="Manage tags">
         <i class="pi pi-tags"></i> Tags
       </button>
     </div>
@@ -28,7 +28,12 @@
       </button>
     </div>
 
-    <UploadZone @uploaded="loadAssets" />
+    <div v-if="canEdit" class="action-row">
+      <UploadZone @uploaded="loadAssets" />
+      <button class="btn-html-add" @click="openHtmlEditor()">
+        <i class="pi pi-code"></i> Add HTML Slide
+      </button>
+    </div>
 
     <div v-if="assets.length === 0" class="empty">
       <p v-if="activeTagFilter">No assets with this tag.</p>
@@ -46,6 +51,7 @@
         @duplicate="duplicateAsset"
         @delete="deleteAsset"
         @tag-changed="loadAll"
+        @edit-html="openHtmlEditor"
       />
     </div>
 
@@ -108,14 +114,49 @@
         </div>
       </div>
     </div>
+
+    <!-- HTML Editor Dialog -->
+    <div v-if="showHtmlEditor" class="dialog-overlay" @click.self="closeHtmlEditor">
+      <div class="dialog html-editor-dialog">
+        <div class="dialog-header">
+          <h3>{{ htmlEditTarget ? 'Edit HTML Slide' : 'New HTML Slide' }}</h3>
+          <button class="close-btn" @click="closeHtmlEditor"><i class="pi pi-times"></i></button>
+        </div>
+        <div class="dialog-body html-editor-body">
+          <div class="html-name-row">
+            <label>Name</label>
+            <input v-model="htmlName" class="tag-input" placeholder="My HTML Slide" />
+          </div>
+          <label class="html-editor-label">HTML / CSS Content</label>
+          <textarea
+            v-model="htmlContent"
+            class="html-editor-textarea"
+            spellcheck="false"
+            placeholder="<div style='text-align:center; color:white; font-size:3rem;'>Hello World</div>"
+          ></textarea>
+          <div class="html-editor-footer">
+            <span class="html-size-hint">{{ htmlContentSize }}</span>
+            <div class="html-editor-actions">
+              <button class="btn-secondary" @click="closeHtmlEditor">Cancel</button>
+              <button class="btn-primary" @click="saveHtmlAsset" :disabled="htmlSaving || !htmlContent.trim()">
+                {{ htmlSaving ? 'Saving...' : (htmlEditTarget ? 'Update' : 'Create') }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { api } from '../api/client.js'
 import UploadZone from '../components/UploadZone.vue'
 import AssetCard from '../components/AssetCard.vue'
+
+const userRole = localStorage.getItem('role') || 'viewer'
+const canEdit = ['admin', 'editor'].includes(userRole)
 
 const assets = ref([])
 const tags = ref([])
@@ -130,6 +171,19 @@ const newTagColor = ref('#7c83ff')
 const editingTag = ref(null)
 const editTagName = ref('')
 const editTagColor = ref('#7c83ff')
+
+// HTML editor state
+const showHtmlEditor = ref(false)
+const htmlEditTarget = ref(null)
+const htmlName = ref('')
+const htmlContent = ref('')
+const htmlSaving = ref(false)
+
+const htmlContentSize = computed(() => {
+  const bytes = new TextEncoder().encode(htmlContent.value).length
+  if (bytes < 1024) return `${bytes} B`
+  return `${(bytes / 1024).toFixed(1)} KB / 64 KB`
+})
 
 async function loadTags() {
   tags.value = await api.get('/tags')
@@ -203,6 +257,64 @@ async function deleteTag(tag) {
   await api.delete(`/tags/${tag.id}`)
   if (activeTagFilter.value === tag.id) activeTagFilter.value = null
   await loadAll()
+}
+
+// HTML editor actions
+async function openHtmlEditor(asset = null) {
+  htmlEditTarget.value = asset
+  if (asset) {
+    htmlName.value = asset.name
+    // Fetch existing HTML content
+    try {
+      const resp = await fetch(`/api/assets/${asset.id}/content`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('tinysignage_token') || localStorage.getItem('tinysignage_admin_token')}` },
+      })
+      if (resp.ok) {
+        htmlContent.value = await resp.text()
+      }
+    } catch {
+      htmlContent.value = ''
+    }
+  } else {
+    htmlName.value = ''
+    htmlContent.value = ''
+  }
+  showHtmlEditor.value = true
+}
+
+function closeHtmlEditor() {
+  showHtmlEditor.value = false
+  htmlEditTarget.value = null
+  htmlName.value = ''
+  htmlContent.value = ''
+}
+
+async function saveHtmlAsset() {
+  if (!htmlContent.value.trim()) return
+  htmlSaving.value = true
+  try {
+    if (htmlEditTarget.value) {
+      // Update existing
+      const body = { content: htmlContent.value }
+      if (htmlName.value.trim() && htmlName.value !== htmlEditTarget.value.name) {
+        body.name = htmlName.value.trim()
+      }
+      await api.patch(`/assets/${htmlEditTarget.value.id}`, body)
+    } else {
+      // Create new — use FormData since the endpoint expects Form fields
+      const formData = new FormData()
+      formData.append('asset_type', 'html')
+      formData.append('content', htmlContent.value)
+      if (htmlName.value.trim()) {
+        formData.append('name', htmlName.value.trim())
+      }
+      await api.post('/assets', formData)
+    }
+    closeHtmlEditor()
+    await loadAssets()
+  } finally {
+    htmlSaving.value = false
+  }
 }
 
 onMounted(loadAll)
@@ -441,4 +553,126 @@ h2 {
 
 .tag-actions button:hover { color: #fff; background: #252836; }
 .tag-actions button.danger:hover { color: #ef5350; background: #ef535022; }
+
+/* Action row */
+.action-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0;
+}
+
+.action-row > :first-child {
+  flex: 1;
+}
+
+.btn-html-add {
+  background: #1a3a2a;
+  border: 1px solid #2a5a3a;
+  color: #4caf50;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-html-add:hover {
+  background: #1f4a32;
+  border-color: #4caf50;
+}
+
+/* HTML Editor Dialog */
+.html-editor-dialog {
+  width: 720px;
+  max-width: 90vw;
+  max-height: 85vh;
+}
+
+.html-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.html-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.html-name-row label {
+  color: #888;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.html-name-row .tag-input {
+  flex: 1;
+}
+
+.html-editor-label {
+  color: #888;
+  font-size: 0.8rem;
+}
+
+.html-editor-textarea {
+  width: 100%;
+  min-height: 320px;
+  max-height: 50vh;
+  background: #0f1117;
+  border: 1px solid #2a2d3a;
+  color: #e0e0e0;
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  tab-size: 2;
+}
+
+.html-editor-textarea:focus {
+  border-color: #7c83ff;
+}
+
+.html-editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+}
+
+.html-size-hint {
+  font-size: 0.75rem;
+  color: #666;
+  font-family: monospace;
+}
+
+.html-editor-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-secondary {
+  background: #252836;
+  border: 1px solid #2a2d3a;
+  color: #ccc;
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.btn-secondary:hover {
+  background: #2a2d3a;
+  color: #fff;
+}
 </style>

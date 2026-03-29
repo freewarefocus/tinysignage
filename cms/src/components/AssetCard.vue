@@ -11,7 +11,10 @@
         <i :class="typeIcon"></i>
       </div>
       <div class="hover-actions">
-        <button @click.stop="$emit('replace', asset)" title="Replace file">
+        <button v-if="asset.asset_type === 'html'" @click.stop="$emit('edit-html', asset)" title="Edit HTML">
+          <i class="pi pi-pencil"></i>
+        </button>
+        <button v-if="asset.asset_type !== 'html'" @click.stop="$emit('replace', asset)" title="Replace file">
           <i class="pi pi-refresh"></i>
         </button>
         <button @click.stop="$emit('duplicate', asset)" title="Duplicate">
@@ -39,7 +42,7 @@
         {{ asset.name }}
       </div>
       <div class="meta">
-        <span class="type-badge">{{ asset.asset_type }}</span>
+        <span class="type-badge" :class="{ 'type-html': asset.asset_type === 'html' }">{{ asset.asset_type }}</span>
         <span v-if="asset.duration">{{ asset.duration }}s</span>
         <span v-else-if="asset.asset_type === 'video'">auto</span>
       </div>
@@ -87,7 +90,7 @@ const props = defineProps({
   asset: Object,
   allTags: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['updated', 'replace', 'duplicate', 'delete', 'tag-changed'])
+const emit = defineEmits(['updated', 'replace', 'duplicate', 'delete', 'tag-changed', 'edit-html'])
 
 const editing = ref(false)
 const editName = ref('')
@@ -98,6 +101,7 @@ const typeIcon = computed(() => {
   switch (props.asset.asset_type) {
     case 'video': return 'pi pi-video'
     case 'url': return 'pi pi-globe'
+    case 'html': return 'pi pi-code'
     default: return 'pi pi-image'
   }
 })
@@ -257,6 +261,11 @@ async function removeTag(tag) {
   text-transform: uppercase;
   font-size: 0.65rem;
   letter-spacing: 0.5px;
+}
+
+.type-badge.type-html {
+  background: #1a3a2a;
+  color: #4caf50;
 }
 
 /* Tags */

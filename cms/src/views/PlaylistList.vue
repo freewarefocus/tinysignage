@@ -105,6 +105,7 @@
 import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client.js'
+import { relativeTime } from '../utils/date.js'
 
 const router = useRouter()
 
@@ -175,15 +176,7 @@ async function confirmDelete() {
 }
 
 function formatDate(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const now = new Date()
-  const diff = now - d
-  if (diff < 60000) return 'just now'
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`
-  return d.toLocaleDateString()
+  return relativeTime(iso)
 }
 
 onMounted(loadPlaylists)

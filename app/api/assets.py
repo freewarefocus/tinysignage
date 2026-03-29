@@ -1,9 +1,10 @@
+import hashlib
 import uuid
 from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,8 @@ from app.auth import require_editor, require_viewer
 from app.database import get_session
 from app.media import compute_content_hash, generate_thumbnail
 from app.models import ApiToken, Asset, AssetTag, Playlist, PlaylistItem, Tag
+
+MAX_HTML_SIZE = 65536  # 64 KB
 
 _config = yaml.safe_load(Path("config.yaml").read_text())
 _media_dir = Path(_config["storage"]["media_dir"])
@@ -58,6 +61,7 @@ async def create_asset(
     name: str = Form(None),
     asset_type: str = Form(None),
     url: str = Form(None),
+    content: str = Form(None),
     duration: int = Form(None),
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
@@ -67,7 +71,32 @@ async def create_asset(
     max_order = result.scalar()
     next_order = (max_order or 0) + 1
 
-    if file and file.filename:
+    if asset_type == "html" and content is not None:
+        # HTML snippet asset
+        if len(content.encode("utf-8")) > MAX_HTML_SIZE:
+            raise HTTPException(status_code=400, detail="HTML content exceeds 64 KB limit")
+
+        asset_id = str(uuid.uuid4())
+        filename = f"{asset_id}.html"
+        filepath = _media_dir / filename
+        filepath.write_text(content, encoding="utf-8")
+
+        file_size = filepath.stat().st_size
+        content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+        asset = Asset(
+            id=asset_id,
+            name=name or "HTML Slide",
+            asset_type="html",
+            uri=filename,
+            duration=duration if duration is not None else 10,
+            play_order=next_order,
+            mimetype="text/html",
+            file_size=file_size,
+            content_hash=content_hash,
+        )
+
+    elif file and file.filename:
         # File upload — streaming write for large video files
         mimetype = file.content_type or ""
         if not mimetype.startswith("image/") and not mimetype.startswith("video/"):
@@ -122,7 +151,7 @@ async def create_asset(
             play_order=next_order,
         )
     else:
-        raise HTTPException(status_code=400, detail="Provide a file or url")
+        raise HTTPException(status_code=400, detail="Provide a file, url, or html content")
 
     session.add(asset)
     await session.flush()
@@ -191,17 +220,51 @@ async def update_asset(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
+    # Handle HTML content update
+    if "content" in body and asset.asset_type == "html":
+        html_content = body["content"]
+        if len(html_content.encode("utf-8")) > MAX_HTML_SIZE:
+            raise HTTPException(status_code=400, detail="HTML content exceeds 64 KB limit")
+        filepath = _media_dir / asset.uri
+        filepath.write_text(html_content, encoding="utf-8")
+        asset.file_size = filepath.stat().st_size
+        asset.content_hash = hashlib.sha256(html_content.encode("utf-8")).hexdigest()
+
     allowed = {"name", "duration", "is_enabled", "start_date", "end_date", "play_order"}
+    changes = {}
     for key, value in body.items():
         if key in allowed:
             setattr(asset, key, value)
+            changes[key] = value
+    if "content" in body and asset.asset_type == "html":
+        changes["content"] = "(updated)"
 
     await audit(session, action="update", entity_type="asset", entity_id=asset_id,
-                details={"name": asset.name, "changes": {k: v for k, v in body.items() if k in allowed}},
+                details={"name": asset.name, "changes": changes},
                 token=_admin, request=request)
     await session.commit()
     await session.refresh(asset)
     return _asset_to_dict(asset)
+
+
+@router.get("/assets/{asset_id}/content")
+async def get_asset_content(
+    asset_id: str,
+    _admin: ApiToken = Depends(require_viewer),
+    session: AsyncSession = Depends(get_session),
+):
+    """Return the raw HTML content for an HTML asset."""
+    asset = await session.get(Asset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if asset.asset_type != "html":
+        raise HTTPException(status_code=400, detail="Not an HTML asset")
+
+    filepath = _media_dir / asset.uri
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="HTML file missing")
+
+    return HTMLResponse(content=filepath.read_text(encoding="utf-8"))
 
 
 @router.put("/assets/{asset_id}/replace")
@@ -216,8 +279,8 @@ async def replace_asset(
     asset = await session.get(Asset, asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-    if asset.asset_type == "url":
-        raise HTTPException(status_code=400, detail="Cannot replace a URL asset file")
+    if asset.asset_type in ("url", "html"):
+        raise HTTPException(status_code=400, detail="Cannot replace a URL or HTML asset file")
 
     mimetype = file.content_type or ""
     if not mimetype.startswith("image/") and not mimetype.startswith("video/"):
@@ -290,6 +353,19 @@ async def duplicate_asset(
 
     if asset.asset_type == "url":
         new_asset.uri = asset.uri
+    elif asset.asset_type == "html":
+        # Copy the HTML file
+        src_path = _media_dir / asset.uri
+        new_filename = f"{new_asset_id}.html"
+        dst_path = _media_dir / new_filename
+        if src_path.exists():
+            import shutil
+            shutil.copy2(src_path, dst_path)
+            new_asset.uri = new_filename
+            new_asset.file_size = dst_path.stat().st_size
+            new_asset.content_hash = compute_content_hash(dst_path)
+        else:
+            new_asset.uri = asset.uri
     else:
         # Copy the media file
         src_path = _media_dir / asset.uri
@@ -372,12 +448,6 @@ async def reorder_assets(
         asset = await session.get(Asset, item["id"])
         if asset:
             asset.play_order = item["play_order"]
-            # Also update matching PlaylistItems in default playlist
-            result = await session.execute(
-                select(PlaylistItem).where(PlaylistItem.asset_id == asset.id)
-            )
-            for pi in result.scalars().all():
-                pi.order = item["play_order"]
     await session.commit()
     return {"ok": True}
 

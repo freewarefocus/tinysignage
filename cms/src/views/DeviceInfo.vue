@@ -85,7 +85,7 @@
           </div>
           <div class="detail-field">
             <label>Created</label>
-            <span>{{ selectedDevice.created_at ? new Date(selectedDevice.created_at).toLocaleDateString() : '—' }}</span>
+            <span>{{ selectedDevice.created_at ? parseUTC(selectedDevice.created_at).toLocaleDateString() : '—' }}</span>
           </div>
         </div>
 
@@ -98,6 +98,31 @@
               {{ pl.name }}{{ pl.is_default ? ' (default)' : '' }}
             </option>
           </select>
+        </div>
+
+        <!-- Health info -->
+        <div v-if="deviceHealth" class="detail-section">
+          <label>Health</label>
+          <div class="health-fields">
+            <div class="health-item">
+              <span class="health-label">Player Version</span>
+              <span>{{ deviceHealth.player_version || '—' }}</span>
+            </div>
+            <div class="health-item">
+              <span class="health-label">Timezone</span>
+              <span>{{ deviceHealth.player_timezone || '—' }}</span>
+            </div>
+            <div class="health-item">
+              <span class="health-label">Clock Drift</span>
+              <span :class="{ 'drift-warn': deviceHealth.clock_drift_seconds != null && Math.abs(deviceHealth.clock_drift_seconds) > 30 }">
+                {{ deviceHealth.clock_drift_seconds != null ? deviceHealth.clock_drift_seconds + 's' : '—' }}
+              </span>
+            </div>
+            <div v-if="deviceHealth.warnings?.length" class="health-item full-width">
+              <span class="health-label">Warnings</span>
+              <span class="health-warnings">{{ deviceHealth.warnings.join(', ') }}</span>
+            </div>
+          </div>
         </div>
 
         <!-- Pairing code -->
@@ -115,6 +140,13 @@
           <div v-else>
             <button class="btn-secondary btn-sm" @click="regeneratePairingCode">Generate Pairing Code</button>
           </div>
+        </div>
+
+        <!-- Delete -->
+        <div class="detail-section detail-danger">
+          <button class="btn-danger" @click="confirmDeleteDevice">
+            <i class="pi pi-trash"></i> Delete Device
+          </button>
         </div>
       </div>
     </div>
@@ -158,6 +190,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { api } from '../api/client.js'
+import { relativeTime, parseUTC } from '../utils/date.js'
 
 const devices = ref([])
 const playlists = ref([])
@@ -179,6 +212,7 @@ const nameInput = ref('')
 const nameEditInput = ref(null)
 const detailPlaylistId = ref('')
 const devicePairing = ref(null)
+const deviceHealth = ref(null)
 
 // Pairing countdown
 const pairingCountdown = ref(0)
@@ -219,21 +253,6 @@ function playlistName(playlistId) {
   return pl ? pl.name : 'Unknown'
 }
 
-function relativeTime(isoStr) {
-  const date = typeof isoStr === 'string' ? new Date(isoStr) : isoStr
-  const now = new Date()
-  const diffMs = now - date
-  const diffSec = Math.floor(diffMs / 1000)
-  if (diffSec < 10) return 'just now'
-  if (diffSec < 60) return `${diffSec}s ago`
-  const diffMin = Math.floor(diffSec / 60)
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHr = Math.floor(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h ago`
-  const diffDay = Math.floor(diffHr / 24)
-  return `${diffDay}d ago`
-}
-
 async function loadDevices() {
   try {
     devices.value = await api.get('/devices')
@@ -271,13 +290,28 @@ async function openDevice(d) {
   selectedDevice.value = d
   detailPlaylistId.value = d.playlist_id || ''
   devicePairing.value = null
+  deviceHealth.value = null
   editingName.value = false
+  // Load health data for this device
+  try {
+    const dashboard = await api.get('/health/dashboard')
+    deviceHealth.value = dashboard.devices?.find(h => h.id === d.id) || null
+  } catch { /* ignore */ }
 }
 
 function closeDetail() {
   selectedDevice.value = null
   devicePairing.value = null
+  deviceHealth.value = null
   if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null }
+}
+
+async function confirmDeleteDevice() {
+  if (!selectedDevice.value) return
+  if (!confirm(`Delete device "${selectedDevice.value.name}"? This will remove all associated schedules, tokens, and overrides.`)) return
+  await api.delete(`/devices/${selectedDevice.value.id}`)
+  closeDetail()
+  await loadDevices()
 }
 
 function startEditName() {
@@ -665,4 +699,60 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 
 .select-input.full { width: 100%; }
 .select-input:focus { border-color: #7c83ff; }
+
+/* Health */
+.health-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.health-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.health-item.full-width { grid-column: 1 / -1; }
+
+.health-label {
+  font-size: 0.7rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.health-item span:not(.health-label):not(.health-warnings) {
+  color: #ccc;
+  font-size: 0.85rem;
+}
+
+.drift-warn { color: #f0ad4e !important; }
+
+.health-warnings {
+  color: #f0ad4e;
+  font-size: 0.8rem;
+}
+
+/* Delete */
+.detail-danger {
+  border-top: 1px solid #2a2d3a;
+  padding-top: 1rem;
+}
+
+.btn-danger {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #5a2030;
+  color: #f88;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s;
+}
+
+.btn-danger:hover { background: #7a2840; }
 </style>

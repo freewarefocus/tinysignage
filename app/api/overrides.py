@@ -55,14 +55,16 @@ async def list_overrides(
     )
     overrides = result.scalars().all()
 
-    # Auto-expire any that have passed their expiry time
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    out = []
     for o in overrides:
+        d = _override_to_dict(o)
+        # Compute effective is_active considering expiry, without modifying DB
         if o.is_active and o.expires_at and o.expires_at <= now:
-            o.is_active = False
-    await session.commit()
+            d["is_active"] = False
+        out.append(d)
 
-    return [_override_to_dict(o) for o in overrides]
+    return out
 
 
 @router.post("/overrides", status_code=201)

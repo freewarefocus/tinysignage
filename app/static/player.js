@@ -415,6 +415,13 @@
             };
 
             element.src = `${baseUrl}/media/${asset.uri}`;
+        } else if (asset.asset_type === 'html') {
+            element = document.createElement('iframe');
+            element.onload = () => {
+                setTimeout(() => doTransition(nextLayer, currentLayerEl, nextLayerId), 300);
+            };
+            element.src = `${baseUrl}/media/${asset.uri}`;
+            element.sandbox = 'allow-scripts allow-same-origin';
         } else if (asset.asset_type === 'url') {
             element = document.createElement('iframe');
             element.onload = () => {

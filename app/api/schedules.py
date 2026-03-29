@@ -199,8 +199,17 @@ async def update_schedule(
         target_type = body["target_type"]
         if target_type not in ("device", "group", "all"):
             raise HTTPException(status_code=400, detail="target_type must be device, group, or all")
+        target_id = body.get("target_id") if target_type != "all" else None
         schedule.target_type = target_type
-        schedule.target_id = body.get("target_id") if target_type != "all" else None
+        schedule.target_id = target_id
+
+        # Validate target exists
+        if target_type == "device" and target_id:
+            if not await session.get(Device, target_id):
+                raise HTTPException(status_code=404, detail="Target device not found")
+        elif target_type == "group" and target_id:
+            if not await session.get(DeviceGroup, target_id):
+                raise HTTPException(status_code=404, detail="Target group not found")
 
     if "start_date" in body:
         schedule.start_date = _parse_date(body["start_date"])

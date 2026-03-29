@@ -106,6 +106,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { api } from '../api/client.js'
+import { formatUTC } from '../utils/date.js'
 
 const entries = ref([])
 const total = ref(0)
@@ -147,9 +148,7 @@ function toggle(i) {
 }
 
 function formatTime(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleString()
+  return formatUTC(iso)
 }
 
 function formatDetail(entry) {

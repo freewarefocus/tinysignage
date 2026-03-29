@@ -122,7 +122,7 @@
         />
       </div>
 
-      <div class="add-section">
+      <div v-if="canEdit" class="add-section">
         <h3>Add from Media Library</h3>
         <div v-if="availableAssets.length === 0" class="empty-hint">
           No media available. Upload files in the Media Library first.
@@ -159,6 +159,9 @@ import PlaylistRow from '../components/PlaylistRow.vue'
 const route = useRoute()
 const router = useRouter()
 
+const userRole = localStorage.getItem('role') || 'viewer'
+const canEdit = ['admin', 'editor'].includes(userRole)
+
 const playlist = ref(null)
 const items = ref([])
 const allAssets = ref([])
@@ -181,6 +184,7 @@ function typeIcon(asset) {
   switch (asset.asset_type) {
     case 'video': return 'pi pi-video'
     case 'url': return 'pi pi-globe'
+    case 'html': return 'pi pi-code'
     default: return 'pi pi-image'
   }
 }

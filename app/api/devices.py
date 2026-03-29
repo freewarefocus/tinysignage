@@ -21,7 +21,7 @@ from app.auth import (
     require_viewer,
 )
 from app.database import get_session
-from app.models import ApiToken, Device, DeviceGroupMembership, Playlist, PlaylistItem, Schedule, Settings
+from app.models import ApiToken, Device, DeviceGroupMembership, Override, Playlist, PlaylistItem, Schedule, Settings
 
 PAIRING_CODE_TTL = timedelta(minutes=10)
 _config_path = Path("config.yaml")
@@ -165,6 +165,16 @@ async def delete_device(
     )
     for membership in result.scalars().all():
         await session.delete(membership)
+
+    # Delete overrides targeting this device
+    result = await session.execute(
+        select(Override).where(
+            Override.target_type == "device",
+            Override.target_id == device_id,
+        )
+    )
+    for override in result.scalars().all():
+        await session.delete(override)
 
     # Delete API tokens
     result = await session.execute(
@@ -390,10 +400,10 @@ async def _get_default_settings(session: AsyncSession) -> dict:
     settings = await session.get(Settings, 1)
     if settings:
         return {
-            "transition_duration": settings.transition_duration or 1.0,
-            "transition_type": settings.transition_type or "fade",
-            "default_duration": settings.default_duration or 10,
-            "shuffle": settings.shuffle or False,
+            "transition_duration": settings.transition_duration if settings.transition_duration is not None else 1.0,
+            "transition_type": settings.transition_type if settings.transition_type is not None else "fade",
+            "default_duration": settings.default_duration if settings.default_duration is not None else 10,
+            "shuffle": settings.shuffle if settings.shuffle is not None else False,
         }
     return {
         "transition_duration": 1.0,

@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.audit import record as audit
 from app.auth import require_editor, require_token, require_viewer
 from app.database import get_session
-from app.models import ApiToken, Asset, Device, Playlist, PlaylistItem, Schedule
+from app.models import ApiToken, Asset, Device, Override, Playlist, PlaylistItem, Schedule
 
 router = APIRouter()
 
@@ -191,7 +191,22 @@ async def delete_playlist(
             detail=f"Playlist is used by schedule(s): {names}",
         )
 
-    # Bug #2: Check if any devices are assigned this playlist
+    # Check if any overrides reference this playlist
+    result = await session.execute(
+        select(Override).where(
+            Override.content_type == "playlist",
+            Override.content == playlist_id,
+        )
+    )
+    referencing_overrides = result.scalars().all()
+    if referencing_overrides:
+        names = ", ".join(o.name for o in referencing_overrides)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Playlist is referenced by override(s): {names}",
+        )
+
+    # Check if any devices are assigned this playlist
     result = await session.execute(
         select(Device).where(Device.playlist_id == playlist_id)
     )

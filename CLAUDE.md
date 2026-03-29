@@ -14,6 +14,8 @@ uvicorn app.main:app --reload --port 8080
 - **aiosqlite==0.21.0** — Pinned. Versions 0.22+ have Windows connection-hanging bugs with SQLAlchemy async sessions.
 - **NullPool** — Always use `NullPool` for the SQLite async engine. No connection pooling needed for SQLite.
 - **pathlib.Path** — Use everywhere for file paths. Never use string concatenation for paths.
+- **Auth required** — All `/api/*` endpoints require Bearer token. Use dependencies from `app/auth.py` (`require_admin`, `require_editor`, `require_viewer`, `require_device`). Only `/health`, `/setup`, and `/api/devices/register` are public.
+- **Alembic migrations** — Use Alembic for all schema changes (`alembic revision --autogenerate -m "description"`). Never use raw ALTER TABLE.
 
 ## Project Layout
 

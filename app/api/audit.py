@@ -38,13 +38,11 @@ async def list_audit_logs(
         query = query.where(AuditLog.entity_type == entity_type)
         count_query = count_query.where(AuditLog.entity_type == entity_type)
     if user:
-        escaped_user = user.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        query = query.where(AuditLog.username.ilike(f"%{escaped_user}%"))
-        count_query = count_query.where(AuditLog.username.ilike(f"%{escaped_user}%"))
+        user_filter = AuditLog.username.contains(user)
+        query = query.where(user_filter)
+        count_query = count_query.where(user_filter)
     if search:
-        escaped_search = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        pattern = f"%{escaped_search}%"
-        search_filter = AuditLog.details.ilike(pattern) | AuditLog.username.ilike(pattern)
+        search_filter = AuditLog.details.contains(search) | AuditLog.username.contains(search)
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
     if date_from:
