@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth import require_admin, require_token
+from app.auth import require_editor, require_token, require_viewer
 from app.database import get_session
 from app.models import ApiToken, Asset, Device, Playlist, PlaylistItem, Schedule
 
@@ -48,7 +48,7 @@ def _item_to_dict(item: PlaylistItem) -> dict:
 
 @router.get("/playlists")
 async def list_playlists(
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
@@ -79,7 +79,7 @@ def _playlist_summary(p: Playlist) -> dict:
 @router.post("/playlists", status_code=201)
 async def create_playlist(
     body: dict,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     name = body.get("name")
@@ -102,7 +102,7 @@ async def create_playlist(
 @router.get("/playlists/{playlist_id}")
 async def get_playlist(
     playlist_id: str,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
@@ -134,7 +134,7 @@ async def get_playlist(
 async def update_playlist(
     playlist_id: str,
     body: dict,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     playlist = await session.get(Playlist, playlist_id)
@@ -160,7 +160,7 @@ async def update_playlist(
 @router.delete("/playlists/{playlist_id}")
 async def delete_playlist(
     playlist_id: str,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     playlist = await session.get(Playlist, playlist_id)
@@ -221,7 +221,7 @@ async def get_playlist_hash(
 async def add_item_to_playlist(
     playlist_id: str,
     body: dict,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     playlist = await session.get(Playlist, playlist_id)
@@ -263,7 +263,7 @@ async def add_item_to_playlist(
 async def remove_item_from_playlist(
     playlist_id: str,
     item_id: str,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
@@ -284,7 +284,7 @@ async def remove_item_from_playlist(
 async def reorder_playlist_items(
     playlist_id: str,
     body: dict,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     """Reorder items. Body: {"item_ids": ["id1", "id2", ...]} in desired order."""

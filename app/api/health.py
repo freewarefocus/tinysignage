@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin, require_device
+from app.auth import require_admin, require_device, require_viewer
 from app.database import get_session
 from app.models import ApiToken, Device
 
@@ -62,7 +62,7 @@ async def player_heartbeat(
 
 @router.get("/health/dashboard")
 async def health_dashboard(
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     """Return per-device health summary."""

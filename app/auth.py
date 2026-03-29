@@ -1,10 +1,11 @@
-"""API token authentication for TinySignage."""
+"""API token authentication and user session auth for TinySignage."""
 
 import hashlib
 import secrets
 import string
 from datetime import datetime, timezone
 
+import bcrypt
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,9 @@ TOKEN_PREFIX = "ts_"
 
 _PAIRING_CHARS = string.ascii_uppercase + string.digits
 
+# Role hierarchy: admin > editor > viewer
+ROLE_HIERARCHY = {"admin": 3, "editor": 2, "viewer": 1, "device": 0}
+
 
 def generate_token() -> str:
     """Generate a secure random token string with ts_ prefix."""
@@ -25,6 +29,16 @@ def generate_token() -> str:
 def hash_token(plaintext: str) -> str:
     """SHA-256 hex digest of a plaintext token."""
     return hashlib.sha256(plaintext.encode()).hexdigest()
+
+
+def hash_password(plaintext: str) -> str:
+    """Hash a password with bcrypt."""
+    return bcrypt.hashpw(plaintext.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_password(plaintext: str, hashed: str) -> bool:
+    """Verify a password against a bcrypt hash."""
+    return bcrypt.checkpw(plaintext.encode(), hashed.encode())
 
 
 def generate_pairing_code() -> str:
@@ -82,6 +96,24 @@ async def require_admin(
     """FastAPI dependency: require an admin token."""
     if token.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
+    return token
+
+
+async def require_editor(
+    token: ApiToken = Depends(require_token),
+) -> ApiToken:
+    """FastAPI dependency: require editor or admin role."""
+    if ROLE_HIERARCHY.get(token.role, 0) < ROLE_HIERARCHY["editor"]:
+        raise HTTPException(status_code=403, detail="Editor access required")
+    return token
+
+
+async def require_viewer(
+    token: ApiToken = Depends(require_token),
+) -> ApiToken:
+    """FastAPI dependency: require any authenticated user (viewer, editor, or admin)."""
+    if ROLE_HIERARCHY.get(token.role, 0) < ROLE_HIERARCHY["viewer"]:
+        raise HTTPException(status_code=403, detail="Login required")
     return token
 
 

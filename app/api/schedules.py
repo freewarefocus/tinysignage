@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth import require_admin
+from app.auth import require_editor, require_viewer
 from app.database import get_session
 from app.models import (
     ApiToken,
@@ -69,7 +69,7 @@ def _schedule_to_dict(schedule: Schedule) -> dict:
 
 @router.get("/schedules")
 async def list_schedules(
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
@@ -82,7 +82,7 @@ async def list_schedules(
 @router.post("/schedules", status_code=201)
 async def create_schedule(
     body: dict,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     name = body.get("name", "").strip()
@@ -146,7 +146,7 @@ async def create_schedule(
 @router.get("/schedules/{schedule_id}")
 async def get_schedule(
     schedule_id: str,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
@@ -164,7 +164,7 @@ async def get_schedule(
 async def update_schedule(
     schedule_id: str,
     body: dict,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     schedule = await session.get(Schedule, schedule_id)
@@ -215,7 +215,7 @@ async def update_schedule(
 @router.delete("/schedules/{schedule_id}")
 async def delete_schedule(
     schedule_id: str,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     schedule = await session.get(Schedule, schedule_id)

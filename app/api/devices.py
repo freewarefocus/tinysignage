@@ -16,6 +16,7 @@ from app.auth import (
     hash_token,
     require_admin,
     require_device,
+    require_viewer,
 )
 from app.database import get_session
 from app.models import ApiToken, Device, DeviceGroupMembership, Playlist, PlaylistItem, Schedule
@@ -34,7 +35,7 @@ def _get_server_url() -> str:
 
 @router.get("/devices")
 async def list_devices(
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(select(Device))

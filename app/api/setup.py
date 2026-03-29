@@ -1,16 +1,16 @@
-"""First-boot wizard API — captures device name and initial configuration."""
+"""First-boot wizard API — captures device name, admin account, and initial configuration."""
 
 from pathlib import Path
 
 import yaml
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import generate_token, hash_token
+from app.auth import generate_token, hash_password, hash_token
 from app.database import get_session
-from app.models import ApiToken, Device
+from app.models import ApiToken, Device, User
 
 router = APIRouter()
 
@@ -44,6 +44,10 @@ button { background: #7c83ff; color: #fff; border: none; padding: 0.7rem 2rem;
          border-radius: 6px; cursor: pointer; font-size: 1rem; width: 100%; }
 button:hover { background: #6b72e8; }
 .done { text-align: center; color: #4caf50; }
+.section-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+                 color: #666; margin: 0.5rem 0 0.8rem; border-top: 1px solid #2a2d3a;
+                 padding-top: 1rem; }
+.error { color: #ef5350; font-size: 0.85rem; margin-bottom: 0.5rem; display: none; }
 </style>
 </head>
 <body>
@@ -55,47 +59,72 @@ button:hover { background: #6b72e8; }
     <input type="text" id="device_name" value="My Signage Player" required>
     <label for="server_url">Server URL (for remote CMS)</label>
     <input type="text" id="server_url" placeholder="http://localhost:8080">
+
+    <div class="section-label">Admin Account</div>
+    <label for="admin_username">Username</label>
+    <input type="text" id="admin_username" value="admin" required minlength="3">
+    <label for="admin_password">Password</label>
+    <input type="password" id="admin_password" required minlength="8" placeholder="Min. 8 characters">
+    <label for="admin_password_confirm">Confirm Password</label>
+    <input type="password" id="admin_password_confirm" required minlength="8">
+    <div class="error" id="error-msg"></div>
+
     <button type="submit">Complete Setup</button>
   </form>
 </div>
 <script>
 document.getElementById('setup-form').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const errEl = document.getElementById('error-msg');
+  errEl.style.display = 'none';
+
+  const pw = document.getElementById('admin_password').value;
+  const pw2 = document.getElementById('admin_password_confirm').value;
+  if (pw !== pw2) {
+    errEl.textContent = 'Passwords do not match.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (pw.length < 8) {
+    errEl.textContent = 'Password must be at least 8 characters.';
+    errEl.style.display = 'block';
+    return;
+  }
+
   const body = {
     device_name: document.getElementById('device_name').value,
     server_url: document.getElementById('server_url').value,
+    admin_username: document.getElementById('admin_username').value,
+    admin_password: pw,
   };
   const resp = await fetch('/api/setup', { method: 'POST',
     headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
-  if (resp.ok) {
+  if (!resp.ok) {
     const data = await resp.json();
-    let html = '<div class="done"><h1>Setup Complete!</h1>';
-    if (data.admin_token) {
-      html += '<p style="color:#ff9800;margin:1rem 0 0.5rem">Save these tokens now — they will not be shown again:</p>';
-      html += '<label>Admin API Token</label>';
-      html += '<input type="text" value="' + data.admin_token + '" readonly onclick="this.select()">';
-      if (data.device_token && data.device_id) {
-        html += '<label>Device Token</label>';
-        html += '<input type="text" value="' + data.device_token + '" readonly onclick="this.select()">';
-        const playerBase = data.server_url || '';
-        const playerUrl = playerBase + '/player?device=' + data.device_id + '&token=' + data.device_token;
-        html += '<label style="margin-top:0.5rem">Player URL</label>';
-        html += '<div style="display:flex;gap:0.5rem;margin-bottom:1rem">';
-        html += '<input type="text" id="player-url" value="' + playerUrl + '" readonly onclick="this.select()" style="margin-bottom:0">';
-        html += '<button type="button" onclick="navigator.clipboard.writeText(document.getElementById(\'player-url\').value)" style="width:auto;padding:0.6rem 1rem;font-size:0.85rem;white-space:nowrap">Copy</button>';
-        html += '</div>';
-        html += '<a href="' + playerUrl + '" target="_blank" style="color:#7c83ff;font-size:0.85rem">Open Player &rarr;</a>';
-      }
-      html += '<p style="color:#888;font-size:0.8rem;margin-top:0.5rem">Store the admin token in the CMS (Settings &gt; API Token).</p>';
-      html += '<button onclick="localStorage.setItem(\'tinysignage_admin_token\', \'' + data.admin_token + '\');window.location.href=\'/cms\'" style="margin-top:1rem">Continue to CMS</button>';
-    } else {
-      html += '<p>Redirecting to CMS...</p>';
-      html += '</div>';
-      setTimeout(() => window.location.href = '/cms', 1500);
-    }
-    html += '</div>';
-    document.getElementById('form-card').innerHTML = html;
+    errEl.textContent = data.detail || 'Setup failed.';
+    errEl.style.display = 'block';
+    return;
   }
+  const data = await resp.json();
+  let html = '<div class="done"><h1>Setup Complete!</h1>';
+  if (data.admin_token) {
+    html += '<p style="color:#ff9800;margin:1rem 0 0.5rem">Save this API token now — it will not be shown again:</p>';
+    html += '<label>Admin API Token</label>';
+    html += '<input type="text" value="' + data.admin_token + '" readonly onclick="this.select()">';
+    if (data.device_token && data.device_id) {
+      const playerBase = data.server_url || '';
+      const playerUrl = playerBase + '/player?device=' + data.device_id + '&token=' + data.device_token;
+      html += '<label style="margin-top:0.5rem">Player URL</label>';
+      html += '<div style="display:flex;gap:0.5rem;margin-bottom:1rem">';
+      html += '<input type="text" id="player-url" value="' + playerUrl + '" readonly onclick="this.select()" style="margin-bottom:0">';
+      html += '<button type="button" onclick="navigator.clipboard.writeText(document.getElementById(\\'player-url\\').value)" style="width:auto;padding:0.6rem 1rem;font-size:0.85rem;white-space:nowrap">Copy</button>';
+      html += '</div>';
+    }
+    html += '<p style="color:#888;font-size:0.8rem;margin-top:0.5rem">You can now log in with your admin account.</p>';
+  }
+  html += '<button onclick="window.location.href=\\'/cms/login\\'" style="margin-top:1rem">Continue to Login</button>';
+  html += '</div>';
+  document.getElementById('form-card').innerHTML = html;
 });
 </script>
 </body>
@@ -116,13 +145,20 @@ async def complete_setup(body: dict, session: AsyncSession = Depends(get_session
 
     device_name = body.get("device_name", "My Signage Player")
     server_url = body.get("server_url", "")
+    admin_username = body.get("admin_username", "admin").strip()
+    admin_password = body.get("admin_password", "")
+
+    # Validate admin credentials
+    if len(admin_username) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
+    if len(admin_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
     # Update the default device name
     result = await session.execute(select(Device))
     device = result.scalars().first()
     if device:
         device.name = device_name
-        await session.commit()
 
     # Save server_url to config if provided
     if server_url:
@@ -130,12 +166,23 @@ async def complete_setup(body: dict, session: AsyncSession = Depends(get_session
         config["server_url"] = server_url
         _config_path.write_text(yaml.dump(config, default_flow_style=False, sort_keys=False))
 
-    # Generate admin token
+    # Create admin user account
+    admin_user = User(
+        username=admin_username,
+        display_name="Administrator",
+        password_hash=hash_password(admin_password),
+        role="admin",
+    )
+    session.add(admin_user)
+    await session.flush()  # Get user.id
+
+    # Generate admin API token (for programmatic access)
     admin_plaintext = generate_token()
     admin_token = ApiToken(
         token_hash=hash_token(admin_plaintext),
         name="Setup Admin",
         role="admin",
+        user_id=admin_user.id,
         created_by="setup_wizard",
     )
     session.add(admin_token)

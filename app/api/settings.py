@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_admin, require_viewer
 from app.database import get_session
 from app.models import ApiToken, Settings
 
@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.get("/settings")
 async def get_settings(
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     settings = await session.get(Settings, 1)
@@ -38,7 +38,7 @@ async def update_settings(
 
 
 @router.get("/status")
-async def get_status(_admin: ApiToken = Depends(require_admin)):
+async def get_status(_admin: ApiToken = Depends(require_viewer)):
     from app.scheduler import scheduler
 
     return {

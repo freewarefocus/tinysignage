@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin
+from app.auth import require_editor, require_viewer
 from app.database import get_session
 from app.media import compute_content_hash, generate_thumbnail
 from app.models import ApiToken, Asset, Playlist, PlaylistItem
@@ -21,7 +21,7 @@ router = APIRouter()
 
 @router.get("/assets")
 async def list_assets(
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(select(Asset).order_by(Asset.play_order))
@@ -36,7 +36,7 @@ async def create_asset(
     asset_type: str = Form(None),
     url: str = Form(None),
     duration: int = Form(None),
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     # Determine next play_order
@@ -125,7 +125,7 @@ async def create_asset(
 @router.get("/assets/{asset_id}")
 async def get_asset(
     asset_id: str,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     asset = await session.get(Asset, asset_id)
@@ -137,7 +137,7 @@ async def get_asset(
 @router.get("/assets/{asset_id}/thumbnail")
 async def get_asset_thumbnail(
     asset_id: str,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     asset = await session.get(Asset, asset_id)
@@ -157,7 +157,7 @@ async def get_asset_thumbnail(
 async def update_asset(
     asset_id: str,
     body: dict,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     asset = await session.get(Asset, asset_id)
@@ -178,7 +178,7 @@ async def update_asset(
 async def replace_asset(
     asset_id: str,
     file: UploadFile = File(...),
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     """Replace the file for an existing asset. Keeps metadata, playlist slot, and order."""
@@ -229,7 +229,7 @@ async def replace_asset(
 @router.post("/assets/{asset_id}/duplicate", status_code=201)
 async def duplicate_asset(
     asset_id: str,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     """Duplicate an asset. Copies the file, creates a new asset and playlist item."""
@@ -299,7 +299,7 @@ async def duplicate_asset(
 @router.delete("/assets/{asset_id}")
 async def delete_asset(
     asset_id: str,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     asset = await session.get(Asset, asset_id)
@@ -323,7 +323,7 @@ async def delete_asset(
 @router.post("/assets/reorder")
 async def reorder_assets(
     items: list[dict],
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     for item in items:

@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth import require_admin
+from app.auth import require_admin, require_viewer
 from app.database import get_session
 from app.models import ApiToken, Device, DeviceGroup, DeviceGroupMembership, Playlist, Schedule
 
@@ -35,7 +35,7 @@ def _group_to_dict(group: DeviceGroup, include_members: bool = False) -> dict:
 
 @router.get("/groups")
 async def list_groups(
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
@@ -72,7 +72,7 @@ async def create_group(
 @router.get("/groups/{group_id}")
 async def get_group(
     group_id: str,
-    _admin: ApiToken = Depends(require_admin),
+    _admin: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(

@@ -1,15 +1,18 @@
 <template>
-  <div class="app-layout">
+  <div v-if="isLoginPage">
+    <router-view />
+  </div>
+  <div v-else class="app-layout">
     <aside class="sidebar">
       <div class="sidebar-header">
         <h1>TinySignage</h1>
       </div>
       <nav>
-        <router-link to="/media" class="nav-item" active-class="active">
+        <router-link v-if="canEdit" to="/media" class="nav-item" active-class="active">
           <i class="pi pi-images"></i>
           <span>Media</span>
         </router-link>
-        <router-link to="/playlists" class="nav-item" active-class="active">
+        <router-link v-if="canEdit" to="/playlists" class="nav-item" active-class="active">
           <i class="pi pi-list"></i>
           <span>Playlists</span>
         </router-link>
@@ -17,11 +20,11 @@
           <i class="pi pi-sitemap"></i>
           <span>Groups</span>
         </router-link>
-        <router-link to="/schedules" class="nav-item" active-class="active">
+        <router-link v-if="canEdit" to="/schedules" class="nav-item" active-class="active">
           <i class="pi pi-calendar"></i>
           <span>Schedules</span>
         </router-link>
-        <router-link to="/settings" class="nav-item" active-class="active">
+        <router-link v-if="isAdmin" to="/settings" class="nav-item" active-class="active">
           <i class="pi pi-cog"></i>
           <span>Settings</span>
         </router-link>
@@ -29,7 +32,11 @@
           <i class="pi pi-desktop"></i>
           <span>Devices</span>
         </router-link>
-        <router-link to="/system" class="nav-item" active-class="active">
+        <router-link v-if="isAdmin" to="/users" class="nav-item" active-class="active">
+          <i class="pi pi-users"></i>
+          <span>Users</span>
+        </router-link>
+        <router-link v-if="isAdmin" to="/system" class="nav-item" active-class="active">
           <i class="pi pi-server"></i>
           <span>System</span>
         </router-link>
@@ -39,6 +46,15 @@
           <i class="pi pi-external-link"></i>
           <span>Open Player</span>
         </a>
+        <div v-if="currentUser" class="user-info">
+          <div class="user-details">
+            <span class="user-name">{{ currentUser.display_name || currentUser.username }}</span>
+            <span class="user-role">{{ currentUser.role }}</span>
+          </div>
+          <button class="logout-btn" title="Sign out" @click="logout">
+            <i class="pi pi-sign-out"></i>
+          </button>
+        </div>
       </div>
     </aside>
     <main class="content">
@@ -49,12 +65,59 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import Toast from 'primevue/toast'
 import { errorBus } from './api/client'
 
 const toast = useToast()
+const route = useRoute()
+const router = useRouter()
+
+const currentUser = ref(null)
+
+const isLoginPage = computed(() => route.name === 'login')
+const isAdmin = computed(() => currentUser.value?.role === 'admin')
+const canEdit = computed(() => {
+  const role = currentUser.value?.role
+  return role === 'admin' || role === 'editor'
+})
+
+function loadUser() {
+  const stored = localStorage.getItem('tinysignage_user')
+  if (stored) {
+    try {
+      currentUser.value = JSON.parse(stored)
+    } catch {
+      currentUser.value = null
+    }
+  } else {
+    // Legacy: user logged in with API token (no user object stored)
+    const token = localStorage.getItem('tinysignage_token') || localStorage.getItem('tinysignage_admin_token')
+    if (token) {
+      currentUser.value = { username: 'API Token', role: 'admin' }
+    } else {
+      currentUser.value = null
+    }
+  }
+}
+
+function logout() {
+  // Fire and forget the logout API call
+  const token = localStorage.getItem('tinysignage_token') || localStorage.getItem('tinysignage_admin_token')
+  if (token) {
+    fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {})
+  }
+  localStorage.removeItem('tinysignage_token')
+  localStorage.removeItem('tinysignage_admin_token')
+  localStorage.removeItem('tinysignage_user')
+  currentUser.value = null
+  router.push('/login')
+}
 
 function onApiError(event) {
   const { summary, severity, sticky } = event.detail
@@ -67,7 +130,11 @@ function onApiError(event) {
   })
 }
 
+// Reload user info when route changes (e.g. after login redirect)
+watch(() => route.name, loadUser)
+
 onMounted(() => {
+  loadUser()
   errorBus.addEventListener('api-error', onApiError)
 })
 
@@ -146,6 +213,50 @@ nav {
 .sidebar-footer {
   border-top: 1px solid #2a2d3a;
   padding: 0.5rem 0;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  border-top: 1px solid #2a2d3a;
+  margin-top: 0.3rem;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.user-name {
+  font-size: 0.85rem;
+  color: #ddd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-role {
+  font-size: 0.7rem;
+  color: #888;
+  text-transform: capitalize;
+}
+
+.logout-btn {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 0.3rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.logout-btn:hover {
+  color: #ef5350;
+  background: #ef535022;
 }
 
 .content {

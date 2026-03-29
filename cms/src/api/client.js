@@ -6,7 +6,8 @@ const BASE = '/api'
 export const errorBus = new EventTarget()
 
 function getAuthHeaders() {
-  const token = localStorage.getItem('tinysignage_admin_token')
+  // New key first, fall back to legacy key for migration
+  const token = localStorage.getItem('tinysignage_token') || localStorage.getItem('tinysignage_admin_token')
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
@@ -52,9 +53,16 @@ async function request(method, path, body = null, options = {}) {
     const severity = getErrorSeverity(resp.status)
     const sticky = resp.status === 401
 
-    // 401: clear token so subsequent calls don't keep failing
+    // 401: clear tokens and redirect to login
     if (resp.status === 401) {
+      localStorage.removeItem('tinysignage_token')
       localStorage.removeItem('tinysignage_admin_token')
+      localStorage.removeItem('tinysignage_user')
+      // Only redirect if not already on login page
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/cms/login'
+        return
+      }
     }
 
     const event = new CustomEvent('api-error', {

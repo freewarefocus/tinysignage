@@ -153,6 +153,25 @@ class DeviceGroupMembership(Base):
     group: Mapped["DeviceGroup"] = relationship(back_populates="memberships")
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    username: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="viewer"
+    )  # "admin", "editor", "viewer"
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class ApiToken(Base):
     __tablename__ = "api_tokens"
 
@@ -161,9 +180,12 @@ class ApiToken(Base):
     )
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(String(20), nullable=False)  # "admin" or "device"
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # "admin", "editor", "viewer", "device"
     device_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("devices.id", ondelete="CASCADE"), nullable=True
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )
     created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -173,6 +195,7 @@ class ApiToken(Base):
     )
 
     device: Mapped["Device | None"] = relationship()
+    user: Mapped["User | None"] = relationship()
 
 
 class Schedule(Base):

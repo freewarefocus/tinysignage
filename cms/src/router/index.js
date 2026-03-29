@@ -2,6 +2,12 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
   {
+    path: '/login',
+    name: 'login',
+    component: () => import('../views/Login.vue'),
+    meta: { public: true },
+  },
+  {
     path: '/',
     redirect: '/media',
   },
@@ -55,11 +61,38 @@ const routes = [
     name: 'system',
     component: () => import('../views/SystemLog.vue'),
   },
+  {
+    path: '/users',
+    name: 'users',
+    component: () => import('../views/UserManagement.vue'),
+    meta: { requiresAdmin: true },
+  },
 ]
 
 const router = createRouter({
   history: createWebHistory('/cms/'),
   routes,
+})
+
+router.beforeEach((to) => {
+  // Public routes (login) don't need auth
+  if (to.meta.public) return true
+
+  // Check for auth token
+  const token = localStorage.getItem('tinysignage_token') || localStorage.getItem('tinysignage_admin_token')
+  if (!token) {
+    return { name: 'login' }
+  }
+
+  // Check admin requirement
+  if (to.meta.requiresAdmin) {
+    const user = JSON.parse(localStorage.getItem('tinysignage_user') || '{}')
+    if (user.role !== 'admin') {
+      return { name: 'media' }
+    }
+  }
+
+  return true
 })
 
 export default router
