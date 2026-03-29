@@ -52,4 +52,5 @@ app/static/cms/
 cms/test_upload.png
 
 # Claude
-.claude/
+.claude/*
+!.claude/CLAUDE.md
