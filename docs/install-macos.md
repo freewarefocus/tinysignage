@@ -2,6 +2,8 @@
 
 Run TinySignage as a local application on macOS. Good for a Mac Mini behind a display, a spare laptop, or development.
 
+> **First time?** See the [Getting Started](getting-started.md) guide for a complete walkthrough from install to content.
+
 ---
 
 ## Requirements
@@ -171,3 +173,12 @@ In Safari, use **Ctrl+Cmd+F**. In Chrome, use **Cmd+Ctrl+F** or **F11** (if your
 ```bash
 open -a "Google Chrome" --args --kiosk http://localhost:8080/player
 ```
+
+---
+
+## See also
+
+- [Getting Started](getting-started.md) -- Zero-to-content walkthrough
+- [Configuration](configuration.md) -- config.yaml reference
+- [Managing Media](managing-media.md) -- Uploading and organizing content
+- [Troubleshooting](troubleshooting.md) -- More common issues and fixes

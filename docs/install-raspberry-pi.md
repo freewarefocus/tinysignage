@@ -1,6 +1,8 @@
 # Installing TinySignage on Raspberry Pi
 
-Dedicated kiosk display — boots straight into fullscreen playback, managed via the CMS from any browser on the network.
+Dedicated kiosk display -- boots straight into fullscreen playback, managed via the CMS from any browser on the network.
+
+> **First time?** See the [Getting Started](getting-started.md) guide for a complete walkthrough from install to content.
 
 ---
 
@@ -81,3 +83,12 @@ ffmpeg -version
 ```
 
 If missing: `sudo apt install ffmpeg`
+
+---
+
+## See also
+
+- [Getting Started](getting-started.md) -- Zero-to-content walkthrough
+- [Configuration](configuration.md) -- config.yaml reference
+- [Managing Media](managing-media.md) -- Uploading and organizing content
+- [Troubleshooting](troubleshooting.md) -- More common issues and fixes

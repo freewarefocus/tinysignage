@@ -2,6 +2,8 @@
 
 Run TinySignage as a local application on Windows 10 or 11. Good for a PC behind a monitor, a spare laptop, or development.
 
+> **First time?** See the [Getting Started](getting-started.md) guide for a complete walkthrough from install to content.
+
 ---
 
 ## Requirements
@@ -119,3 +121,12 @@ chrome --kiosk http://localhost:8080/player
 
 **Firewall prompt on first run:**
 Windows Firewall may ask to allow Python/uvicorn through the firewall. Allow it on "Private networks" if you want to access the CMS from other devices on your network.
+
+---
+
+## See also
+
+- [Getting Started](getting-started.md) -- Zero-to-content walkthrough
+- [Configuration](configuration.md) -- config.yaml reference
+- [Managing Media](managing-media.md) -- Uploading and organizing content
+- [Troubleshooting](troubleshooting.md) -- More common issues and fixes
