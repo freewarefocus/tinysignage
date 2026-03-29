@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.audit import record as audit
 from app.auth import require_admin, require_viewer
 from app.database import get_session
 from app.models import ApiToken, Device, DeviceGroup, DeviceGroupMembership, Playlist, Schedule
@@ -50,6 +51,7 @@ async def list_groups(
 @router.post("/groups", status_code=201)
 async def create_group(
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -58,6 +60,9 @@ async def create_group(
         raise HTTPException(status_code=400, detail="name is required")
     group = DeviceGroup(name=name, description=body.get("description"))
     session.add(group)
+    await session.flush()
+    await audit(session, action="create", entity_type="group", entity_id=group.id,
+                details={"name": name}, token=_admin, request=request)
     await session.commit()
     # Re-fetch with eager loading to avoid lazy-load in async context
     result = await session.execute(
@@ -92,6 +97,7 @@ async def get_group(
 async def update_group(
     group_id: str,
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -102,6 +108,8 @@ async def update_group(
         group.name = body["name"]
     if "description" in body:
         group.description = body["description"]
+    await audit(session, action="update", entity_type="group", entity_id=group_id,
+                details={"name": group.name, "changes": body}, token=_admin, request=request)
     await session.commit()
     # Re-fetch with eager loading to avoid lazy-load in async context
     result = await session.execute(
@@ -116,6 +124,7 @@ async def update_group(
 @router.delete("/groups/{group_id}")
 async def delete_group(
     group_id: str,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -133,6 +142,8 @@ async def delete_group(
     for schedule in result.scalars().all():
         await session.delete(schedule)
 
+    await audit(session, action="delete", entity_type="group", entity_id=group_id,
+                details={"name": group.name}, token=_admin, request=request)
     await session.delete(group)
     await session.commit()
     return {"ok": True}
@@ -142,6 +153,7 @@ async def delete_group(
 async def add_member(
     group_id: str,
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -163,6 +175,9 @@ async def add_member(
 
     membership = DeviceGroupMembership(device_id=device_id, group_id=group_id)
     session.add(membership)
+    await audit(session, action="add_member", entity_type="group", entity_id=group_id,
+                details={"device_id": device_id, "device_name": device.name, "group_name": group.name},
+                token=_admin, request=request)
     await session.commit()
     return {"ok": True}
 
@@ -171,12 +186,15 @@ async def add_member(
 async def remove_member(
     group_id: str,
     device_id: str,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
     membership = await session.get(DeviceGroupMembership, (device_id, group_id))
     if not membership:
         raise HTTPException(status_code=404, detail="Membership not found")
+    await audit(session, action="remove_member", entity_type="group", entity_id=group_id,
+                details={"device_id": device_id}, token=_admin, request=request)
     await session.delete(membership)
     await session.commit()
     return {"ok": True}
@@ -186,6 +204,7 @@ async def remove_member(
 async def assign_playlist_to_group(
     group_id: str,
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -216,5 +235,9 @@ async def assign_playlist_to_group(
             membership.device.playlist_id = playlist_id
             updated += 1
 
+    await audit(session, action="assign_playlist", entity_type="group", entity_id=group_id,
+                details={"playlist_id": playlist_id, "playlist_name": playlist.name,
+                          "group_name": group.name, "devices_updated": updated},
+                token=_admin, request=request)
     await session.commit()
     return {"ok": True, "updated_count": updated}

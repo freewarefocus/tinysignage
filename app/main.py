@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.audit import router as audit_router
 from app.api.assets import router as assets_router
 from app.api.devices import router as devices_router
 from app.api.groups import router as groups_router
@@ -84,6 +85,7 @@ app.mount("/media", StaticFiles(directory=_media_dir), name="media")
 if _cms_dir.exists():
     app.mount("/cms/assets", StaticFiles(directory=_cms_dir / "assets"), name="cms-assets")
 
+app.include_router(audit_router, prefix="/api")
 app.include_router(assets_router, prefix="/api")
 app.include_router(playlists_router, prefix="/api")
 app.include_router(devices_router, prefix="/api")

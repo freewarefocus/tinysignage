@@ -1,11 +1,12 @@
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.audit import record as audit
 from app.auth import require_editor, require_viewer
 from app.database import get_session
 from app.models import (
@@ -82,6 +83,7 @@ async def list_schedules(
 @router.post("/schedules", status_code=201)
 async def create_schedule(
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -131,6 +133,10 @@ async def create_schedule(
         is_active=body.get("is_active", True),
     )
     session.add(schedule)
+    await session.flush()
+    await audit(session, action="create", entity_type="schedule", entity_id=schedule.id,
+                details={"name": name, "playlist_id": playlist_id, "target_type": target_type},
+                token=_admin, request=request)
     await session.commit()
 
     # Re-fetch with playlist loaded
@@ -164,6 +170,7 @@ async def get_schedule(
 async def update_schedule(
     schedule_id: str,
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -200,6 +207,9 @@ async def update_schedule(
     if "end_date" in body:
         schedule.end_date = _parse_date(body["end_date"])
 
+    await audit(session, action="update", entity_type="schedule", entity_id=schedule_id,
+                details={"name": schedule.name, "changes": {k: v for k, v in body.items()}},
+                token=_admin, request=request)
     await session.commit()
 
     # Re-fetch with playlist loaded
@@ -215,12 +225,15 @@ async def update_schedule(
 @router.delete("/schedules/{schedule_id}")
 async def delete_schedule(
     schedule_id: str,
+    request: Request,
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     schedule = await session.get(Schedule, schedule_id)
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
+    await audit(session, action="delete", entity_type="schedule", entity_id=schedule_id,
+                details={"name": schedule.name}, token=_admin, request=request)
     await session.delete(schedule)
     await session.commit()
     return {"ok": True}

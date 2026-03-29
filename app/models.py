@@ -239,6 +239,29 @@ class Schedule(Base):
     playlist: Mapped["Playlist"] = relationship()
 
 
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        index=True,
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    action: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    details: Mapped[str | None] = mapped_column(String(4096), nullable=True)  # JSON string
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+
+    user: Mapped["User | None"] = relationship()
+
+
 class PlaylistItem(Base):
     __tablename__ = "playlist_items"
 

@@ -36,6 +36,10 @@
           <i class="pi pi-users"></i>
           <span>Users</span>
         </router-link>
+        <router-link v-if="isAdmin" to="/audit" class="nav-item" active-class="active">
+          <i class="pi pi-history"></i>
+          <span>Audit Log</span>
+        </router-link>
         <router-link v-if="isAdmin" to="/system" class="nav-item" active-class="active">
           <i class="pi pi-server"></i>
           <span>System</span>

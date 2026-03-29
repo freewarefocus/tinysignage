@@ -1,9 +1,10 @@
 """Token management API — admin-only CRUD for API tokens."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit import record as audit
 from app.auth import generate_token, hash_token, require_admin
 from app.database import get_session
 from app.models import ApiToken, Device
@@ -14,6 +15,7 @@ router = APIRouter()
 @router.post("/tokens", status_code=201)
 async def create_token(
     body: dict,
+    request: Request,
     admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -41,6 +43,9 @@ async def create_token(
         expires_at=None,
     )
     session.add(token)
+    await session.flush()
+    await audit(session, action="create", entity_type="token", entity_id=token.id,
+                details={"name": name, "role": role}, token=admin, request=request)
     await session.commit()
     await session.refresh(token)
 
@@ -80,6 +85,7 @@ async def list_tokens(
 @router.delete("/tokens/{token_id}")
 async def revoke_token(
     token_id: str,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -88,5 +94,7 @@ async def revoke_token(
     if not token:
         raise HTTPException(status_code=404, detail="Token not found")
     token.is_active = False
+    await audit(session, action="revoke", entity_type="token", entity_id=token_id,
+                details={"name": token.name}, token=_admin, request=request)
     await session.commit()
     return {"ok": True}

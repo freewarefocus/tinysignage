@@ -1,10 +1,11 @@
 import hashlib
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.audit import record as audit
 from app.auth import require_editor, require_token, require_viewer
 from app.database import get_session
 from app.models import ApiToken, Asset, Device, Playlist, PlaylistItem, Schedule
@@ -79,6 +80,7 @@ def _playlist_summary(p: Playlist) -> dict:
 @router.post("/playlists", status_code=201)
 async def create_playlist(
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -87,6 +89,9 @@ async def create_playlist(
         raise HTTPException(status_code=400, detail="name is required")
     playlist = Playlist(name=name)
     session.add(playlist)
+    await session.flush()
+    await audit(session, action="create", entity_type="playlist", entity_id=playlist.id,
+                details={"name": name}, token=_admin, request=request)
     await session.commit()
     await session.refresh(playlist)
     return {
@@ -134,6 +139,7 @@ async def get_playlist(
 async def update_playlist(
     playlist_id: str,
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -144,6 +150,9 @@ async def update_playlist(
     for key, value in body.items():
         if key in allowed:
             setattr(playlist, key, value)
+    await audit(session, action="update", entity_type="playlist", entity_id=playlist_id,
+                details={"name": playlist.name, "changes": {k: v for k, v in body.items() if k in allowed}},
+                token=_admin, request=request)
     await session.commit()
     await session.refresh(playlist)
     return {
@@ -160,6 +169,7 @@ async def update_playlist(
 @router.delete("/playlists/{playlist_id}")
 async def delete_playlist(
     playlist_id: str,
+    request: Request,
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -193,6 +203,8 @@ async def delete_playlist(
             detail=f"Playlist is assigned to device(s): {names}",
         )
 
+    await audit(session, action="delete", entity_type="playlist", entity_id=playlist_id,
+                details={"name": playlist.name}, token=_admin, request=request)
     await session.delete(playlist)
     await session.commit()
     return {"ok": True}
@@ -221,6 +233,7 @@ async def get_playlist_hash(
 async def add_item_to_playlist(
     playlist_id: str,
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -247,6 +260,9 @@ async def add_item_to_playlist(
 
     item = PlaylistItem(playlist_id=playlist_id, asset_id=asset_id, order=order)
     session.add(item)
+    await audit(session, action="add_item", entity_type="playlist", entity_id=playlist_id,
+                details={"asset_id": asset_id, "asset_name": asset.name},
+                token=_admin, request=request)
     await session.commit()
 
     # Re-fetch with asset loaded
@@ -263,6 +279,7 @@ async def add_item_to_playlist(
 async def remove_item_from_playlist(
     playlist_id: str,
     item_id: str,
+    request: Request,
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -275,6 +292,8 @@ async def remove_item_from_playlist(
     item = result.scalars().first()
     if not item:
         raise HTTPException(status_code=404, detail="Playlist item not found")
+    await audit(session, action="remove_item", entity_type="playlist", entity_id=playlist_id,
+                details={"asset_id": item.asset_id}, token=_admin, request=request)
     await session.delete(item)
     await session.commit()
     return {"ok": True}

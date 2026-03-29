@@ -2,11 +2,12 @@ import uuid
 from pathlib import Path
 
 import yaml
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit import record as audit
 from app.auth import require_editor, require_viewer
 from app.database import get_session
 from app.media import compute_content_hash, generate_thumbnail
@@ -31,6 +32,7 @@ async def list_assets(
 
 @router.post("/assets", status_code=201)
 async def create_asset(
+    request: Request,
     file: UploadFile | None = File(None),
     name: str = Form(None),
     asset_type: str = Form(None),
@@ -117,6 +119,9 @@ async def create_asset(
         )
         session.add(item)
 
+    await audit(session, action="create", entity_type="asset", entity_id=asset.id,
+                details={"name": asset.name, "type": asset.asset_type},
+                token=_admin, request=request)
     await session.commit()
     await session.refresh(asset)
     return _asset_to_dict(asset)
@@ -157,6 +162,7 @@ async def get_asset_thumbnail(
 async def update_asset(
     asset_id: str,
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -169,6 +175,9 @@ async def update_asset(
         if key in allowed:
             setattr(asset, key, value)
 
+    await audit(session, action="update", entity_type="asset", entity_id=asset_id,
+                details={"name": asset.name, "changes": {k: v for k, v in body.items() if k in allowed}},
+                token=_admin, request=request)
     await session.commit()
     await session.refresh(asset)
     return _asset_to_dict(asset)
@@ -177,6 +186,7 @@ async def update_asset(
 @router.put("/assets/{asset_id}/replace")
 async def replace_asset(
     asset_id: str,
+    request: Request,
     file: UploadFile = File(...),
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
@@ -221,6 +231,9 @@ async def replace_asset(
     thumb = generate_thumbnail(filepath, _thumbs_dir, asset.asset_type, asset.id)
     asset.thumbnail_path = thumb  # None if generation failed
 
+    await audit(session, action="replace", entity_type="asset", entity_id=asset_id,
+                details={"name": asset.name, "new_file": file.filename},
+                token=_admin, request=request)
     await session.commit()
     await session.refresh(asset)
     return _asset_to_dict(asset)
@@ -229,6 +242,7 @@ async def replace_asset(
 @router.post("/assets/{asset_id}/duplicate", status_code=201)
 async def duplicate_asset(
     asset_id: str,
+    request: Request,
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -291,6 +305,9 @@ async def duplicate_asset(
         )
         session.add(item)
 
+    await audit(session, action="duplicate", entity_type="asset", entity_id=new_asset.id,
+                details={"name": new_asset.name, "source_id": asset_id},
+                token=_admin, request=request)
     await session.commit()
     await session.refresh(new_asset)
     return _asset_to_dict(new_asset)
@@ -299,6 +316,7 @@ async def duplicate_asset(
 @router.delete("/assets/{asset_id}")
 async def delete_asset(
     asset_id: str,
+    request: Request,
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -306,6 +324,7 @@ async def delete_asset(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
+    asset_name = asset.name
     # Delete file if not a URL asset
     if asset.asset_type != "url":
         filepath = _media_dir / asset.uri
@@ -315,6 +334,8 @@ async def delete_asset(
             thumb_path = _thumbs_dir / asset.thumbnail_path
             thumb_path.unlink(missing_ok=True)
 
+    await audit(session, action="delete", entity_type="asset", entity_id=asset_id,
+                details={"name": asset_name}, token=_admin, request=request)
     await session.delete(asset)
     await session.commit()
     return {"ok": True}

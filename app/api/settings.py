@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit import record as audit
 from app.auth import require_admin, require_viewer
 from app.database import get_session
 from app.models import ApiToken, Settings
@@ -25,14 +26,17 @@ async def get_settings(
 @router.patch("/settings")
 async def update_settings(
     data: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
     settings = await session.get(Settings, 1)
     allowed = {"transition_duration", "transition_type", "default_duration", "shuffle"}
-    for key, value in data.items():
-        if key in allowed:
-            setattr(settings, key, value)
+    changes = {k: v for k, v in data.items() if k in allowed}
+    for key, value in changes.items():
+        setattr(settings, key, value)
+    await audit(session, action="update", entity_type="settings", entity_id="global",
+                details={"changes": changes}, token=_admin, request=request)
     await session.commit()
     return {"status": "ok"}
 

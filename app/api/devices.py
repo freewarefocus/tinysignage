@@ -2,13 +2,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.playlists import _item_to_dict, _playlist_hash
 from app.api.schedules import evaluate_schedule_for_device
+from app.audit import record as audit
 from app.auth import (
     generate_pairing_code,
     generate_token,
@@ -46,6 +47,7 @@ async def list_devices(
 @router.post("/devices/register")
 async def register_with_pairing_code(
     body: dict,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ):
     """Public endpoint: exchange a pairing code for a device token."""
@@ -85,6 +87,8 @@ async def register_with_pairing_code(
     matched_device.registration_code = None
     matched_device.registration_expires = None
 
+    await audit(session, action="register", entity_type="device", entity_id=matched_device.id,
+                details={"name": matched_device.name}, request=request)
     await session.commit()
 
     return {
@@ -110,6 +114,7 @@ async def get_device(
 async def update_device(
     device_id: str,
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -122,6 +127,9 @@ async def update_device(
         if key in allowed:
             setattr(device, key, value)
 
+    await audit(session, action="update", entity_type="device", entity_id=device_id,
+                details={"name": device.name, "changes": {k: v for k, v in body.items() if k in allowed}},
+                token=_admin, request=request)
     await session.commit()
     await session.refresh(device)
     return _device_to_dict(device)
@@ -130,6 +138,7 @@ async def update_device(
 @router.delete("/devices/{device_id}")
 async def delete_device(
     device_id: str,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -163,6 +172,8 @@ async def delete_device(
     for token in result.scalars().all():
         await session.delete(token)
 
+    await audit(session, action="delete", entity_type="device", entity_id=device_id,
+                details={"name": device.name}, token=_admin, request=request)
     await session.delete(device)
     await session.commit()
     return {"ok": True}
@@ -171,6 +182,7 @@ async def delete_device(
 @router.post("/devices", status_code=201)
 async def create_device(
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -197,6 +209,9 @@ async def create_device(
         registration_expires=now + PAIRING_CODE_TTL,
     )
     session.add(device)
+    await session.flush()
+    await audit(session, action="create", entity_type="device", entity_id=device.id,
+                details={"name": name}, token=_admin, request=request)
     await session.commit()
     await session.refresh(device)
 

@@ -3,10 +3,11 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit import record as audit
 from app.auth import (
     generate_token,
     hash_password,
@@ -39,7 +40,7 @@ def _user_dict(user: User) -> dict:
 
 
 @router.post("/auth/login")
-async def login(body: dict, session: AsyncSession = Depends(get_session)):
+async def login(body: dict, request: Request, session: AsyncSession = Depends(get_session)):
     """Authenticate with username/password, returns a session token."""
     username = body.get("username", "").strip()
     password = body.get("password", "")
@@ -72,6 +73,9 @@ async def login(body: dict, session: AsyncSession = Depends(get_session)):
 
     # Update last_login
     user.last_login = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    await audit(session, action="login", entity_type="user", entity_id=user.id,
+                details={"username": user.username}, request=request)
     await session.commit()
 
     log.info("User %s logged in", user.username)
@@ -84,11 +88,14 @@ async def login(body: dict, session: AsyncSession = Depends(get_session)):
 
 @router.post("/auth/logout")
 async def logout(
+    request: Request,
     token: ApiToken = Depends(require_token),
     session: AsyncSession = Depends(get_session),
 ):
     """Invalidate the current session token."""
     token.is_active = False
+    await audit(session, action="logout", entity_type="user", entity_id=token.user_id,
+                token=token, request=request)
     await session.commit()
     return {"ok": True}
 
@@ -128,6 +135,7 @@ async def list_users(
 @router.post("/users", status_code=201)
 async def create_user(
     body: dict,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -160,6 +168,9 @@ async def create_user(
         role=role,
     )
     session.add(user)
+    await session.flush()
+    await audit(session, action="create", entity_type="user", entity_id=user.id,
+                details={"username": username, "role": role}, token=_admin, request=request)
     await session.commit()
     await session.refresh(user)
 
@@ -171,6 +182,7 @@ async def create_user(
 async def update_user(
     user_id: str,
     body: dict,
+    request: Request,
     admin_token: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -213,6 +225,12 @@ async def update_user(
             raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
         user.password_hash = hash_password(password)
 
+    changes = {k: v for k, v in body.items() if k != "password"}
+    if "password" in body:
+        changes["password"] = "changed"
+    await audit(session, action="update", entity_type="user", entity_id=user_id,
+                details={"username": user.username, "changes": changes},
+                token=admin_token, request=request)
     await session.commit()
     await session.refresh(user)
 
@@ -223,6 +241,7 @@ async def update_user(
 @router.delete("/users/{user_id}")
 async def delete_user(
     user_id: str,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -240,8 +259,11 @@ async def delete_user(
         if admin_count <= 1:
             raise HTTPException(status_code=400, detail="Cannot delete the last admin user")
 
+    username = user.username
+    await audit(session, action="delete", entity_type="user", entity_id=user_id,
+                details={"username": username}, token=_admin, request=request)
     await session.delete(user)
     await session.commit()
 
-    log.info("User %s deleted", user.username)
+    log.info("User %s deleted", username)
     return {"ok": True}
