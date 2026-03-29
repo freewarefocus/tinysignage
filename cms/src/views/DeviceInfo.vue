@@ -42,6 +42,33 @@
       </div>
     </div>
 
+    <!-- Pre-flight warning dialog -->
+    <div v-if="showPreflightDialog" class="dialog-overlay" @click.self="cancelPreflight">
+      <div class="dialog">
+        <h3>Pre-Flight Check</h3>
+        <p v-if="preflightResult.overall === 'fail'" class="preflight-fail">
+          This playlist may not work correctly on this device:
+        </p>
+        <p v-else class="preflight-warn">
+          Some checks returned warnings:
+        </p>
+        <div class="preflight-checks">
+          <div
+            v-for="c in preflightResult.checks.filter(c => c.status !== 'pass' && c.status !== 'not_applicable')"
+            :key="c.check"
+            :class="'preflight-item preflight-' + c.status"
+          >
+            <span class="preflight-check-name">{{ c.check }}</span>
+            <span>{{ c.message }}</span>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn-warning" @click="confirmPreflight">Assign Anyway</button>
+          <button class="btn-secondary" @click="cancelPreflight">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Device detail panel -->
     <div v-if="selectedDevice" class="dialog-overlay" @click.self="closeDetail">
       <div class="dialog detail-dialog">
@@ -111,6 +138,39 @@
           </select>
         </div>
 
+        <!-- Hardware info -->
+        <div v-if="deviceHealth" class="detail-section">
+          <label>Hardware</label>
+          <div class="health-fields">
+            <div class="health-item">
+              <span class="health-label">Player Type</span>
+              <span>{{ deviceHealth.player_type || '—' }}</span>
+            </div>
+            <div class="health-item">
+              <span class="health-label">Resolution</span>
+              <span :class="signalColor('resolution')">{{ deviceHealth.resolution_detected || '—' }}</span>
+            </div>
+            <div class="health-item">
+              <span class="health-label">RAM</span>
+              <span :class="signalColor('ram')">{{ deviceHealth.ram_mb != null ? deviceHealth.ram_mb + ' MB' : '—' }}</span>
+            </div>
+            <div class="health-item">
+              <span class="health-label">Storage</span>
+              <span :class="signalColor('storage')">
+                <template v-if="deviceHealth.storage_free_mb != null">
+                  {{ deviceHealth.storage_free_mb }} MB free
+                  <template v-if="deviceHealth.storage_total_mb"> / {{ deviceHealth.storage_total_mb }} MB</template>
+                </template>
+                <template v-else>—</template>
+              </span>
+            </div>
+            <div class="health-item">
+              <span class="health-label">Capabilities Updated</span>
+              <span>{{ deviceHealth.capabilities_updated_at ? relativeTime(deviceHealth.capabilities_updated_at) : '—' }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- Health info -->
         <div v-if="deviceHealth" class="detail-section">
           <label>Health</label>
@@ -164,20 +224,27 @@
 
     <div v-if="loading" class="loading">Loading devices...</div>
 
-    <div v-else-if="devices.length === 0" class="empty">
+    <div v-else-if="sortedDevices.length === 0" class="empty">
       No devices registered. Click <strong>Add Device</strong> to get started.
     </div>
 
     <div v-else class="device-grid">
       <div
-        v-for="d in devices"
+        v-for="d in sortedDevices"
         :key="d.id"
         class="device-card"
         @click="openDevice(d)"
       >
         <div class="card-header">
           <span class="card-name">{{ d.name }}</span>
-          <span :class="'status-dot status-' + d.status" :title="d.status"></span>
+          <div class="card-signals">
+            <template v-if="healthMap[d.id]">
+              <span v-for="(sig, key) in healthMap[d.id].signals" :key="key"
+                :class="'signal-dot signal-' + sig.level"
+                :title="key + ': ' + (sig.message || 'OK')"></span>
+            </template>
+            <span :class="'status-dot status-' + d.status" :title="d.status"></span>
+          </div>
         </div>
         <div class="card-body">
           <div class="card-field">
@@ -192,6 +259,12 @@
             <i class="pi pi-globe"></i>
             <span class="mono">{{ d.ip_address }}</span>
           </div>
+          <div class="card-summary" v-if="healthMap[d.id]">
+            <span v-if="healthMap[d.id].player_type">{{ healthMap[d.id].player_type }}</span>
+            <span v-if="healthMap[d.id].ram_mb">{{ healthMap[d.id].ram_mb }} MB</span>
+            <span v-if="healthMap[d.id].storage_free_mb != null">{{ healthMap[d.id].storage_free_mb }} MB free</span>
+            <span v-if="healthMap[d.id].resolution_detected">{{ healthMap[d.id].resolution_detected }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -199,7 +272,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { api } from '../api/client.js'
 import { relativeTime, parseUTC } from '../utils/date.js'
 
@@ -209,6 +282,26 @@ const layouts = ref([])
 const loading = ref(true)
 const lastRefresh = ref(null)
 let refreshInterval = null
+
+// Health dashboard data
+const healthData = ref([])
+const healthMap = computed(() => {
+  const map = {}
+  for (const h of healthData.value) {
+    map[h.id] = h
+  }
+  return map
+})
+
+// Sorted devices: red overall first, then yellow, then green
+const sortedDevices = computed(() => {
+  const order = { red: 0, yellow: 1, green: 2 }
+  return [...devices.value].sort((a, b) => {
+    const aLevel = healthMap.value[a.id]?.overall || 'green'
+    const bLevel = healthMap.value[b.id]?.overall || 'green'
+    return (order[aLevel] ?? 2) - (order[bLevel] ?? 2)
+  })
+})
 
 // Add Device
 const showAddDevice = ref(false)
@@ -226,6 +319,11 @@ const detailPlaylistId = ref('')
 const detailLayoutId = ref('')
 const devicePairing = ref(null)
 const deviceHealth = ref(null)
+
+// Pre-flight
+const showPreflightDialog = ref(false)
+const preflightResult = ref(null)
+let pendingPlaylistAssign = null
 
 // Pairing countdown
 const pairingCountdown = ref(0)
@@ -266,6 +364,14 @@ function playlistName(playlistId) {
   return pl ? pl.name : 'Unknown'
 }
 
+function signalColor(signalName) {
+  if (!deviceHealth.value?.signals?.[signalName]) return ''
+  const level = deviceHealth.value.signals[signalName].level
+  if (level === 'red') return 'text-red'
+  if (level === 'yellow') return 'text-yellow'
+  return ''
+}
+
 async function loadDevices() {
   try {
     devices.value = await api.get('/devices')
@@ -273,6 +379,13 @@ async function loadDevices() {
   } finally {
     loading.value = false
   }
+}
+
+async function loadHealthDashboard() {
+  try {
+    const dashboard = await api.get('/health/dashboard')
+    healthData.value = dashboard.devices || []
+  } catch { /* ignore */ }
 }
 
 async function loadPlaylists() {
@@ -310,10 +423,13 @@ async function openDevice(d) {
   devicePairing.value = null
   deviceHealth.value = null
   editingName.value = false
-  // Load health data for this device
+  // Use cached health data
+  deviceHealth.value = healthMap.value[d.id] || null
+  // Also refresh from server
   try {
     const dashboard = await api.get('/health/dashboard')
-    deviceHealth.value = dashboard.devices?.find(h => h.id === d.id) || null
+    healthData.value = dashboard.devices || []
+    deviceHealth.value = healthMap.value[d.id] || null
   } catch { /* ignore */ }
 }
 
@@ -350,9 +466,48 @@ async function saveName() {
 
 async function assignPlaylist() {
   const playlistId = detailPlaylistId.value || null
+
+  // Skip preflight when removing playlist
+  if (!playlistId) {
+    await doAssignPlaylist(playlistId)
+    return
+  }
+
+  // Run pre-flight check
+  try {
+    const result = await api.get(`/devices/${selectedDevice.value.id}/preflight?playlist_id=${playlistId}`)
+    if (result.overall === 'warn' || result.overall === 'fail') {
+      preflightResult.value = result
+      pendingPlaylistAssign = playlistId
+      showPreflightDialog.value = true
+      return
+    }
+  } catch {
+    // Pre-flight endpoint failed — proceed silently (advisory, not a gate)
+  }
+
+  await doAssignPlaylist(playlistId)
+}
+
+async function doAssignPlaylist(playlistId) {
   const updated = await api.patch(`/devices/${selectedDevice.value.id}`, { playlist_id: playlistId })
   selectedDevice.value = updated
   await loadDevices()
+}
+
+function confirmPreflight() {
+  showPreflightDialog.value = false
+  if (pendingPlaylistAssign !== null) {
+    doAssignPlaylist(pendingPlaylistAssign)
+    pendingPlaylistAssign = null
+  }
+}
+
+function cancelPreflight() {
+  showPreflightDialog.value = false
+  pendingPlaylistAssign = null
+  // Revert dropdown to original value
+  detailPlaylistId.value = selectedDevice.value.playlist_id || ''
 }
 
 async function assignLayout() {
@@ -372,9 +527,12 @@ async function regeneratePairingCode() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadDevices(), loadPlaylists(), loadLayouts()])
+  await Promise.all([loadDevices(), loadPlaylists(), loadLayouts(), loadHealthDashboard()])
   // Auto-refresh every 30 seconds
-  refreshInterval = setInterval(loadDevices, 30000)
+  refreshInterval = setInterval(() => {
+    loadDevices()
+    loadHealthDashboard()
+  }, 30000)
 })
 
 onUnmounted(() => {
@@ -435,6 +593,22 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 
 .btn-secondary.btn-sm { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
 
+.btn-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #8a6d00;
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s;
+}
+
+.btn-warning:hover { background: #a08000; }
+
 .btn-icon {
   background: none;
   border: none;
@@ -489,6 +663,27 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
   color: #fff;
 }
 
+.card-signals {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.card-summary {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.card-summary span {
+  background: #0f1117;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+}
+
 .status-dot {
   width: 10px;
   height: 10px;
@@ -499,6 +694,13 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 .status-dot.status-online { background: #4caf50; box-shadow: 0 0 6px rgba(76, 175, 80, 0.5); }
 .status-dot.status-offline { background: #f44336; }
 .status-dot.status-unknown { background: #666; }
+
+/* Signal dots */
+.signal-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.signal-green { background: #4caf50; }
+.signal-yellow { background: #f0ad4e; }
+.signal-red { background: #f44336; }
+.signal-unknown { background: #666; }
 
 .card-body {
   display: flex;
@@ -752,11 +954,45 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
   font-size: 0.85rem;
 }
 
+.text-red { color: #f44336 !important; }
+.text-yellow { color: #f0ad4e !important; }
+
 .drift-warn { color: #f0ad4e !important; }
 
 .health-warnings {
   color: #f0ad4e;
   font-size: 0.8rem;
+}
+
+/* Pre-flight dialog */
+.preflight-fail { color: #f44336 !important; }
+.preflight-warn { color: #f0ad4e !important; }
+
+.preflight-checks {
+  margin-bottom: 1rem;
+}
+
+.preflight-item {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+  color: #ccc;
+  background: #0f1117;
+}
+
+.preflight-item.preflight-fail { border-left: 3px solid #f44336; }
+.preflight-item.preflight-warn { border-left: 3px solid #f0ad4e; }
+.preflight-item.preflight-unknown { border-left: 3px solid #666; }
+
+.preflight-check-name {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  min-width: 60px;
+  color: #888;
 }
 
 /* Delete */

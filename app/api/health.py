@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -46,6 +47,8 @@ async def player_heartbeat(
         device.player_version = body["player_version"]
     if "player_timezone" in body:
         device.player_timezone = body["player_timezone"]
+    if "storage_free_mb" in body:
+        device.storage_free_mb = body["storage_free_mb"]
 
     # Compute clock drift
     player_time_str = body.get("player_time")
@@ -63,6 +66,57 @@ async def player_heartbeat(
     return {"status": "ok", "server_time": now.isoformat()}
 
 
+@router.post("/devices/{device_id}/capabilities")
+async def report_capabilities(
+    device_id: str,
+    body: dict,
+    request: Request,
+    token: ApiToken = Depends(require_device),
+    session: AsyncSession = Depends(get_session),
+):
+    """Receive capability report from a player device."""
+    if device_id != token.device_id:
+        raise HTTPException(status_code=403, detail="Token not authorized for this device")
+
+    device = await session.get(Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="device not found")
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # Extract promoted fields from nested payload
+    software = body.get("software", {})
+    if software.get("player_version"):
+        device.player_version = software["player_version"]
+    if software.get("player_type"):
+        device.player_type = software["player_type"]
+
+    hardware = body.get("hardware", {})
+    if hardware.get("ram_mb") is not None:
+        device.ram_mb = hardware["ram_mb"]
+    if hardware.get("storage_total_mb") is not None:
+        device.storage_total_mb = hardware["storage_total_mb"]
+    if hardware.get("storage_free_mb") is not None:
+        device.storage_free_mb = hardware["storage_free_mb"]
+    if hardware.get("gpio_supported") is not None:
+        device.gpio_supported = hardware["gpio_supported"]
+    if hardware.get("cpu_cores") is not None:
+        pass  # Not promoted to a column; stored in JSON blob
+
+    display = body.get("display", {})
+    if display.get("resolution_detected"):
+        device.resolution_detected = display["resolution_detected"]
+
+    # Store full blob
+    device.capabilities = json.dumps(body)
+    device.capabilities_updated_at = now
+    device.last_seen = now
+    device.status = "online"
+
+    await session.commit()
+    return {"status": "ok"}
+
+
 @router.get("/health/dashboard")
 async def health_dashboard(
     _admin: ApiToken = Depends(require_viewer),
@@ -75,40 +129,106 @@ async def health_dashboard(
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     summary = []
     for d in devices:
+        signals = _compute_signals(d, now)
+        # Overall status = worst signal
+        signal_levels = [s["level"] for s in signals.values()]
+        if "red" in signal_levels:
+            overall = "red"
+        elif "yellow" in signal_levels:
+            overall = "yellow"
+        else:
+            overall = "green"
+
+        warnings = []
+        for sig_name, sig in signals.items():
+            if sig["level"] != "green" and sig.get("message"):
+                warnings.append(sig["message"])
+
+        # Check clock drift (kept as warning, not a signal)
+        if d.clock_drift_seconds is not None and abs(d.clock_drift_seconds) > 30:
+            warnings.append(f"Clock drift: {d.clock_drift_seconds:+.1f}s")
+
         health = {
             "id": d.id,
             "name": d.name,
             "status": d.status,
+            "overall": overall,
+            "signals": signals,
             "last_heartbeat": d.last_heartbeat.isoformat() if d.last_heartbeat else None,
             "last_seen": d.last_seen.isoformat() if d.last_seen else None,
             "player_version": d.player_version,
+            "player_type": d.player_type,
             "player_timezone": d.player_timezone,
             "clock_drift_seconds": d.clock_drift_seconds,
-            "warnings": [],
+            "resolution_detected": d.resolution_detected,
+            "ram_mb": d.ram_mb,
+            "storage_total_mb": d.storage_total_mb,
+            "storage_free_mb": d.storage_free_mb,
+            "capabilities_updated_at": d.capabilities_updated_at.isoformat() if d.capabilities_updated_at else None,
+            "warnings": warnings,
         }
-
-        # Check staleness
-        if d.last_heartbeat:
-            seconds_since = (now - d.last_heartbeat).total_seconds()
-            if seconds_since > 120:
-                health["status"] = "offline"
-                health["warnings"].append(
-                    f"No heartbeat for {int(seconds_since)}s"
-                )
-        else:
-            health["warnings"].append("Never sent a heartbeat")
-
-        # Check clock drift
-        if d.clock_drift_seconds is not None and abs(d.clock_drift_seconds) > 30:
-            health["warnings"].append(
-                f"Clock drift: {d.clock_drift_seconds:+.1f}s"
-            )
-
-        # Check timezone
-        if d.player_timezone:
-            # Just flag it for visibility; no server timezone to compare against yet
-            pass
-
         summary.append(health)
 
     return {"devices": summary, "server_time": now.isoformat()}
+
+
+def _compute_signals(device: Device, now: datetime) -> dict:
+    """Compute per-signal health status for a device."""
+    signals = {}
+
+    # Heartbeat signal
+    if device.last_heartbeat:
+        minutes_since = (now - device.last_heartbeat).total_seconds() / 60
+        if minutes_since < 15:
+            signals["heartbeat"] = {"level": "green", "message": ""}
+        elif minutes_since < 60:
+            signals["heartbeat"] = {"level": "yellow", "message": f"No heartbeat for {int(minutes_since)} min"}
+        else:
+            signals["heartbeat"] = {"level": "red", "message": f"No heartbeat for {int(minutes_since)} min"}
+    else:
+        signals["heartbeat"] = {"level": "red", "message": "Never sent a heartbeat"}
+
+    # Storage signal
+    if device.storage_free_mb is not None and device.storage_total_mb is not None and device.storage_total_mb > 0:
+        pct_free = device.storage_free_mb / device.storage_total_mb
+        if pct_free > 0.2 and device.storage_free_mb > 1024:
+            signals["storage"] = {"level": "green", "message": ""}
+        elif pct_free < 0.1 or device.storage_free_mb < 500:
+            signals["storage"] = {"level": "red", "message": f"Storage critically low: {device.storage_free_mb} MB free ({pct_free:.0%})"}
+        else:
+            signals["storage"] = {"level": "yellow", "message": f"Storage low: {device.storage_free_mb} MB free ({pct_free:.0%})"}
+    elif device.storage_free_mb is not None:
+        # Have free but not total — can only check absolute
+        if device.storage_free_mb > 1024:
+            signals["storage"] = {"level": "green", "message": ""}
+        elif device.storage_free_mb < 500:
+            signals["storage"] = {"level": "red", "message": f"Storage critically low: {device.storage_free_mb} MB free"}
+        else:
+            signals["storage"] = {"level": "yellow", "message": f"Storage low: {device.storage_free_mb} MB free"}
+    else:
+        signals["storage"] = {"level": "yellow", "message": "Storage unknown"}
+
+    # Resolution signal
+    if device.resolution_detected:
+        try:
+            w, h = device.resolution_detected.split("x")
+            w, h = int(w), int(h)
+            if w >= 1280 and h >= 720:
+                signals["resolution"] = {"level": "green", "message": ""}
+            else:
+                signals["resolution"] = {"level": "yellow", "message": f"Low resolution: {device.resolution_detected}"}
+        except (ValueError, AttributeError):
+            signals["resolution"] = {"level": "yellow", "message": "Resolution not detected"}
+    else:
+        signals["resolution"] = {"level": "yellow", "message": "Resolution not detected"}
+
+    # RAM signal
+    if device.ram_mb is not None:
+        if device.ram_mb >= 2048:
+            signals["ram"] = {"level": "green", "message": ""}
+        else:
+            signals["ram"] = {"level": "yellow", "message": f"Low RAM: {device.ram_mb} MB"}
+    else:
+        signals["ram"] = {"level": "yellow", "message": "RAM unknown"}
+
+    return signals

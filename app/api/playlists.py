@@ -363,3 +363,59 @@ async def reorder_playlist_items(
                 details={"item_count": len(item_ids)}, token=_admin, request=request)
     await session.commit()
     return {"ok": True}
+
+
+@router.post("/playlists/{playlist_id}/preflight")
+async def bulk_preflight(
+    playlist_id: str,
+    body: dict,
+    request: Request,
+    _admin: ApiToken = Depends(require_viewer),
+    session: AsyncSession = Depends(get_session),
+):
+    """Run pre-flight checks for a playlist against multiple devices."""
+    from app.api.devices import _run_preflight_checks, _preflight_overall
+
+    device_ids = body.get("device_ids", [])
+    if not device_ids:
+        raise HTTPException(status_code=400, detail="device_ids required")
+
+    result = await session.execute(
+        select(Playlist)
+        .where(Playlist.id == playlist_id)
+        .options(selectinload(Playlist.items).selectinload(PlaylistItem.asset))
+    )
+    playlist = result.scalars().first()
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+
+    results = []
+    for did in device_ids:
+        device = await session.get(Device, did)
+        if not device:
+            results.append({
+                "device_id": did,
+                "playlist_id": playlist_id,
+                "overall": "fail",
+                "checks": [{"check": "device", "status": "fail", "message": "Device not found", "details": {}}],
+            })
+            continue
+
+        checks = _run_preflight_checks(device, playlist)
+        overall = _preflight_overall(checks)
+
+        await audit(
+            session, action="preflight_check", entity_type="device", entity_id=did,
+            details={"playlist_id": playlist_id, "overall": overall, "checks": checks},
+            token=_admin, request=request,
+        )
+
+        results.append({
+            "device_id": did,
+            "playlist_id": playlist_id,
+            "overall": overall,
+            "checks": checks,
+        })
+
+    await session.commit()
+    return results

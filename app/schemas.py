@@ -86,6 +86,12 @@ class DeviceOut(BaseModel):
     last_seen: datetime | None = None
     ip_address: str | None = None
     status: str
+    player_type: str | None = None
+    resolution_detected: str | None = None
+    ram_mb: int | None = None
+    storage_total_mb: int | None = None
+    storage_free_mb: int | None = None
+    capabilities_updated_at: datetime | None = None
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

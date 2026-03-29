@@ -17,7 +17,8 @@
     const HEARTBEAT_INTERVAL = 60000; // 60s between heartbeats
     const MAX_VIDEO_DURATION = 300;   // 5 min cap for videos with duration=0
     const PRELOAD_AHEAD = 1;          // Number of assets to preload ahead
-    const PLAYER_VERSION = '0.6.0';
+    const PLAYER_VERSION = '0.7.0';
+    const CAPABILITY_REPORT_INTERVAL = 3600000; // 60 min
 
     // Base URL for split deployment — read from <meta name="server-url">
     const serverMeta = document.querySelector('meta[name="server-url"]');
@@ -210,6 +211,7 @@
         poll();
         schedulePoll();
         scheduleHeartbeat();
+        scheduleCapabilityReport();
 
         if (playlist.length > 0) {
             currentIndex = 0;
@@ -990,6 +992,67 @@
         } else {
             showSplash();
         }
+    }
+
+    // --- Capability Reporting ---
+    let capabilityTimer = null;
+
+    async function gatherCapabilities() {
+        const payload = {
+            protocol_version: 1,
+            reported_at: new Date().toISOString(),
+            software: {
+                player_version: PLAYER_VERSION,
+                player_type: 'browser',
+                user_agent: navigator.userAgent,
+            },
+            display: {
+                resolution_detected: screen.width + 'x' + screen.height,
+                pixel_ratio: window.devicePixelRatio || 1,
+                color_depth: screen.colorDepth,
+            },
+            hardware: {
+                cpu_cores: navigator.hardwareConcurrency || null,
+                ram_mb: navigator.deviceMemory ? navigator.deviceMemory * 1024 : null,
+                os: navigator.platform || null,
+            },
+            capabilities: {
+                touch: 'ontouchstart' in window || navigator.maxTouchPoints > 0,
+                audio: typeof AudioContext !== 'undefined' || typeof webkitAudioContext !== 'undefined',
+            },
+        };
+
+        // Browser storage quota (not promoted to device columns)
+        if (navigator.storage && navigator.storage.estimate) {
+            try {
+                const est = await navigator.storage.estimate();
+                payload.hardware.browser_storage_quota_mb = Math.round((est.quota || 0) / (1024 * 1024));
+                payload.hardware.browser_storage_usage_mb = Math.round((est.usage || 0) / (1024 * 1024));
+            } catch (e) { /* ignore */ }
+        }
+
+        return payload;
+    }
+
+    async function sendCapabilities() {
+        if (!deviceId) return;
+        try {
+            const payload = await gatherCapabilities();
+            await authFetch(apiUrl(`/api/devices/${deviceId}/capabilities`), {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify(payload),
+            });
+            console.log('[TinySignage] Capabilities reported');
+        } catch (e) {
+            console.warn('[TinySignage] Capability report failed:', e.message);
+        }
+    }
+
+    function scheduleCapabilityReport() {
+        sendCapabilities();
+        if (capabilityTimer) clearInterval(capabilityTimer);
+        capabilityTimer = setInterval(sendCapabilities, CAPABILITY_REPORT_INTERVAL);
     }
 
     // --- Go ---

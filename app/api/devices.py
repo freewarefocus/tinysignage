@@ -22,7 +22,7 @@ from app.auth import (
     require_viewer,
 )
 from app.database import get_session
-from app.models import ApiToken, Device, DeviceGroupMembership, Layout, LayoutZone, Override, Playlist, PlaylistItem, Schedule, Settings
+from app.models import ApiToken, Asset, Device, DeviceGroupMembership, Layout, LayoutZone, Override, Playlist, PlaylistItem, Schedule, Settings
 
 PAIRING_CODE_TTL = timedelta(minutes=10)
 _config_path = Path("config.yaml")
@@ -551,6 +551,156 @@ def _device_to_dict(device: Device) -> dict:
         "last_seen": device.last_seen.isoformat() if device.last_seen else None,
         "ip_address": device.ip_address,
         "status": device.status,
+        "player_type": device.player_type,
+        "resolution_detected": device.resolution_detected,
+        "ram_mb": device.ram_mb,
+        "storage_total_mb": device.storage_total_mb,
+        "storage_free_mb": device.storage_free_mb,
+        "capabilities_updated_at": device.capabilities_updated_at.isoformat() if device.capabilities_updated_at else None,
         "has_pairing_code": has_pairing_code,
         "created_at": device.created_at.isoformat() if device.created_at else None,
     }
+
+
+@router.get("/devices/{device_id}/preflight")
+async def preflight_check(
+    device_id: str,
+    playlist_id: str,
+    request: Request,
+    _admin: ApiToken = Depends(require_viewer),
+    session: AsyncSession = Depends(get_session),
+):
+    """Pre-flight check before assigning a playlist to a device."""
+    device = await session.get(Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    result = await session.execute(
+        select(Playlist)
+        .where(Playlist.id == playlist_id)
+        .options(selectinload(Playlist.items).selectinload(PlaylistItem.asset))
+    )
+    playlist = result.scalars().first()
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+
+    checks = _run_preflight_checks(device, playlist)
+    overall = _preflight_overall(checks)
+
+    # Log to audit
+    await audit(
+        session, action="preflight_check", entity_type="device", entity_id=device_id,
+        details={"playlist_id": playlist_id, "overall": overall, "checks": checks},
+        token=_admin, request=request,
+    )
+    await session.commit()
+
+    return {
+        "device_id": device_id,
+        "playlist_id": playlist_id,
+        "overall": overall,
+        "checks": checks,
+    }
+
+
+def _run_preflight_checks(device: Device, playlist: Playlist) -> list[dict]:
+    """Run all pre-flight checks for a device/playlist pair."""
+    checks = []
+
+    # 1. Storage check
+    enabled_items = [item for item in playlist.items if item.asset and item.asset.is_enabled]
+    total_size_bytes = sum(item.asset.file_size or 0 for item in enabled_items)
+    total_size_mb = total_size_bytes / (1024 * 1024) if total_size_bytes > 0 else 0
+
+    if device.storage_free_mb is not None:
+        if total_size_mb > device.storage_free_mb:
+            checks.append({
+                "check": "storage", "status": "fail",
+                "message": f"Needs ~{total_size_mb:.0f} MB, only {device.storage_free_mb} MB free",
+                "details": {"needed_mb": round(total_size_mb, 1), "free_mb": device.storage_free_mb},
+            })
+        elif total_size_mb > device.storage_free_mb * 0.9:
+            checks.append({
+                "check": "storage", "status": "warn",
+                "message": f"Needs ~{total_size_mb:.0f} MB, {device.storage_free_mb} MB free (tight)",
+                "details": {"needed_mb": round(total_size_mb, 1), "free_mb": device.storage_free_mb},
+            })
+        else:
+            checks.append({
+                "check": "storage", "status": "pass",
+                "message": "Storage adequate",
+                "details": {"needed_mb": round(total_size_mb, 1), "free_mb": device.storage_free_mb},
+            })
+    else:
+        checks.append({
+            "check": "storage", "status": "unknown",
+            "message": "Device storage not reported",
+            "details": {"needed_mb": round(total_size_mb, 1)},
+        })
+
+    # 2. RAM check (heuristic based on video duration)
+    video_duration_min = sum(
+        (item.asset.duration or 0) / 60
+        for item in enabled_items
+        if item.asset.asset_type == "video"
+    )
+    if device.ram_mb is not None:
+        if video_duration_min > 30 and device.ram_mb < 4096:
+            checks.append({
+                "check": "ram", "status": "warn",
+                "message": f"{video_duration_min:.0f} min video, only {device.ram_mb} MB RAM",
+                "details": {"video_duration_min": round(video_duration_min, 1), "ram_mb": device.ram_mb},
+            })
+        elif video_duration_min > 10 and device.ram_mb < 2048:
+            checks.append({
+                "check": "ram", "status": "warn",
+                "message": f"{video_duration_min:.0f} min video, only {device.ram_mb} MB RAM",
+                "details": {"video_duration_min": round(video_duration_min, 1), "ram_mb": device.ram_mb},
+            })
+        else:
+            checks.append({
+                "check": "ram", "status": "pass",
+                "message": "RAM adequate",
+                "details": {"video_duration_min": round(video_duration_min, 1), "ram_mb": device.ram_mb},
+            })
+    else:
+        checks.append({
+            "check": "ram", "status": "unknown",
+            "message": "Device RAM not reported",
+            "details": {"video_duration_min": round(video_duration_min, 1)},
+        })
+
+    # 3. GPIO (placeholder)
+    checks.append({
+        "check": "gpio", "status": "not_applicable",
+        "message": "GPIO triggers not implemented",
+        "details": {},
+    })
+
+    # 4. Capabilities reported
+    if device.capabilities_updated_at:
+        checks.append({
+            "check": "capabilities_reported", "status": "pass",
+            "message": "Capabilities reported",
+            "details": {"last_report": device.capabilities_updated_at.isoformat()},
+        })
+    else:
+        checks.append({
+            "check": "capabilities_reported", "status": "unknown",
+            "message": "Device has not reported capabilities",
+            "details": {},
+        })
+
+    return checks
+
+
+def _preflight_overall(checks: list[dict]) -> str:
+    """Compute overall pre-flight status from individual checks."""
+    statuses = [c["status"] for c in checks if c["status"] != "not_applicable"]
+    if "fail" in statuses:
+        return "fail"
+    if "warn" in statuses:
+        return "warn"
+    if "unknown" in statuses:
+        return "unknown"
+    return "pass"
