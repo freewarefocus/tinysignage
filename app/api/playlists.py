@@ -19,7 +19,7 @@ def _playlist_hash(items: list[PlaylistItem]) -> str:
     for item in sorted(items, key=lambda i: i.order):
         asset = item.asset
         content = asset.content_hash or asset.id
-        parts.append(f"{item.order}:{asset.id}:{content}:{asset.duration}:{asset.is_enabled}")
+        parts.append(f"{item.order}:{asset.id}:{content}:{asset.duration}:{asset.is_enabled}:{asset.transition_type}:{asset.transition_duration}")
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
 
@@ -42,6 +42,8 @@ def _item_to_dict(item: PlaylistItem) -> dict:
             "mimetype": asset.mimetype,
             "thumbnail_path": asset.thumbnail_path,
             "content_hash": asset.content_hash,
+            "transition_type": asset.transition_type,
+            "transition_duration": asset.transition_duration,
         } if asset else None,
         "created_at": item.created_at.isoformat() if item.created_at else None,
     }

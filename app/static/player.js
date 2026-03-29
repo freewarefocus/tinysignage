@@ -375,6 +375,16 @@
         }
     }
 
+    // --- Per-asset transition overrides ---
+    function getEffectiveTransition(asset) {
+        // Per-asset overrides > playlist/global settings
+        const type = asset.transition_type || currentTransitionType;
+        const duration = (asset.transition_duration != null)
+            ? asset.transition_duration
+            : (settings.transition_duration != null ? settings.transition_duration : 1);
+        return { type, duration };
+    }
+
     // --- Asset Loading ---
     function loadAsset(asset) {
         const nextLayerId = currentLayer === 'a' ? 'b' : 'a';
@@ -383,15 +393,16 @@
 
         cleanupLayer(nextLayer);
 
+        const transition = getEffectiveTransition(asset);
+        const doTx = () => doTransition(nextLayer, currentLayerEl, nextLayerId, transition);
+
         let element;
         if (asset.asset_type === 'image') {
             element = document.createElement('img');
-            element.onload = () => {
-                setTimeout(() => doTransition(nextLayer, currentLayerEl, nextLayerId), 300);
-            };
+            element.onload = () => { setTimeout(doTx, 300); };
             element.onerror = () => {
                 console.warn('[TinySignage] Image load failed:', asset.uri);
-                setTimeout(() => doTransition(nextLayer, currentLayerEl, nextLayerId), 300);
+                setTimeout(doTx, 300);
             };
             element.src = `${baseUrl}/media/${asset.uri}`;
         } else if (asset.asset_type === 'video') {
@@ -401,9 +412,7 @@
             element.playsInline = true;
             element.loop = false;
 
-            element.oncanplay = () => {
-                setTimeout(() => doTransition(nextLayer, currentLayerEl, nextLayerId), 300);
-            };
+            element.oncanplay = () => { setTimeout(doTx, 300); };
 
             element.onerror = () => {
                 console.warn('[TinySignage] Video load failed:', asset.uri);
@@ -417,16 +426,12 @@
             element.src = `${baseUrl}/media/${asset.uri}`;
         } else if (asset.asset_type === 'html') {
             element = document.createElement('iframe');
-            element.onload = () => {
-                setTimeout(() => doTransition(nextLayer, currentLayerEl, nextLayerId), 300);
-            };
+            element.onload = () => { setTimeout(doTx, 300); };
             element.src = `${baseUrl}/media/${asset.uri}`;
             element.sandbox = 'allow-scripts allow-same-origin';
         } else if (asset.asset_type === 'url') {
             element = document.createElement('iframe');
-            element.onload = () => {
-                setTimeout(() => doTransition(nextLayer, currentLayerEl, nextLayerId), 500);
-            };
+            element.onload = () => { setTimeout(doTx, 500); };
             element.src = asset.uri;
             element.sandbox = 'allow-scripts allow-same-origin';
         }
@@ -452,7 +457,7 @@
     }
 
     // --- Transitions ---
-    function doTransition(inLayer, outLayer, newCurrentId) {
+    function doTransition(inLayer, outLayer, newCurrentId, transition) {
         hideSplash();
 
         const inContent = inLayer.querySelector('video, img, iframe');
@@ -463,7 +468,9 @@
             outContent?.tagName === 'VIDEO'
         );
 
-        const useCut = currentTransitionType === 'cut' || isVideoToVideo;
+        const txType = transition ? transition.type : currentTransitionType;
+        const txDuration = transition ? transition.duration : null;
+        const useCut = txType === 'cut' || isVideoToVideo;
 
         if (useCut) {
             inLayer.style.transition = 'none';
@@ -476,20 +483,33 @@
                 outLayer.style.transition = '';
             });
         } else {
+            // Apply per-asset transition duration if set
+            if (txDuration != null) {
+                inLayer.style.transitionDuration = txDuration + 's';
+                outLayer.style.transitionDuration = txDuration + 's';
+            }
+
             inLayer.classList.add('active');
             outLayer.classList.remove('active');
             const onTransitionEnd = () => {
                 outLayer.removeEventListener('transitionend', onTransitionEnd);
                 cleanupLayer(outLayer);
+                // Restore default transition duration
+                inLayer.style.transitionDuration = '';
+                outLayer.style.transitionDuration = '';
             };
             outLayer.addEventListener('transitionend', onTransitionEnd);
-            const duration = parseFloat(
-                getComputedStyle(document.documentElement)
-                    .getPropertyValue('--transition-duration')
-            ) || 1;
+            const duration = txDuration != null
+                ? txDuration
+                : (parseFloat(
+                    getComputedStyle(document.documentElement)
+                        .getPropertyValue('--transition-duration')
+                ) || 1);
             setTimeout(() => {
                 outLayer.removeEventListener('transitionend', onTransitionEnd);
                 cleanupLayer(outLayer);
+                inLayer.style.transitionDuration = '';
+                outLayer.style.transitionDuration = '';
             }, (duration + 0.5) * 1000);
         }
 

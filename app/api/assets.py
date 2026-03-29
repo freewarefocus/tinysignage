@@ -230,7 +230,13 @@ async def update_asset(
         asset.file_size = filepath.stat().st_size
         asset.content_hash = hashlib.sha256(html_content.encode("utf-8")).hexdigest()
 
-    allowed = {"name", "duration", "is_enabled", "start_date", "end_date", "play_order"}
+    allowed = {"name", "duration", "is_enabled", "start_date", "end_date", "play_order",
+                "transition_type", "transition_duration"}
+    # Normalize nullable transition fields: empty string or None clears the override
+    for field in ("transition_type", "transition_duration"):
+        if field in body and (body[field] is None or body[field] == ""):
+            body[field] = None
+
     changes = {}
     for key, value in body.items():
         if key in allowed:
@@ -467,6 +473,8 @@ def _asset_to_dict(asset: Asset, tags: list[dict] | None = None) -> dict:
         "file_size": asset.file_size,
         "thumbnail_path": asset.thumbnail_path,
         "content_hash": asset.content_hash,
+        "transition_type": asset.transition_type,
+        "transition_duration": asset.transition_duration,
         "created_at": asset.created_at.isoformat() if asset.created_at else None,
         "updated_at": asset.updated_at.isoformat() if asset.updated_at else None,
         "tags": tags if tags is not None else [],

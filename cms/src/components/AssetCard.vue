@@ -46,6 +46,30 @@
         <span v-if="asset.duration">{{ asset.duration }}s</span>
         <span v-else-if="asset.asset_type === 'video'">auto</span>
       </div>
+      <!-- Transition override row -->
+      <div class="transition-row">
+        <select
+          v-model="transitionType"
+          class="transition-select"
+          @change="saveTransition"
+          title="Transition type override"
+        >
+          <option value="">Default</option>
+          <option value="fade">Crossfade</option>
+          <option value="cut">Cut</option>
+        </select>
+        <input
+          v-model.number="transitionDuration"
+          type="number"
+          class="transition-dur"
+          min="0"
+          max="30"
+          step="0.5"
+          placeholder="s"
+          title="Transition duration override (seconds)"
+          @change="saveTransition"
+        />
+      </div>
       <!-- Tags row -->
       <div v-if="asset.tags?.length || showTagPicker" class="tags-row">
         <span
@@ -83,7 +107,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, computed } from 'vue'
+import { ref, nextTick, computed, watch } from 'vue'
 import { api } from '../api/client.js'
 
 const props = defineProps({
@@ -96,6 +120,11 @@ const editing = ref(false)
 const editName = ref('')
 const nameInput = ref(null)
 const showTagPicker = ref(false)
+const transitionType = ref(props.asset.transition_type || '')
+const transitionDuration = ref(props.asset.transition_duration ?? '')
+
+watch(() => props.asset.transition_type, (v) => { transitionType.value = v || '' })
+watch(() => props.asset.transition_duration, (v) => { transitionDuration.value = v ?? '' })
 
 const typeIcon = computed(() => {
   switch (props.asset.asset_type) {
@@ -128,6 +157,15 @@ async function saveName() {
 
 function cancelEdit() {
   editing.value = false
+}
+
+async function saveTransition() {
+  const body = {
+    transition_type: transitionType.value || null,
+    transition_duration: transitionDuration.value !== '' ? Number(transitionDuration.value) : null,
+  }
+  await api.patch(`/assets/${props.asset.id}`, body)
+  emit('updated')
 }
 
 async function addTag(tag) {
@@ -267,6 +305,41 @@ async function removeTag(tag) {
   background: #1a3a2a;
   color: #4caf50;
 }
+
+/* Transition overrides */
+.transition-row {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+
+.transition-select {
+  flex: 1;
+  background: #0f1117;
+  border: 1px solid #2a2d3a;
+  color: #aaa;
+  font-size: 0.7rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+}
+
+.transition-select:focus { border-color: #7c83ff; }
+
+.transition-dur {
+  width: 40px;
+  background: #0f1117;
+  border: 1px solid #2a2d3a;
+  color: #aaa;
+  font-size: 0.7rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  outline: none;
+  text-align: center;
+}
+
+.transition-dur:focus { border-color: #7c83ff; }
 
 /* Tags */
 .tags-row {

@@ -127,6 +127,22 @@
             <label>Name</label>
             <input v-model="htmlName" class="tag-input" placeholder="My HTML Slide" />
           </div>
+          <!-- Widget picker -->
+          <div v-if="!htmlEditTarget && widgets.length" class="widget-picker">
+            <label class="html-editor-label">Insert Widget</label>
+            <div class="widget-buttons">
+              <button
+                v-for="w in widgets"
+                :key="w.id"
+                class="widget-btn"
+                @click="insertWidget(w)"
+                :title="w.description"
+              >
+                <i :class="widgetIcon(w.id)"></i>
+                {{ w.name }}
+              </button>
+            </div>
+          </div>
           <label class="html-editor-label">HTML / CSS Content</label>
           <textarea
             v-model="htmlContent"
@@ -171,6 +187,9 @@ const newTagColor = ref('#7c83ff')
 const editingTag = ref(null)
 const editTagName = ref('')
 const editTagColor = ref('#7c83ff')
+
+// Widget state
+const widgets = ref([])
 
 // HTML editor state
 const showHtmlEditor = ref(false)
@@ -317,7 +336,28 @@ async function saveHtmlAsset() {
   }
 }
 
-onMounted(loadAll)
+// Widget helpers
+async function loadWidgets() {
+  try {
+    widgets.value = await api.get('/widgets')
+  } catch {
+    widgets.value = []
+  }
+}
+
+function widgetIcon(id) {
+  const icons = { clock: 'pi pi-clock', date: 'pi pi-calendar', weather: 'pi pi-cloud' }
+  return icons[id] || 'pi pi-box'
+}
+
+function insertWidget(w) {
+  htmlContent.value = w.html
+  if (!htmlName.value.trim()) {
+    htmlName.value = w.name + ' Widget'
+  }
+}
+
+onMounted(() => { loadAll(); loadWidgets() })
 </script>
 
 <style scoped>
@@ -674,5 +714,37 @@ h2 {
 .btn-secondary:hover {
   background: #2a2d3a;
   color: #fff;
+}
+
+/* Widget picker */
+.widget-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.widget-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.widget-btn {
+  background: #1a2a3a;
+  border: 1px solid #2a4a5a;
+  color: #6cb8e6;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.widget-btn:hover {
+  background: #1f3a4a;
+  border-color: #6cb8e6;
 }
 </style>

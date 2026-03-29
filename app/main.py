@@ -24,6 +24,7 @@ from app.api.storage import router as storage_router
 from app.api.tags import router as tags_router
 from app.api.tokens import router as tokens_router
 from app.api.users import router as users_router
+from app.api.widgets import router as widgets_router
 from app.database import engine, init_db
 from app.error_handlers import register_error_handlers
 from app.logging_config import setup_logging
@@ -104,6 +105,7 @@ app.include_router(storage_router, prefix="/api")
 app.include_router(tags_router, prefix="/api")
 app.include_router(tokens_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
+app.include_router(widgets_router, prefix="/api")
 app.include_router(setup_router, prefix="/api")
 # Also mount setup routes without /api prefix for the wizard UI
 app.include_router(setup_router)

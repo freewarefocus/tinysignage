@@ -37,6 +37,8 @@ class Asset(Base):
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     thumbnail_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    transition_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    transition_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )
