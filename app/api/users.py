@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import record as audit
@@ -58,6 +58,14 @@ async def login(body: dict, request: Request, session: AsyncSession = Depends(ge
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
 
+    # Prune expired login session tokens to prevent unbounded table growth
+    await session.execute(
+        delete(ApiToken).where(
+            ApiToken.created_by == "login",
+            ApiToken.expires_at < datetime.now(timezone.utc).replace(tzinfo=None),
+        )
+    )
+
     # Create a session token
     plaintext = generate_token()
     expires = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=SESSION_EXPIRY_DAYS)
@@ -75,7 +83,7 @@ async def login(body: dict, request: Request, session: AsyncSession = Depends(ge
     user.last_login = datetime.now(timezone.utc).replace(tzinfo=None)
 
     await audit(session, action="login", entity_type="user", entity_id=user.id,
-                details={"username": user.username}, request=request)
+                details={"username": user.username}, token=token, request=request)
     await session.commit()
 
     log.info("User %s logged in", user.username)

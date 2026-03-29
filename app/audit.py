@@ -33,8 +33,13 @@ async def record(
     if token:
         user_id = token.user_id
         username = token.name
-        if token.user and hasattr(token.user, "username"):
-            username = token.user.username
+        # Avoid lazy-loading token.user — it raises MissingGreenlet in async context.
+        # Instead, query the user explicitly if we have a user_id.
+        if user_id:
+            from app.models import User
+            user = await session.get(User, user_id)
+            if user:
+                username = user.username
 
     if request and request.client:
         ip_address = request.client.host

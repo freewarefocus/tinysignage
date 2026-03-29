@@ -4,6 +4,7 @@ server:
 storage:
   media_dir: ./media
   db_path: ./db/signage.db
+  warning_threshold_mb: 500
 display:
   transition_duration: 1.0
   transition_type: fade

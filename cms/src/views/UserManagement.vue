@@ -109,7 +109,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api } from '../api/client'
 
 const users = ref([])
@@ -120,8 +120,9 @@ const deleteTarget = ref(null)
 const formError = ref('')
 const form = ref({ username: '', display_name: '', role: 'viewer', password: '', is_active: true })
 
-const currentUser = JSON.parse(localStorage.getItem('tinysignage_user') || '{}')
-const currentUserId = currentUser.id
+const currentUserId = computed(() => {
+  try { return JSON.parse(localStorage.getItem('tinysignage_user') || '{}').id } catch { return null }
+})
 
 async function loadUsers() {
   loading.value = true
@@ -132,7 +133,8 @@ async function loadUsers() {
 }
 
 function formatDate(iso) {
-  return new Date(iso).toLocaleString()
+  if (!iso) return ''
+  return new Date(iso.endsWith('Z') ? iso : iso + 'Z').toLocaleString()
 }
 
 function closeDialog() {

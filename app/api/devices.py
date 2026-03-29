@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.overrides import evaluate_override_for_device
 from app.api.playlists import _item_to_dict, _playlist_hash
 from app.api.schedules import evaluate_schedule_for_device
 from app.audit import record as audit
@@ -20,7 +21,7 @@ from app.auth import (
     require_viewer,
 )
 from app.database import get_session
-from app.models import ApiToken, Device, DeviceGroupMembership, Playlist, PlaylistItem, Schedule
+from app.models import ApiToken, Device, DeviceGroupMembership, Playlist, PlaylistItem, Schedule, Settings
 
 PAIRING_CODE_TTL = timedelta(minutes=10)
 _config_path = Path("config.yaml")
@@ -266,14 +267,75 @@ async def get_device_playlist(
     device.status = "online"
     await session.commit()
 
-    # Evaluate schedules: highest-priority active schedule wins,
-    # falls back to device's directly assigned playlist
+    # --- Emergency override check (absolute priority) ---
+    active_override = await evaluate_override_for_device(device_id, session)
+    if active_override:
+        if active_override.content_type == "message":
+            # Message override: return special payload the player renders as text
+            override_hash = f"override-{active_override.id}"
+            return {
+                "hash": override_hash,
+                "items": [],
+                "settings": await _get_default_settings(session),
+                "override": {
+                    "id": active_override.id,
+                    "type": "message",
+                    "message": active_override.content,
+                    "name": active_override.name,
+                    "expires_at": active_override.expires_at.isoformat() if active_override.expires_at else None,
+                },
+            }
+        elif active_override.content_type == "playlist":
+            # Playlist override: force a specific playlist
+            effective_playlist_id = active_override.content
+            result = await session.execute(
+                select(Playlist)
+                .where(Playlist.id == effective_playlist_id)
+                .options(
+                    selectinload(Playlist.items).selectinload(PlaylistItem.asset)
+                )
+            )
+            playlist = result.scalars().first()
+            if playlist:
+                now = datetime.now(timezone.utc).replace(tzinfo=None)
+                active_items = [
+                    item for item in playlist.items
+                    if item.asset and item.asset.is_enabled
+                    and (not item.asset.start_date or item.asset.start_date <= now)
+                    and (not item.asset.end_date or item.asset.end_date >= now)
+                ]
+                settings = await session.get(Settings, 1)
+
+                def _resolve_ov(field, default):
+                    pl_val = getattr(playlist, field, None)
+                    if pl_val is not None:
+                        return pl_val
+                    return getattr(settings, field, default) if settings else default
+
+                return {
+                    "hash": f"override-{active_override.id}-{_playlist_hash(active_items)}",
+                    "items": [_item_to_dict(item) for item in active_items],
+                    "settings": {
+                        "transition_duration": _resolve_ov("transition_duration", 1.0),
+                        "transition_type": _resolve_ov("transition_type", "fade"),
+                        "default_duration": _resolve_ov("default_duration", 10),
+                        "shuffle": _resolve_ov("shuffle", False),
+                    },
+                    "override": {
+                        "id": active_override.id,
+                        "type": "playlist",
+                        "name": active_override.name,
+                        "expires_at": active_override.expires_at.isoformat() if active_override.expires_at else None,
+                    },
+                }
+
+    # --- Normal flow: evaluate schedules, then device default ---
     effective_playlist_id = await evaluate_schedule_for_device(device_id, session)
     if not effective_playlist_id:
         effective_playlist_id = device.playlist_id
 
     if not effective_playlist_id:
-        return {"hash": "", "items": [], "settings": _get_default_settings()}
+        return {"hash": "", "items": [], "settings": await _get_default_settings(session)}
 
     result = await session.execute(
         select(Playlist)
@@ -284,7 +346,7 @@ async def get_device_playlist(
     )
     playlist = result.scalars().first()
     if not playlist:
-        return {"hash": "", "items": [], "settings": _get_default_settings()}
+        return {"hash": "", "items": [], "settings": await _get_default_settings(session)}
 
     # Filter to enabled assets within schedule window
     # SQLite returns naive datetimes; strip tzinfo for comparison
@@ -323,7 +385,16 @@ async def get_device_playlist(
     }
 
 
-def _get_default_settings() -> dict:
+async def _get_default_settings(session: AsyncSession) -> dict:
+    """Read global settings from DB, falling back to hardcoded defaults."""
+    settings = await session.get(Settings, 1)
+    if settings:
+        return {
+            "transition_duration": settings.transition_duration or 1.0,
+            "transition_type": settings.transition_type or "fade",
+            "default_duration": settings.default_duration or 10,
+            "shuffle": settings.shuffle or False,
+        }
     return {
         "transition_duration": 1.0,
         "transition_type": "fade",

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -49,6 +49,7 @@ class Asset(Base):
     playlist_items: Mapped[list["PlaylistItem"]] = relationship(
         back_populates="asset", cascade="all, delete-orphan"
     )
+    asset_tags: Mapped[list["AssetTag"]] = relationship(cascade="all, delete-orphan")
 
 
 class Settings(Base):
@@ -256,10 +257,72 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    details: Mapped[str | None] = mapped_column(String(4096), nullable=True)  # JSON string
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON string
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
 
     user: Mapped["User | None"] = relationship()
+
+
+class Override(Base):
+    __tablename__ = "overrides"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(
+        String(20), nullable=False  # "message" or "playlist"
+    )
+    content: Mapped[str] = mapped_column(
+        String(4096), nullable=False  # text message or playlist_id
+    )
+    target_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="all"  # "all", "group", "device"
+    )
+    target_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True  # device or group id; null when target_type="all"
+    )
+    created_by: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    creator: Mapped["User | None"] = relationship()
+
+
+class Tag(Base):
+    __tablename__ = "tags"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    color: Mapped[str] = mapped_column(String(7), nullable=False, default="#7c83ff")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+
+    asset_tags: Mapped[list["AssetTag"]] = relationship(
+        back_populates="tag", cascade="all, delete-orphan"
+    )
+
+
+class AssetTag(Base):
+    __tablename__ = "asset_tags"
+
+    asset_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("assets.id", ondelete="CASCADE"), primary_key=True
+    )
+    tag_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    asset: Mapped["Asset"] = relationship(overlaps="asset_tags")
+    tag: Mapped["Tag"] = relationship(back_populates="asset_tags")
 
 
 class PlaylistItem(Base):

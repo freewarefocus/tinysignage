@@ -27,15 +27,65 @@
       <button type="submit" class="btn-save">Save Settings</button>
       <span v-if="saved" class="save-msg">Saved!</span>
     </form>
+
+    <hr class="section-divider" />
+
+    <h3>Backup & Restore</h3>
+    <p class="section-desc">Export or import a complete backup of your database and media files.</p>
+
+    <div class="backup-actions">
+      <div class="backup-group">
+        <button @click="exportBackup" :disabled="exporting" class="btn-save">
+          <i class="pi pi-download"></i>
+          {{ exporting ? 'Exporting...' : 'Export Backup' }}
+        </button>
+        <p class="help-text">Download a ZIP containing your database and all media files.</p>
+      </div>
+
+      <div class="backup-group">
+        <label v-if="!selectedFile" class="btn-import" :class="{ disabled: importing }">
+          <i class="pi pi-upload"></i>
+          Choose Backup File
+          <input type="file" accept=".zip" @change="onFileSelected" :disabled="importing" hidden ref="fileInput" />
+        </label>
+
+        <div v-if="selectedFile" class="import-confirm">
+          <p class="selected-file">
+            <i class="pi pi-file"></i>
+            {{ selectedFile.name }}
+            <span class="file-size">({{ formatSize(selectedFile.size) }})</span>
+          </p>
+          <p class="warning">
+            <i class="pi pi-exclamation-triangle"></i>
+            This will replace ALL current data including database and media files.
+            A server restart is required after restore.
+          </p>
+          <div class="confirm-actions">
+            <button @click="confirmImport" :disabled="importing" class="btn-danger">
+              {{ importing ? 'Restoring...' : 'Restore Backup' }}
+            </button>
+            <button @click="cancelImport" :disabled="importing" class="btn-cancel">Cancel</button>
+          </div>
+        </div>
+
+        <p v-if="!selectedFile" class="help-text">Upload a previously exported backup to restore all data.</p>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useToast } from 'primevue/usetoast'
 import { api } from '../api/client.js'
 
+const toast = useToast()
 const settings = ref(null)
 const saved = ref(false)
+const exporting = ref(false)
+const importing = ref(false)
+const selectedFile = ref(null)
+const fileInput = ref(null)
 
 async function loadSettings() {
   settings.value = await api.get('/settings')
@@ -47,11 +97,110 @@ async function saveSettings() {
   setTimeout(() => (saved.value = false), 2000)
 }
 
+function getAuthHeaders() {
+  const token = localStorage.getItem('tinysignage_token') || localStorage.getItem('tinysignage_admin_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+async function exportBackup() {
+  exporting.value = true
+  try {
+    const resp = await fetch('/api/backup/export', {
+      headers: getAuthHeaders(),
+    })
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}))
+      throw new Error(data.detail || `Export failed (${resp.status})`)
+    }
+
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const disposition = resp.headers.get('Content-Disposition') || ''
+    const match = disposition.match(/filename="(.+)"/)
+    a.download = match ? match[1] : 'tinysignage-backup.zip'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+
+    toast.add({ severity: 'success', summary: 'Export Complete', detail: 'Backup downloaded.', life: 5000 })
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Export Failed', detail: e.message, life: 8000 })
+  } finally {
+    exporting.value = false
+  }
+}
+
+function onFileSelected(event) {
+  const file = event.target.files[0]
+  if (file) {
+    selectedFile.value = file
+  }
+}
+
+function cancelImport() {
+  selectedFile.value = null
+  if (fileInput.value) {
+    fileInput.value.value = ''
+  }
+}
+
+async function confirmImport() {
+  if (!selectedFile.value) return
+
+  importing.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', selectedFile.value)
+
+    const resp = await fetch('/api/backup/import', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: formData,
+    })
+
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}))
+      throw new Error(data.detail || `Import failed (${resp.status})`)
+    }
+
+    const data = await resp.json()
+    toast.add({
+      severity: 'success',
+      summary: 'Restore Complete',
+      detail: data.message,
+      life: 15000,
+    })
+
+    selectedFile.value = null
+    if (fileInput.value) {
+      fileInput.value.value = ''
+    }
+
+    // Reload settings since the database was replaced
+    await loadSettings()
+  } catch (e) {
+    toast.add({ severity: 'error', summary: 'Restore Failed', detail: e.message, life: 8000 })
+  } finally {
+    importing.value = false
+  }
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB'
+}
+
 onMounted(loadSettings)
 </script>
 
 <style scoped>
 h2 { margin-bottom: 1.5rem; color: #fff; }
+h3 { color: #fff; margin-bottom: 0.5rem; }
 
 .settings-form {
   max-width: 400px;
@@ -102,15 +251,162 @@ h2 { margin-bottom: 1.5rem; color: #fff; }
   cursor: pointer;
   font-size: 0.9rem;
   transition: background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .btn-save:hover {
   background: #6b72e8;
 }
 
+.btn-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .save-msg {
   margin-left: 1rem;
   color: #4caf50;
   font-size: 0.85rem;
+}
+
+.section-divider {
+  border: none;
+  border-top: 1px solid #2a2d3a;
+  margin: 2rem 0;
+}
+
+.section-desc {
+  color: #999;
+  font-size: 0.85rem;
+  margin-bottom: 1.2rem;
+}
+
+.backup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 500px;
+}
+
+.backup-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.help-text {
+  color: #777;
+  font-size: 0.8rem;
+}
+
+.btn-import {
+  background: #2a2d3a;
+  color: #ccc;
+  border: 1px dashed #4a4d5a;
+  padding: 0.6rem 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.15s, border-color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
+}
+
+.btn-import:hover {
+  background: #353846;
+  border-color: #7c83ff;
+  color: #fff;
+}
+
+.btn-import.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.import-confirm {
+  background: #1a1d27;
+  border: 1px solid #3a3a5a;
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.selected-file {
+  color: #ddd;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.file-size {
+  color: #888;
+  font-size: 0.8rem;
+}
+
+.warning {
+  color: #ff9800;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  line-height: 1.4;
+}
+
+.warning i {
+  margin-top: 0.1rem;
+  flex-shrink: 0;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 0.8rem;
+}
+
+.btn-danger {
+  background: #e53935;
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1.2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s;
+}
+
+.btn-danger:hover {
+  background: #c62828;
+}
+
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-cancel {
+  background: transparent;
+  color: #aaa;
+  border: 1px solid #3a3a5a;
+  padding: 0.5rem 1.2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-cancel:hover {
+  background: #2a2d3a;
+  color: #fff;
+}
+
+.btn-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

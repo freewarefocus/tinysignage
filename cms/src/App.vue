@@ -6,6 +6,9 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <h1>TinySignage</h1>
+        <router-link v-if="isAdmin" to="/overrides" class="emergency-btn" title="Emergency Overrides">
+          <i class="pi pi-exclamation-triangle"></i>
+        </router-link>
       </div>
       <nav>
         <router-link v-if="canEdit" to="/media" class="nav-item" active-class="active">
@@ -28,6 +31,10 @@
           <i class="pi pi-cog"></i>
           <span>Settings</span>
         </router-link>
+        <router-link to="/storage" class="nav-item" active-class="active">
+          <i class="pi pi-database"></i>
+          <span>Storage</span>
+        </router-link>
         <router-link to="/devices" class="nav-item" active-class="active">
           <i class="pi pi-desktop"></i>
           <span>Devices</span>
@@ -35,6 +42,10 @@
         <router-link v-if="isAdmin" to="/users" class="nav-item" active-class="active">
           <i class="pi pi-users"></i>
           <span>Users</span>
+        </router-link>
+        <router-link v-if="isAdmin" to="/overrides" class="nav-item emergency-nav" active-class="active">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>Overrides</span>
         </router-link>
         <router-link v-if="isAdmin" to="/audit" class="nav-item" active-class="active">
           <i class="pi pi-history"></i>
@@ -173,12 +184,47 @@ body {
 .sidebar-header {
   padding: 1.2rem 1rem;
   border-bottom: 1px solid #2a2d3a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .sidebar-header h1 {
   font-size: 1.1rem;
   font-weight: 600;
   color: #fff;
+}
+
+.emergency-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(220, 53, 69, 0.15);
+  color: #dc3545;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+  font-size: 0.95rem;
+}
+
+.emergency-btn:hover {
+  background: #dc3545;
+  color: #fff;
+}
+
+.emergency-nav {
+  color: #dc3545 !important;
+}
+
+.emergency-nav:hover {
+  color: #ff6b6b !important;
+}
+
+.emergency-nav.active {
+  color: #dc3545 !important;
+  border-right-color: #dc3545 !important;
 }
 
 nav {

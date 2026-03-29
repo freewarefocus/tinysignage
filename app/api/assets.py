@@ -11,7 +11,7 @@ from app.audit import record as audit
 from app.auth import require_editor, require_viewer
 from app.database import get_session
 from app.media import compute_content_hash, generate_thumbnail
-from app.models import ApiToken, Asset, Playlist, PlaylistItem
+from app.models import ApiToken, Asset, AssetTag, Playlist, PlaylistItem, Tag
 
 _config = yaml.safe_load(Path("config.yaml").read_text())
 _media_dir = Path(_config["storage"]["media_dir"])
@@ -22,12 +22,33 @@ router = APIRouter()
 
 @router.get("/assets")
 async def list_assets(
+    tag: str | None = None,
     _admin: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
-    result = await session.execute(select(Asset).order_by(Asset.play_order))
+    query = select(Asset).order_by(Asset.play_order)
+    if tag:
+        query = query.join(AssetTag).where(AssetTag.tag_id == tag)
+    result = await session.execute(query)
     assets = result.scalars().all()
-    return [_asset_to_dict(a) for a in assets]
+
+    # Batch-load tags for all assets
+    asset_ids = [a.id for a in assets]
+    tag_map: dict[str, list[dict]] = {aid: [] for aid in asset_ids}
+    if asset_ids:
+        tag_q = (
+            select(AssetTag.asset_id, Tag.id, Tag.name, Tag.color)
+            .join(Tag)
+            .where(AssetTag.asset_id.in_(asset_ids))
+            .order_by(Tag.name)
+        )
+        tag_result = await session.execute(tag_q)
+        for row in tag_result:
+            tag_map[row.asset_id].append(
+                {"id": row.id, "name": row.name, "color": row.color}
+            )
+
+    return [_asset_to_dict(a, tags=tag_map.get(a.id, [])) for a in assets]
 
 
 @router.post("/assets", status_code=201)
@@ -361,7 +382,7 @@ async def reorder_assets(
     return {"ok": True}
 
 
-def _asset_to_dict(asset: Asset) -> dict:
+def _asset_to_dict(asset: Asset, tags: list[dict] | None = None) -> dict:
     return {
         "id": asset.id,
         "name": asset.name,
@@ -378,4 +399,5 @@ def _asset_to_dict(asset: Asset) -> dict:
         "content_hash": asset.content_hash,
         "created_at": asset.created_at.isoformat() if asset.created_at else None,
         "updated_at": asset.updated_at.isoformat() if asset.updated_at else None,
+        "tags": tags if tags is not None else [],
     }

@@ -47,6 +47,11 @@ const routes = [
     component: () => import('../views/Settings.vue'),
   },
   {
+    path: '/storage',
+    name: 'storage',
+    component: () => import('../views/StorageDashboard.vue'),
+  },
+  {
     path: '/devices',
     name: 'devices',
     component: () => import('../views/DeviceInfo.vue'),
@@ -60,6 +65,12 @@ const routes = [
     path: '/system',
     name: 'system',
     component: () => import('../views/SystemLog.vue'),
+  },
+  {
+    path: '/overrides',
+    name: 'overrides',
+    component: () => import('../views/EmergencyOverrides.vue'),
+    meta: { requiresAdmin: true },
   },
   {
     path: '/audit',

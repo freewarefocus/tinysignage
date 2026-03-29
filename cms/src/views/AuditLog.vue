@@ -170,7 +170,7 @@ function toggle(i) {
 
 function formatTime(iso) {
   if (!iso) return ''
-  return new Date(iso).toLocaleString()
+  return new Date(iso.endsWith('Z') ? iso : iso + 'Z').toLocaleString()
 }
 
 function formatAction(action) {

@@ -43,6 +43,38 @@
         <span v-if="asset.duration">{{ asset.duration }}s</span>
         <span v-else-if="asset.asset_type === 'video'">auto</span>
       </div>
+      <!-- Tags row -->
+      <div v-if="asset.tags?.length || showTagPicker" class="tags-row">
+        <span
+          v-for="t in asset.tags"
+          :key="t.id"
+          class="asset-tag"
+          :style="{ background: t.color + '22', color: t.color, borderColor: t.color + '55' }"
+        >
+          {{ t.name }}
+          <button class="tag-remove" @click.stop="removeTag(t)" :style="{ color: t.color }">&times;</button>
+        </span>
+        <button v-if="!showTagPicker" class="add-tag-btn" @click.stop="showTagPicker = true" title="Add tag">+</button>
+      </div>
+      <div v-else class="tags-row">
+        <button class="add-tag-btn" @click.stop="showTagPicker = true" title="Add tag">
+          <i class="pi pi-tag" style="font-size: 0.6rem;"></i>
+        </button>
+      </div>
+      <!-- Tag picker dropdown -->
+      <div v-if="showTagPicker" class="tag-picker" @click.stop>
+        <div
+          v-for="t in availableTags"
+          :key="t.id"
+          class="tag-option"
+          @click="addTag(t)"
+        >
+          <span class="tag-dot" :style="{ background: t.color }"></span>
+          {{ t.name }}
+        </div>
+        <div v-if="availableTags.length === 0" class="no-tags">No more tags</div>
+        <button class="tag-picker-close" @click="showTagPicker = false">Done</button>
+      </div>
     </div>
   </div>
 </template>
@@ -51,12 +83,16 @@
 import { ref, nextTick, computed } from 'vue'
 import { api } from '../api/client.js'
 
-const props = defineProps({ asset: Object })
-const emit = defineEmits(['updated', 'replace', 'duplicate', 'delete'])
+const props = defineProps({
+  asset: Object,
+  allTags: { type: Array, default: () => [] },
+})
+const emit = defineEmits(['updated', 'replace', 'duplicate', 'delete', 'tag-changed'])
 
 const editing = ref(false)
 const editName = ref('')
 const nameInput = ref(null)
+const showTagPicker = ref(false)
 
 const typeIcon = computed(() => {
   switch (props.asset.asset_type) {
@@ -64,6 +100,11 @@ const typeIcon = computed(() => {
     case 'url': return 'pi pi-globe'
     default: return 'pi pi-image'
   }
+})
+
+const availableTags = computed(() => {
+  const assignedIds = new Set((props.asset.tags || []).map(t => t.id))
+  return props.allTags.filter(t => !assignedIds.has(t.id))
 })
 
 function startEdit() {
@@ -83,6 +124,17 @@ async function saveName() {
 
 function cancelEdit() {
   editing.value = false
+}
+
+async function addTag(tag) {
+  await api.post(`/assets/${props.asset.id}/tags`, { tag_id: tag.id })
+  showTagPicker.value = false
+  emit('tag-changed')
+}
+
+async function removeTag(tag) {
+  await api.delete(`/assets/${props.asset.id}/tags/${tag.id}`)
+  emit('tag-changed')
 }
 </script>
 
@@ -206,4 +258,111 @@ function cancelEdit() {
   font-size: 0.65rem;
   letter-spacing: 0.5px;
 }
+
+/* Tags */
+.tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+  position: relative;
+}
+
+.asset-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  border: 1px solid;
+  line-height: 1.4;
+}
+
+.tag-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.6;
+}
+
+.tag-remove:hover { opacity: 1; }
+
+.add-tag-btn {
+  background: none;
+  border: 1px dashed #444;
+  color: #666;
+  padding: 0px 5px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  transition: all 0.15s;
+}
+
+.add-tag-btn:hover {
+  border-color: #7c83ff;
+  color: #7c83ff;
+}
+
+.tag-picker {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #252836;
+  border: 1px solid #2a2d3a;
+  border-radius: 6px;
+  padding: 0.3rem;
+  z-index: 10;
+  min-width: 140px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.tag-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  color: #ccc;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.tag-option:hover {
+  background: #1a1d27;
+  color: #fff;
+}
+
+.tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.no-tags {
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  color: #666;
+  text-align: center;
+}
+
+.tag-picker-close {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  border-top: 1px solid #2a2d3a;
+  color: #888;
+  padding: 0.3rem;
+  margin-top: 0.3rem;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.tag-picker-close:hover { color: #fff; }
 </style>

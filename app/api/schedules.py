@@ -248,6 +248,11 @@ async def evaluate_schedule_for_device(
     Returns the playlist_id from the highest-priority active schedule
     that matches the device right now, or None if no schedule applies
     (in which case the device's default playlist_id should be used).
+
+    NOTE: Time-of-day checks use UTC. This is correct for single-timezone
+    deployments where the server and admin share the same timezone. For
+    multi-timezone support, each schedule would need a timezone field and
+    conversion logic — deferred to a future session.
     """
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     current_time = now.strftime("%H:%M")

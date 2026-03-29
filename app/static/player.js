@@ -38,6 +38,9 @@
     let deviceToken = '';
     let startTime = Date.now();
     let heartbeatTimer = null;
+    let activeOverride = null;  // Current emergency override from server
+    let overrideExpiryTimer = null;
+    let pairingBound = false;   // Guard to prevent duplicate pairing listeners
 
     // --- Auth ---
     function authHeaders() {
@@ -92,6 +95,9 @@
         const errorEl = document.getElementById('pairing-error');
 
         input.focus();
+
+        if (pairingBound) return;
+        pairingBound = true;
 
         // Force uppercase as user types
         input.addEventListener('input', () => {
@@ -247,9 +253,38 @@
             const data = await resp.json();
             setOnlineStatus(true);
 
+            // --- Emergency override handling ---
+            if (data.override) {
+                if (data.override.type === 'message') {
+                    showEmergencyMessage(data.override);
+                    activeOverride = data.override;
+                    scheduleOverrideExpiry(data.override);
+                    playlistHash = data.hash;
+                    cachePlaylist(data);
+                    return;
+                }
+                // Playlist override: falls through to normal playlist update below
+                activeOverride = data.override;
+                scheduleOverrideExpiry(data.override);
+            } else if (activeOverride) {
+                // Override was removed — return to normal
+                console.log('[TinySignage] Override ended, resuming normal playback');
+                activeOverride = null;
+                if (overrideExpiryTimer) { clearTimeout(overrideExpiryTimer); overrideExpiryTimer = null; }
+                hideEmergencyMessage();
+                if (playlist.length > 0) {
+                    playCurrentAsset();
+                } else {
+                    showSplash();
+                }
+            }
+
             if (data.hash !== playlistHash) {
                 console.log('[TinySignage] Playlist updated:', data.hash);
                 const wasEmpty = playlist.length === 0;
+
+                // Clear emergency message if switching to playlist content
+                hideEmergencyMessage();
 
                 playlist = data.items || [];
                 playlistHash = data.hash;
@@ -322,8 +357,14 @@
 
     function advance() {
         cancelPlayback();
-        currentIndex++;
-        if (currentIndex >= playlist.length) currentIndex = 0;
+        if (settings.shuffle && playlist.length > 1) {
+            let next;
+            do { next = Math.floor(Math.random() * playlist.length); } while (next === currentIndex);
+            currentIndex = next;
+        } else {
+            currentIndex++;
+            if (currentIndex >= playlist.length) currentIndex = 0;
+        }
         playCurrentAsset();
     }
 
@@ -513,6 +554,55 @@
         } catch (e) {
             // Offline — silently skip
         }
+    }
+
+    // --- Emergency Override ---
+    function showEmergencyMessage(override) {
+        const overlay = document.getElementById('emergency-overlay');
+        const messageEl = document.getElementById('emergency-message');
+        const nameEl = document.getElementById('emergency-name');
+
+        // Escape HTML to prevent injection
+        const escaped = override.message
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        messageEl.innerHTML = escaped;
+        nameEl.textContent = override.name || '';
+
+        overlay.classList.remove('hidden');
+        hideSplash();
+        cancelPlayback();
+    }
+
+    function hideEmergencyMessage() {
+        const overlay = document.getElementById('emergency-overlay');
+        overlay.classList.add('hidden');
+    }
+
+    function scheduleOverrideExpiry(override) {
+        if (overrideExpiryTimer) {
+            clearTimeout(overrideExpiryTimer);
+            overrideExpiryTimer = null;
+        }
+        if (!override || !override.expires_at) return;
+        const expiresAt = new Date(override.expires_at.endsWith('Z') ? override.expires_at : override.expires_at + 'Z');
+        const msUntilExpiry = expiresAt.getTime() - Date.now();
+        if (msUntilExpiry <= 0) {
+            // Already expired — clear immediately
+            console.log('[TinySignage] Override already expired client-side, clearing');
+            activeOverride = null;
+            hideEmergencyMessage();
+            if (playlist.length > 0) { playCurrentAsset(); } else { showSplash(); }
+            return;
+        }
+        overrideExpiryTimer = setTimeout(() => {
+            console.log('[TinySignage] Override expired client-side, clearing');
+            activeOverride = null;
+            hideEmergencyMessage();
+            overrideExpiryTimer = null;
+            if (playlist.length > 0) { playCurrentAsset(); } else { showSplash(); }
+        }, msUntilExpiry);
     }
 
     // --- Go ---

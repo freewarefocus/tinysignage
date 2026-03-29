@@ -1,8 +1,9 @@
 """Audit log API — read-only query interface for audit trail."""
 
 import json
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,19 +38,29 @@ async def list_audit_logs(
         query = query.where(AuditLog.entity_type == entity_type)
         count_query = count_query.where(AuditLog.entity_type == entity_type)
     if user:
-        query = query.where(AuditLog.username.ilike(f"%{user}%"))
-        count_query = count_query.where(AuditLog.username.ilike(f"%{user}%"))
+        escaped_user = user.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.where(AuditLog.username.ilike(f"%{escaped_user}%"))
+        count_query = count_query.where(AuditLog.username.ilike(f"%{escaped_user}%"))
     if search:
-        pattern = f"%{search}%"
+        escaped_search = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped_search}%"
         search_filter = AuditLog.details.ilike(pattern) | AuditLog.username.ilike(pattern)
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
     if date_from:
-        query = query.where(AuditLog.timestamp >= date_from)
-        count_query = count_query.where(AuditLog.timestamp >= date_from)
+        try:
+            parsed_from = datetime.fromisoformat(date_from)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date_from format (expected ISO 8601)")
+        query = query.where(AuditLog.timestamp >= parsed_from)
+        count_query = count_query.where(AuditLog.timestamp >= parsed_from)
     if date_to:
-        query = query.where(AuditLog.timestamp <= date_to)
-        count_query = count_query.where(AuditLog.timestamp <= date_to)
+        try:
+            parsed_to = datetime.fromisoformat(date_to)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date_to format (expected ISO 8601)")
+        query = query.where(AuditLog.timestamp <= parsed_to)
+        count_query = count_query.where(AuditLog.timestamp <= parsed_to)
 
     total = (await session.execute(count_query)).scalar()
 
