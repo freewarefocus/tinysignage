@@ -29,6 +29,10 @@
           <i class="pi pi-desktop"></i>
           <span>Devices</span>
         </router-link>
+        <router-link to="/system" class="nav-item" active-class="active">
+          <i class="pi pi-server"></i>
+          <span>System</span>
+        </router-link>
       </nav>
       <div class="sidebar-footer">
         <a href="/player" target="_blank" class="nav-item">
@@ -40,8 +44,37 @@
     <main class="content">
       <router-view />
     </main>
+    <Toast position="bottom-right" />
   </div>
 </template>
+
+<script setup>
+import { onMounted, onUnmounted } from 'vue'
+import { useToast } from 'primevue/usetoast'
+import Toast from 'primevue/toast'
+import { errorBus } from './api/client'
+
+const toast = useToast()
+
+function onApiError(event) {
+  const { summary, severity, sticky } = event.detail
+  toast.add({
+    severity: severity || 'error',
+    summary: 'Error',
+    detail: summary,
+    life: sticky ? undefined : 5000,
+    sticky: sticky || false,
+  })
+}
+
+onMounted(() => {
+  errorBus.addEventListener('api-error', onApiError)
+})
+
+onUnmounted(() => {
+  errorBus.removeEventListener('api-error', onApiError)
+})
+</script>
 
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }

@@ -37,6 +37,10 @@ Desktop.ini
 *.swp
 *.swo
 
+# Logs
+logs/*
+!logs/.gitkeep
+
 # Node / Vue CMS
 node_modules/
 cms/node_modules/

@@ -1,4 +1,9 @@
+import { getErrorMessage, getErrorSeverity } from './errorMessages'
+
 const BASE = '/api'
+
+/** Event bus for API errors — App.vue listens to this */
+export const errorBus = new EventTarget()
 
 function getAuthHeaders() {
   const token = localStorage.getItem('tinysignage_admin_token')
@@ -20,10 +25,45 @@ async function request(method, path, body = null, options = {}) {
     init.headers = { ...authHeaders, ...init.headers }
   }
 
-  const resp = await fetch(url, init)
+  let resp
+  try {
+    resp = await fetch(url, init)
+  } catch (networkError) {
+    const event = new CustomEvent('api-error', {
+      detail: {
+        summary: 'Network error — cannot reach the server.',
+        severity: 'error',
+        sticky: false,
+      },
+    })
+    errorBus.dispatchEvent(event)
+    throw networkError
+  }
+
   if (!resp.ok) {
-    const detail = await resp.text().catch(() => resp.statusText)
-    throw new Error(`${resp.status}: ${detail}`)
+    let serverDetail = null
+    try {
+      serverDetail = await resp.json()
+    } catch {
+      // Response wasn't JSON — use status text
+    }
+
+    const summary = getErrorMessage(resp.status, serverDetail)
+    const severity = getErrorSeverity(resp.status)
+    const sticky = resp.status === 401
+
+    // 401: clear token so subsequent calls don't keep failing
+    if (resp.status === 401) {
+      localStorage.removeItem('tinysignage_admin_token')
+    }
+
+    const event = new CustomEvent('api-error', {
+      detail: { summary, severity, sticky, status: resp.status, serverDetail },
+    })
+    errorBus.dispatchEvent(event)
+
+    const errorMsg = serverDetail?.detail || resp.statusText
+    throw new Error(`${resp.status}: ${errorMsg}`)
   }
   return resp.json()
 }

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,11 +27,11 @@ async def player_heartbeat(
     """Receive heartbeat from a player device."""
     device_id = body.get("device_id")
     if not device_id:
-        return {"error": "device_id required"}
+        raise HTTPException(status_code=400, detail="device_id required")
 
     device = await session.get(Device, device_id)
     if not device:
-        return {"error": "device not found"}
+        raise HTTPException(status_code=404, detail="device not found")
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     device.last_heartbeat = now

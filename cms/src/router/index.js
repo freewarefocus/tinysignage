@@ -50,6 +50,11 @@ const routes = [
     path: '/device',
     redirect: '/devices',
   },
+  {
+    path: '/system',
+    name: 'system',
+    component: () => import('../views/SystemLog.vue'),
+  },
 ]
 
 const router = createRouter({

@@ -12,24 +12,28 @@ from app.api.assets import router as assets_router
 from app.api.devices import router as devices_router
 from app.api.groups import router as groups_router
 from app.api.health import router as health_router
+from app.api.logs import router as logs_router
 from app.api.playlists import router as playlists_router
 from app.api.schedules import router as schedules_router
 from app.api.settings import router as settings_router
 from app.api.setup import router as setup_router
 from app.api.tokens import router as tokens_router
 from app.database import engine, init_db
+from app.error_handlers import register_error_handlers
+from app.logging_config import setup_logging
 from app.scheduler import scheduler
 from app.watchdog import watchdog
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    datefmt="%H:%M:%S",
+_config_path = Path("config.yaml")
+_config = yaml.safe_load(_config_path.read_text())
+
+_log_cfg = _config.get("logging", {})
+setup_logging(
+    log_dir=_log_cfg.get("log_dir", "logs"),
+    level=_log_cfg.get("level", "INFO"),
 )
 log = logging.getLogger("tinysignage")
 
-_config_path = Path("config.yaml")
-_config = yaml.safe_load(_config_path.read_text())
 _media_dir = Path(_config["storage"]["media_dir"])
 _cms_dir = Path("app/static/cms")
 _player_html = Path("app/static/player.html")
@@ -50,6 +54,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="TinySignage", lifespan=lifespan)
+register_error_handlers(app)
 
 # CORS for split deployment (player on a different machine than CMS)
 _cors_origins = _config.get("cors", {}).get("allowed_origins", ["*"])
@@ -84,6 +89,7 @@ app.include_router(devices_router, prefix="/api")
 app.include_router(groups_router, prefix="/api")
 app.include_router(schedules_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
+app.include_router(logs_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
 app.include_router(tokens_router, prefix="/api")
 app.include_router(setup_router, prefix="/api")

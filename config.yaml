@@ -14,4 +14,7 @@ player:
 cors:
   allowed_origins:
   - '*'
+logging:
+  level: INFO
+  log_dir: ./logs
 device_id: 9659bdba-1b72-408d-9cad-21716ba4c285
