@@ -55,7 +55,7 @@
           title="Transition type override"
         >
           <option value="">Default</option>
-          <option value="fade">Crossfade</option>
+          <option value="fade">Fade</option>
           <option value="slide">Slide</option>
           <option value="cut">Cut</option>
         </select>
@@ -66,13 +66,13 @@
           min="0"
           max="30"
           step="0.5"
-          placeholder="s"
+          placeholder=""
           title="Transition duration override (seconds)"
           @change="saveTransition"
         />
       </div>
       <!-- Tags row -->
-      <div v-if="asset.tags?.length || showTagPicker" class="tags-row">
+      <div class="tags-row">
         <span
           v-for="t in asset.tags"
           :key="t.id"
@@ -82,26 +82,24 @@
           {{ t.name }}
           <button class="tag-remove" @click.stop="removeTag(t)" :style="{ color: t.color }">&times;</button>
         </span>
-        <button v-if="!showTagPicker" class="add-tag-btn" @click.stop="showTagPicker = true" title="Add tag">+</button>
-      </div>
-      <div v-else class="tags-row">
-        <button class="add-tag-btn" @click.stop="showTagPicker = true" title="Add tag">
-          <i class="pi pi-tag" style="font-size: 0.6rem;"></i>
+        <button v-if="!showTagPicker" class="add-tag-btn" @click.stop="showTagPicker = true" title="Add tag">
+          <template v-if="asset.tags?.length">+</template>
+          <i v-else class="pi pi-tag" style="font-size: 0.6rem;"></i>
         </button>
-      </div>
-      <!-- Tag picker dropdown -->
-      <div v-if="showTagPicker" class="tag-picker" @click.stop>
-        <div
-          v-for="t in availableTags"
-          :key="t.id"
-          class="tag-option"
-          @click="addTag(t)"
-        >
-          <span class="tag-dot" :style="{ background: t.color }"></span>
-          {{ t.name }}
+        <!-- Tag picker dropdown (inside tags-row for correct positioning) -->
+        <div v-if="showTagPicker" class="tag-picker" @click.stop>
+          <div
+            v-for="t in availableTags"
+            :key="t.id"
+            class="tag-option"
+            @click="addTag(t)"
+          >
+            <span class="tag-dot" :style="{ background: t.color }"></span>
+            {{ t.name }}
+          </div>
+          <div v-if="availableTags.length === 0" class="no-tags">No more tags</div>
+          <button class="tag-picker-close" @click="showTagPicker = false">Done</button>
         </div>
-        <div v-if="availableTags.length === 0" class="no-tags">No more tags</div>
-        <button class="tag-picker-close" @click="showTagPicker = false">Done</button>
       </div>
     </div>
   </div>
@@ -185,7 +183,7 @@ async function removeTag(tag) {
 .asset-card {
   background: #1a1d27;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
   transition: box-shadow 0.2s;
 }
 
@@ -201,6 +199,8 @@ async function removeTag(tag) {
   position: relative;
   aspect-ratio: 16 / 9;
   background: #0f1117;
+  border-radius: 8px 8px 0 0;
+  overflow: hidden;
 }
 
 .thumb {

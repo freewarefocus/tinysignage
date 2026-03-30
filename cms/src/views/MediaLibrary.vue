@@ -28,12 +28,14 @@
       </button>
     </div>
 
-    <div v-if="canEdit" class="action-row">
-      <UploadZone @uploaded="loadAssets" />
+    <div v-if="canEdit" class="action-area">
+      <div class="upload-row">
+        <UploadZone @uploaded="loadAssets" />
+        <button class="btn-html-add" @click="openHtmlEditor()">
+          <i class="pi pi-code"></i> Add HTML Slide
+        </button>
+      </div>
       <p class="form-hint upload-hint">Large video files may take longer to load on the player.</p>
-      <button class="btn-html-add" @click="openHtmlEditor()">
-        <i class="pi pi-code"></i> Add HTML Slide
-      </button>
     </div>
 
     <div v-if="assets.length === 0" class="empty">
@@ -624,16 +626,24 @@ h2 {
 .tag-actions button:hover { color: #fff; background: #252836; }
 .tag-actions button.danger:hover { color: #ef5350; background: #ef535022; }
 
-/* Action row */
-.action-row {
+/* Action area */
+.action-area {
+  margin-bottom: 1.5rem;
+}
+
+.upload-row {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  margin-bottom: 0;
 }
 
-.action-row > :first-child {
+.upload-row > :first-child {
   flex: 1;
+}
+
+.upload-hint {
+  margin-top: 0.25rem;
+  margin-bottom: 0;
 }
 
 .btn-html-add {
@@ -777,8 +787,6 @@ h2 {
   background: #1f3a4a;
   border-color: #6cb8e6;
 }
-
-.upload-hint { flex-basis: 100%; }
 
 .dialog h3 {
   color: #fff;

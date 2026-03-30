@@ -102,7 +102,7 @@ async function uploadFiles(files) {
   text-align: center;
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0;
 }
 
 .upload-zone:hover,
