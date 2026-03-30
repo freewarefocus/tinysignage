@@ -32,7 +32,7 @@
           <div class="pairing-code">{{ newDevice.pairing_code }}</div>
           <div class="pairing-url">
             <label>Or open this URL on the player:</label>
-            <code>{{ newDevice.pairing_url }}</code>
+            <code>{{ fullPairingUrl(newDevice.pairing_url) }}</code>
           </div>
           <p class="pairing-expires">Code expires in {{ formatCountdown(pairingCountdown) }}</p>
           <div class="dialog-actions">
@@ -204,7 +204,7 @@
           <label>Pairing Code</label>
           <div v-if="devicePairing">
             <div class="pairing-code small">{{ devicePairing.code }}</div>
-            <code class="pairing-url-inline">{{ devicePairing.pairing_url }}</code>
+            <code class="pairing-url-inline">{{ fullPairingUrl(devicePairing.pairing_url) }}</code>
             <p class="pairing-expires">Expires in {{ formatCountdown(pairingCountdown) }}</p>
           </div>
           <div v-else-if="selectedDevice.has_pairing_code" class="pairing-active">
@@ -376,6 +376,12 @@ watch(showAddDevice, async (val) => {
     addInput.value?.focus()
   }
 })
+
+function fullPairingUrl(url) {
+  if (!url) return ''
+  if (url.startsWith('http')) return url
+  return window.location.origin + url
+}
 
 function playlistName(playlistId) {
   if (!playlistId) return 'No playlist'

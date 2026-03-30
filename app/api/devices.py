@@ -31,10 +31,13 @@ _config_path = Path("config.yaml")
 router = APIRouter()
 
 
-def _get_server_url() -> str:
-    """Read server_url from config. Returns '' if unset."""
+def _get_server_url(request: Request = None) -> str:
+    """Read server_url from config. Falls back to request origin if unset."""
     config = yaml.safe_load(_config_path.read_text())
-    return config.get("server_url", "").rstrip("/")
+    url = config.get("server_url", "").rstrip("/")
+    if not url and request:
+        url = str(request.base_url).rstrip("/")
+    return url
 
 
 @router.get("/devices")
@@ -230,7 +233,7 @@ async def create_device(
 
     resp = _device_to_dict(device)
     resp["pairing_code"] = pairing_code
-    server_url = _get_server_url()
+    server_url = _get_server_url(request)
     resp["pairing_url"] = f"{server_url}/player?pair={pairing_code}"
     return resp
 
@@ -238,6 +241,7 @@ async def create_device(
 @router.post("/devices/{device_id}/pairing-code")
 async def generate_device_pairing_code(
     device_id: str,
+    request: Request,
     _admin: ApiToken = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
 ):
@@ -252,7 +256,7 @@ async def generate_device_pairing_code(
     device.registration_expires = now + PAIRING_CODE_TTL
     await session.commit()
 
-    server_url = _get_server_url()
+    server_url = _get_server_url(request)
     return {
         "code": pairing_code,
         "expires_in": int(PAIRING_CODE_TTL.total_seconds()),
