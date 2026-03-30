@@ -66,6 +66,71 @@ async def player_heartbeat(
     return {"status": "ok", "server_time": now.isoformat()}
 
 
+@router.post("/devices/{device_id}/player-log")
+async def upload_player_log(
+    device_id: str,
+    body: dict,
+    token: ApiToken = Depends(require_device),
+    session: AsyncSession = Depends(get_session),
+):
+    """Receive player log entries from a device (sent with heartbeat)."""
+    if device_id != token.device_id:
+        raise HTTPException(status_code=403, detail="Token not authorized for this device")
+
+    device = await session.get(Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="device not found")
+
+    entries = body.get("entries", [])
+    if not isinstance(entries, list):
+        raise HTTPException(status_code=422, detail="entries must be an array")
+
+    # Store as JSON text (ring buffer — player already trims to 200)
+    device.player_log = json.dumps(entries[-200:])
+    device.player_log_updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    await session.commit()
+    return {"status": "ok", "stored": len(entries)}
+
+
+@router.get("/devices/{device_id}/player-log")
+async def get_player_log(
+    device_id: str,
+    level: str | None = None,
+    search: str | None = None,
+    _token: ApiToken = Depends(require_viewer),
+    session: AsyncSession = Depends(get_session),
+):
+    """Retrieve player log for a device. Viewer+ access."""
+    device = await session.get(Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="device not found")
+
+    entries = []
+    if device.player_log:
+        try:
+            entries = json.loads(device.player_log)
+        except (json.JSONDecodeError, TypeError):
+            entries = []
+
+    # Filter by level
+    if level:
+        level_lower = level.lower()
+        entries = [e for e in entries if e.get("l", "").lower() == level_lower]
+
+    # Filter by search term
+    if search:
+        search_lower = search.lower()
+        entries = [e for e in entries if search_lower in e.get("m", "").lower()]
+
+    return {
+        "device_id": device_id,
+        "device_name": device.name,
+        "entries": entries,
+        "total": len(entries),
+        "updated_at": device.player_log_updated_at.isoformat() if device.player_log_updated_at else None,
+    }
+
+
 @router.post("/devices/{device_id}/capabilities")
 async def report_capabilities(
     device_id: str,

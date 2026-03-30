@@ -23,7 +23,8 @@
     <div v-if="uploads.length" class="upload-list">
       <div v-for="u in uploads" :key="u.name" class="upload-item">
         <span class="upload-name">{{ u.name }}</span>
-        <div class="upload-bar">
+        <div v-if="u.error" class="upload-error">{{ u.error }}</div>
+        <div v-else class="upload-bar">
           <div class="upload-progress" :style="{ width: u.progress + '%' }"></div>
         </div>
       </div>
@@ -50,7 +51,7 @@ function onFileSelect(e) {
 
 async function uploadFiles(files) {
   for (const file of files) {
-    const entry = { name: file.name, progress: 0 }
+    const entry = { name: file.name, progress: 0, error: null }
     uploads.value.push(entry)
 
     const formData = new FormData()
@@ -68,21 +69,26 @@ async function uploadFiles(files) {
             entry.progress = 100
             resolve()
           } else {
-            reject(new Error(`Upload failed: ${xhr.status}`))
+            let detail = ''
+            try { detail = JSON.parse(xhr.responseText)?.detail || xhr.responseText } catch { detail = xhr.statusText }
+            reject(new Error(`Upload failed for "${file.name}": HTTP ${xhr.status} — ${detail}`))
           }
         })
-        xhr.addEventListener('error', () => reject(new Error('Upload failed')))
+        xhr.addEventListener('error', () => reject(new Error(`Upload failed for "${file.name}": network error (server unreachable or request blocked)`)))
         xhr.open('POST', '/api/assets')
+        const token = localStorage.getItem('tinysignage_token') || localStorage.getItem('tinysignage_admin_token')
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
         xhr.send(formData)
       })
     } catch (err) {
-      console.error('Upload error:', err)
+      entry.error = err.message
+      console.error(`[UploadZone] ${err.message}`)
     }
 
-    // Remove from list after a short delay
+    // Keep failed entries visible longer so the user sees the error
     setTimeout(() => {
       uploads.value = uploads.value.filter((u) => u !== entry)
-    }, 1500)
+    }, entry.error ? 5000 : 1500)
   }
   emit('uploaded')
 }
@@ -147,5 +153,11 @@ async function uploadFiles(files) {
   height: 100%;
   background: #7c83ff;
   transition: width 0.2s;
+}
+
+.upload-error {
+  color: #ff6b6b;
+  font-size: 0.8rem;
+  margin-top: 3px;
 }
 </style>

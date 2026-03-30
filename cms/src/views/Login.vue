@@ -27,6 +27,7 @@
           {{ loading ? 'Signing in...' : 'Sign In' }}
         </button>
       </form>
+      <p class="recovery-hint">Forgot your password? Ask your TinySignage administrator to reset it from the Users page.</p>
     </div>
   </div>
 </template>
@@ -64,7 +65,8 @@ async function handleLogin() {
     // Migrate away from old key
     localStorage.removeItem('tinysignage_admin_token')
     router.push('/')
-  } catch {
+  } catch (err) {
+    console.error('[Login] Login failed:', err)
     error.value = 'Cannot reach the server'
   } finally {
     loading.value = false
@@ -148,5 +150,13 @@ button:disabled {
   color: #ef5350;
   font-size: 0.85rem;
   margin-bottom: 0.8rem;
+}
+
+.recovery-hint {
+  color: #666;
+  font-size: 0.78rem;
+  text-align: center;
+  margin-top: 1.2rem;
+  line-height: 1.4;
 }
 </style>

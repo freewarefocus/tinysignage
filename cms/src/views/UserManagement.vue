@@ -25,12 +25,16 @@
           <td>{{ user.username }}</td>
           <td>{{ user.display_name || '—' }}</td>
           <td>
-            <span class="role-badge" :class="'role-' + user.role">
+            <span class="role-badge" :class="'role-' + user.role"
+              v-tooltip="user.role === 'admin' ? 'Full access: manage users, devices, content, and settings'
+                : user.role === 'editor' ? 'Can manage content and playlists, but not users or settings'
+                : 'Read-only access to the CMS dashboard'">
               {{ user.role }}
             </span>
           </td>
           <td>
-            <span class="status-badge" :class="user.is_active ? 'active' : 'inactive'">
+            <span class="status-badge" :class="user.is_active ? 'active' : 'inactive'"
+              v-tooltip="user.is_active ? 'User can log in' : 'User is blocked from logging in'">
               {{ user.is_active ? 'Active' : 'Disabled' }}
             </span>
           </td>
@@ -68,27 +72,39 @@
           <label>Display Name</label>
           <input v-model="form.display_name" type="text" />
           <label>Role</label>
-          <select v-model="form.role">
+          <select v-model="form.role" :disabled="isLastAdminEdit">
             <option value="admin">Admin</option>
             <option value="editor">Editor</option>
             <option value="viewer">Viewer</option>
           </select>
           <template v-if="editUser">
-            <label>
-              <input type="checkbox" v-model="form.is_active" />
+            <label :class="{ 'label-disabled': isLastAdminEdit }">
+              <input type="checkbox" v-model="form.is_active" :disabled="isLastAdminEdit" />
               Active
             </label>
+            <p v-if="isLastAdminEdit" class="info-text">
+              <i class="pi pi-info-circle"></i>
+              This is the only admin account. Its role and status cannot be changed until another admin exists.
+            </p>
             <label>New Password (leave blank to keep current)</label>
             <input v-model="form.password" type="password" minlength="8" placeholder="Min. 8 characters" />
+            <template v-if="form.password">
+              <label>Confirm New Password</label>
+              <input v-model="form.passwordConfirm" type="password" minlength="8" placeholder="Re-enter password" />
+              <div v-if="passwordMismatch" class="error">Passwords do not match</div>
+            </template>
           </template>
           <template v-else>
             <label>Password</label>
             <input v-model="form.password" type="password" required minlength="8" placeholder="Min. 8 characters" />
+            <label>Confirm Password</label>
+            <input v-model="form.passwordConfirm" type="password" required minlength="8" placeholder="Re-enter password" />
+            <div v-if="passwordMismatch" class="error">Passwords do not match</div>
           </template>
           <div v-if="formError" class="error">{{ formError }}</div>
           <div class="modal-actions">
             <button type="button" class="btn-secondary" @click="closeDialog">Cancel</button>
-            <button type="submit" class="btn-primary">{{ editUser ? 'Save' : 'Create' }}</button>
+            <button type="submit" class="btn-primary" :disabled="passwordMismatch">{{ editUser ? 'Save' : 'Create' }}</button>
           </div>
         </form>
       </div>
@@ -118,10 +134,27 @@ const showCreate = ref(false)
 const editUser = ref(null)
 const deleteTarget = ref(null)
 const formError = ref('')
-const form = ref({ username: '', display_name: '', role: 'viewer', password: '', is_active: true })
+const form = ref({ username: '', display_name: '', role: 'viewer', password: '', passwordConfirm: '', is_active: true })
 
 const currentUserId = computed(() => {
   try { return JSON.parse(localStorage.getItem('tinysignage_user') || '{}').id } catch { return null }
+})
+
+const activeAdminCount = computed(() =>
+  users.value.filter(u => u.role === 'admin' && u.is_active).length
+)
+
+const isLastAdminEdit = computed(() =>
+  editUser.value && editUser.value.role === 'admin' && editUser.value.is_active && activeAdminCount.value === 1
+)
+
+const passwordMismatch = computed(() => {
+  if (editUser.value) {
+    // Only check when a new password is being set
+    return form.value.password && form.value.passwordConfirm !== form.value.password
+  }
+  // Create mode: always check
+  return form.value.password && form.value.passwordConfirm !== form.value.password
 })
 
 async function loadUsers() {
@@ -141,7 +174,7 @@ function closeDialog() {
   showCreate.value = false
   editUser.value = null
   formError.value = ''
-  form.value = { username: '', display_name: '', role: 'viewer', password: '', is_active: true }
+  form.value = { username: '', display_name: '', role: 'viewer', password: '', passwordConfirm: '', is_active: true }
 }
 
 async function createUser() {
@@ -396,5 +429,34 @@ onMounted(loadUsers)
 
 input:disabled {
   opacity: 0.5;
+}
+
+select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.label-disabled {
+  opacity: 0.5;
+}
+
+.info-text {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  color: #7c83ff;
+  font-size: 0.8rem;
+  margin: 0.3rem 0 0.5rem;
+  line-height: 1.4;
+}
+
+.info-text i {
+  margin-top: 0.1rem;
+  flex-shrink: 0;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

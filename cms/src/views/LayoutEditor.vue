@@ -86,6 +86,7 @@
             <div class="prop-field">
               <label>Z-Index</label>
               <input type="number" v-model.number="selectedZone.z_index" @change="updateZone(selectedZone)" />
+              <p class="form-hint">Controls layering when multiple zones overlap. Higher numbers appear on top.</p>
             </div>
             <div class="prop-field">
               <label>X %</label>
@@ -104,7 +105,8 @@
               <input type="number" v-model.number="selectedZone.height_percent" step="0.1" min="1" max="100" @change="updateZone(selectedZone)" />
             </div>
           </div>
-          <button class="btn-danger btn-sm" @click="deleteZone(selectedZone)">
+          <p class="form-hint">Position and size as percentages of the screen. The preview on the left updates as you type.</p>
+          <button class="btn-danger btn-sm" @click="confirmDeleteZone(selectedZone)">
             <i class="pi pi-trash"></i> Delete Zone
           </button>
         </div>
@@ -158,6 +160,23 @@
         </div>
       </div>
     </div>
+
+    <!-- Delete confirmation -->
+    <div v-if="deleteTarget" class="dialog-overlay" @click.self="deleteTarget = null">
+      <div class="dialog">
+        <h3>{{ deleteTarget.type === 'layout' ? 'Delete Layout' : 'Delete Zone' }}</h3>
+        <p v-if="deleteTarget.type === 'layout'">
+          Delete layout <strong>{{ deleteTarget.name }}</strong>? All zones will be removed. Devices using this layout will fall back to their default layout.
+        </p>
+        <p v-else>
+          Remove zone <strong>{{ deleteTarget.name }}</strong>? Any playlist assigned to it will stop displaying in this layout.
+        </p>
+        <div class="dialog-actions">
+          <button class="btn-secondary" @click="deleteTarget = null">Cancel</button>
+          <button class="btn-danger" @click="doDelete">Delete</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -179,6 +198,7 @@ const nameInput = ref(null)
 // Zone editor
 const activeLayout = ref(null)
 const selectedZone = ref(null)
+const deleteTarget = ref(null)
 
 // Drag state
 const dragState = ref(null)
@@ -246,10 +266,8 @@ async function saveLayout() {
   await loadLayouts()
 }
 
-async function confirmDelete(layout) {
-  if (!confirm(`Delete layout "${layout.name}"? All zones will be removed.`)) return
-  await api.delete(`/layouts/${layout.id}`)
-  await loadLayouts()
+function confirmDelete(layout) {
+  deleteTarget.value = { ...layout, type: 'layout' }
 }
 
 // --- Zone editor ---
@@ -293,11 +311,22 @@ async function updateZone(zone) {
   })
 }
 
-async function deleteZone(zone) {
-  if (!confirm(`Delete zone "${zone.name}"?`)) return
-  await api.delete(`/layouts/${activeLayout.value.id}/zones/${zone.id}`)
-  activeLayout.value.zones = activeLayout.value.zones.filter(z => z.id !== zone.id)
-  if (selectedZone.value?.id === zone.id) selectedZone.value = null
+function confirmDeleteZone(zone) {
+  deleteTarget.value = { ...zone, type: 'zone' }
+}
+
+async function doDelete() {
+  if (!deleteTarget.value) return
+  const target = deleteTarget.value
+  deleteTarget.value = null
+  if (target.type === 'layout') {
+    await api.delete(`/layouts/${target.id}`)
+    await loadLayouts()
+  } else {
+    await api.delete(`/layouts/${activeLayout.value.id}/zones/${target.id}`)
+    activeLayout.value.zones = activeLayout.value.zones.filter(z => z.id !== target.id)
+    if (selectedZone.value?.id === target.id) selectedZone.value = null
+  }
 }
 
 // --- Drag & resize ---
@@ -487,6 +516,13 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
   margin-bottom: 0.75rem;
 }
 .dialog input:focus, .dialog select:focus { border-color: #7c83ff; }
+
+.dialog p {
+  color: #aaa;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
+}
 
 .dialog-actions {
   display: flex;
@@ -683,4 +719,5 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
 .zone-list-name { color: #ddd; font-size: 0.85rem; font-weight: 500; flex: 1; }
 .zone-list-type { color: #7c83ff; font-size: 0.75rem; text-transform: uppercase; }
 .zone-list-pl { color: #888; font-size: 0.8rem; }
+
 </style>

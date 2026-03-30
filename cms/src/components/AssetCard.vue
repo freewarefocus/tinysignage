@@ -3,7 +3,7 @@
     <div class="thumb-wrap">
       <img
         v-if="asset.thumbnail_path"
-        :src="`/api/assets/${asset.id}/thumbnail`"
+        :src="`/media/thumbs/${asset.thumbnail_path}`"
         class="thumb"
         alt=""
       />
@@ -56,6 +56,7 @@
         >
           <option value="">Default</option>
           <option value="fade">Crossfade</option>
+          <option value="slide">Slide</option>
           <option value="cut">Cut</option>
         </select>
         <input

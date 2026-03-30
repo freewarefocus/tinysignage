@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import PrimeVue from 'primevue/config'
 import ToastService from 'primevue/toastservice'
+import Tooltip from 'primevue/tooltip'
 import Aura from '@primevue/themes/aura'
 import 'primeicons/primeicons.css'
 
@@ -20,6 +21,7 @@ app.use(PrimeVue, {
 
 app.use(ToastService)
 app.use(router)
+app.directive('tooltip', Tooltip)
 
 // Safety net: catch Vue component errors
 app.config.errorHandler = (err, instance, info) => {

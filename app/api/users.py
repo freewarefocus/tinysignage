@@ -54,9 +54,15 @@ async def login(body: dict, request: Request, session: AsyncSession = Depends(ge
     user = result.scalars().first()
 
     if not user or not verify_password(password, user.password_hash):
+        await audit(session, action="auth_failed", entity_type="user", entity_id=None,
+                    details={"username": username, "reason": "invalid credentials"}, request=request)
+        await session.commit()
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
     if not user.is_active:
+        await audit(session, action="auth_failed", entity_type="user", entity_id=user.id,
+                    details={"username": username, "reason": "account disabled"}, request=request)
+        await session.commit()
         raise HTTPException(status_code=403, detail="Account is disabled")
 
     # Prune expired login session tokens to prevent unbounded table growth

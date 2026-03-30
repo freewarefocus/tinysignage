@@ -48,6 +48,9 @@ button:hover { background: #6b72e8; }
                  color: #666; margin: 0.5rem 0 0.8rem; border-top: 1px solid #2a2d3a;
                  padding-top: 1rem; }
 .error { color: #ef5350; font-size: 0.85rem; margin-bottom: 0.5rem; display: none; }
+.hero-section { background: #252836; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
+details summary:hover { color: #aaa; }
+details summary::marker { color: #666; }
 </style>
 </head>
 <body>
@@ -107,22 +110,29 @@ document.getElementById('setup-form').addEventListener('submit', async (e) => {
   }
   const data = await resp.json();
   let html = '<div class="done"><h1>Setup Complete!</h1>';
+  if (data.device_token && data.device_id) {
+    const playerBase = data.server_url || '';
+    const playerUrl = playerBase + '/player?device=' + data.device_id + '&token=' + data.device_token;
+    html += '<div class="hero-section">';
+    html += '<h2 style="font-size:1.1rem;color:#fff;margin-bottom:0.3rem">Your Player URL</h2>';
+    html += '<p style="color:#888;font-size:0.85rem;margin-bottom:0.8rem">Open this URL in a fullscreen browser on the screen you want to use as a display.</p>';
+    html += '<div style="display:flex;gap:0.5rem;margin-bottom:0.5rem">';
+    html += '<input type="text" id="player-url" value="' + playerUrl + '" readonly onclick="this.select()" style="margin-bottom:0;font-size:0.85rem">';
+    html += '<button type="button" onclick="navigator.clipboard.writeText(document.getElementById(\\'player-url\\').value)" style="width:auto;padding:0.6rem 1rem;font-size:0.85rem;white-space:nowrap">Copy</button>';
+    html += '</div>';
+    html += '</div>';
+  }
   if (data.admin_token) {
-    html += '<p style="color:#ff9800;margin:1rem 0 0.5rem">Save this API token now — it will not be shown again:</p>';
+    html += '<details style="margin-top:1rem;border-top:1px solid #2a2d3a;padding-top:0.8rem">';
+    html += '<summary style="color:#888;font-size:0.85rem;cursor:pointer;margin-bottom:0.5rem">Technical: API Token (optional)</summary>';
+    html += '<p style="color:#666;font-size:0.8rem;margin-bottom:0.5rem">This token is for scripts or external tools. You can create new tokens anytime in the CMS under Users. Safe to skip if you\\\'re just getting started.</p>';
     html += '<label>Admin API Token</label>';
     html += '<input type="text" value="' + data.admin_token + '" readonly onclick="this.select()">';
-    if (data.device_token && data.device_id) {
-      const playerBase = data.server_url || '';
-      const playerUrl = playerBase + '/player?device=' + data.device_id + '&token=' + data.device_token;
-      html += '<label style="margin-top:0.5rem">Player URL</label>';
-      html += '<div style="display:flex;gap:0.5rem;margin-bottom:1rem">';
-      html += '<input type="text" id="player-url" value="' + playerUrl + '" readonly onclick="this.select()" style="margin-bottom:0">';
-      html += '<button type="button" onclick="navigator.clipboard.writeText(document.getElementById(\\'player-url\\').value)" style="width:auto;padding:0.6rem 1rem;font-size:0.85rem;white-space:nowrap">Copy</button>';
-      html += '</div>';
-    }
-    html += '<p style="color:#888;font-size:0.8rem;margin-top:0.5rem">You can now log in with your admin account.</p>';
+    html += '<p style="color:#666;font-size:0.78rem;margin-top:0.3rem">This token is shown once for security. You can always create new tokens later.</p>';
+    html += '</details>';
   }
-  html += '<button onclick="window.location.href=\\'/cms/login\\'" style="margin-top:1rem">Continue to Login</button>';
+  html += '<p style="color:#888;font-size:0.85rem;margin-top:1rem">You can now log in with your admin account.</p>';
+  html += '<button onclick="window.location.href=\\'/cms/login\\'" style="margin-top:0.8rem">Continue to Login</button>';
   html += '</div>';
   document.getElementById('form-card').innerHTML = html;
 });

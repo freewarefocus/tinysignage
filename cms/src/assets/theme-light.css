@@ -219,6 +219,8 @@ html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
   background: #aaa;
 }
 
+html[data-theme="light"] .form-hint { color: #888; }
+
 /* Mini-player dark frame stays dark in both themes */
 html[data-theme="light"] .mini-player-frame {
   background: #111;

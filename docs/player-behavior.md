@@ -12,6 +12,7 @@ The player communicates with the server on three intervals:
 |--------|----------|----------|
 | **Playlist poll** | Every 30 seconds | `GET /api/devices/{id}/playlist` |
 | **Heartbeat** | Every 60 seconds | `POST /api/player/heartbeat` |
+| **Log upload** | After each heartbeat | `POST /api/devices/{id}/player-log` |
 | **Capability report** | On boot + every 60 minutes | `POST /api/devices/{id}/capabilities` |
 
 ### Playlist polling
@@ -31,6 +32,8 @@ Every 60 seconds, the player sends a heartbeat with diagnostics:
 - Free storage (when available)
 
 The server uses heartbeats to determine device status. A device with no heartbeat for 120+ seconds is marked offline.
+
+After each successful heartbeat, the player uploads its persistent log buffer to `POST /api/devices/{id}/player-log`. This makes player logs available remotely for debugging, even on headless devices.
 
 ### Capability reporting
 
@@ -192,6 +195,40 @@ Trigger state (active flow ID, current source playlist, loop count) is saved to 
 ### Override interaction
 
 Emergency overrides suspend all trigger evaluation. When an override ends, the player returns to the flow's entry playlist.
+
+---
+
+## Persistent logging
+
+The player maintains a persistent log in `localStorage` that survives page reloads and browser restarts.
+
+### How it works
+
+All player events are logged through the `PlayerLog` object, which:
+
+1. Writes to the browser console (as before) with a `[Player]` prefix
+2. Appends to a ring buffer in `localStorage` under `tinysignage_player_log`
+3. Uploads the buffer to the server after each successful heartbeat
+
+The ring buffer holds the last 200 entries. Each entry contains a timestamp, level (`info`, `warn`, `error`), and message.
+
+### What is logged
+
+| Level | Events |
+|-------|--------|
+| **info** | Playlist updates, override changes, trigger fires, zone activation, capability reports, connection restored |
+| **warn** | Poll failures, heartbeat failures, cache errors, trigger state issues, GPIO parse errors |
+| **error** | Image load failures, video load failures, video timeouts |
+
+### Accessing player logs
+
+| Method | When to use |
+|--------|-------------|
+| **Ctrl+Shift+D** | On the player screen -- opens a full-screen debug overlay with all log entries |
+| **`GET /api/devices/{id}/player-log`** | Remote access -- useful for Raspberry Pi, kiosk, or any headless device |
+| **DevTools > Application > Local Storage** | If you have direct browser access |
+
+The remote API supports filtering: `?level=error` shows only errors, `?search=poll` matches message text.
 
 ---
 

@@ -145,6 +145,8 @@ class Device(Base):
     storage_free_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
     capabilities: Mapped[str | None] = mapped_column(Text, nullable=True)
     capabilities_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    player_log: Mapped[str | None] = mapped_column(Text, nullable=True)
+    player_log_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     registration_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     registration_expires: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

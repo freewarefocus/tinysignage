@@ -171,11 +171,15 @@
             <label>Day of month</label>
             <input v-model.number="rruleMonthDay" type="number" min="1" max="31" @input="buildRrule" />
           </div>
-          <div class="form-group">
-            <label>Rule</label>
-            <input v-model="form.recurrence_rule" readonly class="rule-preview" />
-            <p class="form-hint">iCal RRULE format. Auto-generated from selections above.</p>
-          </div>
+          <p v-if="rruleSummary" class="rrule-summary">{{ rruleSummary }}</p>
+          <details class="rrule-details">
+            <summary>Technical: Recurrence Rule (auto-generated)</summary>
+            <div class="form-group">
+              <label>Rule</label>
+              <input v-model="form.recurrence_rule" readonly class="rule-preview" />
+              <p class="form-hint">iCal RRULE format. Auto-generated from selections above.</p>
+            </div>
+          </details>
         </div>
 
         <div class="form-row">
@@ -287,16 +291,16 @@
             <div class="row-name">
               <span class="dot" :style="{ background: scheduleColor(s) }"></span>
               {{ s.name }}
-              <span v-if="!s.is_active" class="badge-inactive">OFF</span>
-              <span v-if="s.recurrence_rule" class="badge-rrule" title="Recurrence rule active">RRULE</span>
+              <span v-if="!s.is_active" class="badge-inactive" v-tooltip="'Schedule is inactive and will not play'">OFF</span>
+              <span v-if="s.recurrence_rule" class="badge-rrule" v-tooltip="'This schedule repeats using a recurrence rule'">RRULE</span>
             </div>
             <div class="row-details">
               <span class="detail-tag"><i class="pi pi-list"></i> {{ s.playlist_name || '—' }}</span>
               <span class="detail-tag"><i class="pi pi-desktop"></i> {{ targetLabel(s) }}</span>
               <span class="detail-tag"><i class="pi pi-clock"></i> {{ timeLabel(s) }}</span>
               <span class="detail-tag"><i class="pi pi-calendar"></i> {{ daysLabel(s) }}</span>
-              <span class="detail-tag">Priority: {{ s.priority }}</span>
-              <span v-if="s.priority_weight !== 1.0" class="detail-tag">Weight: {{ s.priority_weight }}</span>
+              <span class="detail-tag" v-tooltip="'Higher priority wins when schedules overlap'">Priority: {{ s.priority }}</span>
+              <span v-if="s.priority_weight !== 1.0" class="detail-tag" v-tooltip="'Weighted random selection among same-priority schedules'">Weight: {{ s.priority_weight }}</span>
               <span v-if="s.transition_playlist_name" class="detail-tag">
                 <i class="pi pi-replay"></i> {{ s.transition_playlist_name }}
               </span>
@@ -354,6 +358,34 @@ const rruleDayOptions = {
 const intervalLabel = computed(() => {
   const labels = { DAILY: 'day(s)', WEEKLY: 'week(s)', MONTHLY: 'month(s)', YEARLY: 'year(s)' }
   return labels[rruleFreq.value] || ''
+})
+
+const rruleSummary = computed(() => {
+  const freq = rruleFreq.value
+  const interval = rruleInterval.value
+  const days = rruleDays.value
+  const monthDay = rruleMonthDay.value
+
+  const dayNames = { MO: 'Monday', TU: 'Tuesday', WE: 'Wednesday', TH: 'Thursday', FR: 'Friday', SA: 'Saturday', SU: 'Sunday' }
+
+  if (freq === 'DAILY') {
+    return interval === 1 ? 'Every day' : `Every ${interval} days`
+  }
+  if (freq === 'WEEKLY') {
+    const prefix = interval === 1 ? 'Every' : `Every ${interval} weeks on`
+    if (days.length === 0) return interval === 1 ? 'Every week' : `Every ${interval} weeks`
+    const names = days.map(d => dayNames[d] || d)
+    if (names.length === 1) return `${prefix} ${names[0]}`
+    return `${prefix} ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  }
+  if (freq === 'MONTHLY') {
+    const suffix = monthDay === 1 ? '1st' : monthDay === 2 ? '2nd' : monthDay === 3 ? '3rd' : `${monthDay}th`
+    return interval === 1 ? `Monthly on the ${suffix}` : `Every ${interval} months on the ${suffix}`
+  }
+  if (freq === 'YEARLY') {
+    return interval === 1 ? 'Every year' : `Every ${interval} years`
+  }
+  return ''
 })
 
 const defaultForm = () => ({
@@ -789,7 +821,28 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 
 .form-row { display: flex; gap: 0.75rem; }
 
-.form-hint { color: #666; font-size: 0.75rem; margin: 0.2rem 0 0.5rem; }
+.rrule-summary {
+  color: #7c83ff;
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0.5rem;
+  font-weight: 500;
+}
+
+.rrule-details {
+  margin-bottom: 0.5rem;
+}
+
+.rrule-details summary {
+  color: #888;
+  font-size: 0.8rem;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.3rem 0;
+}
+
+.rrule-details summary:hover {
+  color: #aaa;
+}
 
 /* Recurrence toggle */
 .recurrence-toggle { display: flex; gap: 0; }

@@ -6,7 +6,7 @@
     <div class="row-thumb">
       <img
         v-if="item.asset?.thumbnail_path"
-        :src="`/api/assets/${item.asset.id}/thumbnail`"
+        :src="`/media/thumbs/${item.asset.thumbnail_path}`"
         alt=""
       />
       <div v-else class="thumb-placeholder">

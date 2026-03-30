@@ -26,6 +26,7 @@ Upload images and videos through a web CMS, arrange them into playlists, and a f
 - **Interactive triggers** -- keyboard, touch zones, GPIO buttons, webhooks, timeouts -- link playlists with trigger-driven transitions for kiosks, wayfinding, and emergency alerts
 - **Emergency overrides** -- instant message or playlist push to all/group/device, auto-expiry
 - **Role-based access** -- admin, editor, viewer roles with API tokens
+- **Structured logging** -- backend error log, player persistent log with remote retrieval, audit trail
 - **Backup and restore** -- one-click ZIP export of database and media
 
 ## What it doesn't do
@@ -69,6 +70,21 @@ A single FastAPI process serves the API, CMS, player, and media files. SQLite is
 
 ---
 
+## Logs and debugging
+
+TinySignage never fails silently. Every error surfaces through two channels: user-facing notifications and a persistent debug log.
+
+| What you need | Where to look |
+|---------------|---------------|
+| **Server errors** (500s, crashes) | CMS > System Log, or `logs/errors.jsonl`, or `GET /api/logs/errors` |
+| **Player issues** (poll failures, asset load errors) | Press **Ctrl+Shift+D** on the player for the debug overlay, or `GET /api/devices/{id}/player-log` for remote access |
+| **Who changed what** (asset deleted, playlist modified) | CMS > Audit Log, or `GET /api/audit` |
+| **Failed login attempts** | Audit Log (action: `auth_failed`) |
+
+Player logs are especially useful for headless devices (Raspberry Pi, kiosk). The player stores a 200-entry ring buffer locally and uploads it to the server on each heartbeat, so you can debug remotely without physical access.
+
+---
+
 ## Hardware
 
 TinySignage runs on anything with a browser and a screen. No proprietary hardware required.
@@ -108,8 +124,8 @@ Also works on: any x86 mini PC, retired office PC, Mac, Linux server, or Docker 
 | [Users and Permissions](docs/users-and-permissions.md) | RBAC roles, API tokens, sessions |
 | [Backup and Restore](docs/backup-and-restore.md) | ZIP export and import |
 | [Configuration](docs/configuration.md) | config.yaml reference |
-| [Player Behavior](docs/player-behavior.md) | Polling, caching, offline mode, transitions |
-| [Troubleshooting](docs/troubleshooting.md) | Common issues and fixes |
+| [Player Behavior](docs/player-behavior.md) | Polling, caching, offline mode, transitions, persistent logging |
+| [Troubleshooting](docs/troubleshooting.md) | Log locations, common issues, and fixes |
 | [Architecture](docs/architecture.md) | System design, project layout, dependencies |
 | [API Reference](docs/api-reference.md) | All endpoints with examples |
 | [Contributing](CONTRIBUTING.md) | Dev setup, conventions, PR guidelines |

@@ -14,6 +14,16 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
+        # Log auth failures for security visibility
+        if exc.status_code in (401, 403) and request.url.path.startswith("/api/"):
+            log.warning(
+                "Auth failure %s on %s %s from %s: %s",
+                exc.status_code,
+                request.method,
+                request.url.path,
+                request.client.host if request.client else "unknown",
+                exc.detail,
+            )
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail, "status_code": exc.status_code},

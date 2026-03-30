@@ -6,67 +6,73 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <h1>TinySignage</h1>
-        <router-link v-if="isAdmin" to="/overrides" class="emergency-btn" title="Emergency Overrides">
-          <i class="pi pi-exclamation-triangle"></i>
+        <router-link
+          v-if="isAdmin"
+          to="/overrides"
+          class="emergency-btn"
+          :class="{ 'override-active': hasActiveOverride }"
+          v-tooltip.right="hasActiveOverride ? 'Override active' : 'Emergency Overrides'"
+        >
+          <i :class="hasActiveOverride ? 'pi pi-exclamation-triangle' : 'pi pi-megaphone'"></i>
         </router-link>
       </div>
       <nav>
-        <router-link v-if="canEdit" to="/media" class="nav-item" active-class="active">
+        <router-link v-if="canEdit" to="/media" class="nav-item" active-class="active" v-tooltip.right="'Media Library'">
           <i class="pi pi-images"></i>
           <span>Media</span>
         </router-link>
-        <router-link v-if="canEdit" to="/playlists" class="nav-item" active-class="active">
+        <router-link v-if="canEdit" to="/playlists" class="nav-item" active-class="active" v-tooltip.right="'Playlists'">
           <i class="pi pi-list"></i>
           <span>Playlists</span>
         </router-link>
-        <router-link to="/groups" class="nav-item" active-class="active">
+        <router-link to="/groups" class="nav-item" active-class="active" v-tooltip.right="'Device Groups'">
           <i class="pi pi-sitemap"></i>
           <span>Groups</span>
         </router-link>
-        <router-link v-if="canEdit" to="/schedules" class="nav-item" active-class="active">
+        <router-link v-if="canEdit" to="/schedules" class="nav-item" active-class="active" v-tooltip.right="'Schedules'">
           <i class="pi pi-calendar"></i>
           <span>Schedules</span>
         </router-link>
-        <router-link v-if="isAdmin" to="/settings" class="nav-item" active-class="active">
+        <router-link v-if="isAdmin" to="/settings" class="nav-item" active-class="active" v-tooltip.right="'Settings'">
           <i class="pi pi-cog"></i>
           <span>Settings</span>
         </router-link>
-        <router-link to="/storage" class="nav-item" active-class="active">
+        <router-link to="/storage" class="nav-item" active-class="active" v-tooltip.right="'Storage'">
           <i class="pi pi-database"></i>
           <span>Storage</span>
         </router-link>
-        <router-link v-if="canEdit" to="/layouts" class="nav-item" active-class="active">
+        <router-link v-if="canEdit" to="/layouts" class="nav-item" active-class="active" v-tooltip.right="'Layouts'">
           <i class="pi pi-th-large"></i>
           <span>Layouts</span>
         </router-link>
-        <router-link to="/devices" class="nav-item" active-class="active">
+        <router-link to="/devices" class="nav-item" active-class="active" v-tooltip.right="'Devices'">
           <i class="pi pi-desktop"></i>
           <span>Devices</span>
         </router-link>
-        <router-link v-if="isAdmin" to="/users" class="nav-item" active-class="active">
+        <router-link v-if="isAdmin" to="/users" class="nav-item" active-class="active" v-tooltip.right="'Users'">
           <i class="pi pi-users"></i>
           <span>Users</span>
         </router-link>
-        <router-link v-if="isAdmin" to="/overrides" class="nav-item emergency-nav" active-class="active">
-          <i class="pi pi-exclamation-triangle"></i>
+        <router-link v-if="isAdmin" to="/overrides" class="nav-item" :class="{ 'emergency-nav': hasActiveOverride }" active-class="active" v-tooltip.right="'Emergency Overrides'">
+          <i :class="hasActiveOverride ? 'pi pi-exclamation-triangle' : 'pi pi-megaphone'"></i>
           <span>Overrides</span>
         </router-link>
-        <router-link v-if="isAdmin" to="/audit" class="nav-item" active-class="active">
+        <router-link v-if="isAdmin" to="/audit" class="nav-item" active-class="active" v-tooltip.right="'Audit Log'">
           <i class="pi pi-history"></i>
           <span>Audit Log</span>
         </router-link>
-        <router-link v-if="isAdmin" to="/system" class="nav-item" active-class="active">
+        <router-link v-if="isAdmin" to="/system" class="nav-item" active-class="active" v-tooltip.right="'System Log'">
           <i class="pi pi-server"></i>
           <span>System</span>
         </router-link>
       </nav>
       <div class="sidebar-footer">
-        <a href="/player" target="_blank" class="nav-item">
+        <a href="/player" target="_blank" class="nav-item" v-tooltip.right="'Open Player'">
           <i class="pi pi-external-link"></i>
           <span>Open Player</span>
         </a>
         <div class="theme-toggle-row">
-          <button class="theme-toggle-btn" @click="toggleTheme" :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'">
+          <button class="theme-toggle-btn" @click="toggleTheme" v-tooltip.right="isDark ? 'Switch to light mode' : 'Switch to dark mode'">
             <i :class="isDark ? 'pi pi-sun' : 'pi pi-moon'"></i>
             <span>{{ isDark ? 'Light Mode' : 'Dark Mode' }}</span>
           </button>
@@ -76,7 +82,7 @@
             <span class="user-name">{{ currentUser.display_name || currentUser.username }}</span>
             <span class="user-role">{{ currentUser.role }}</span>
           </div>
-          <button class="logout-btn" title="Sign out" @click="logout">
+          <button class="logout-btn" @click="logout" v-tooltip.right="'Sign out'">
             <i class="pi pi-sign-out"></i>
           </button>
         </div>
@@ -103,6 +109,8 @@ const router = useRouter()
 
 const currentUser = ref(null)
 const isDark = ref(true)
+const hasActiveOverride = ref(false)
+let overrideCheckInterval = null
 
 const isLoginPage = computed(() => route.name === 'login')
 const isAdmin = computed(() => currentUser.value?.role === 'admin')
@@ -121,7 +129,7 @@ function toggleTheme() {
   const newTheme = isDark.value ? 'light' : 'dark'
   applyTheme(newTheme)
   // Persist to server (fire and forget)
-  api.patch('/users/me/preferences', { theme_preference: newTheme }).catch(() => {})
+  api.patch('/users/me/preferences', { theme_preference: newTheme }).catch(err => console.warn('[App] Theme save failed:', err))
 }
 
 async function loadThemeFromServer() {
@@ -130,8 +138,19 @@ async function loadThemeFromServer() {
     if (prefs.theme_preference) {
       applyTheme(prefs.theme_preference)
     }
+  } catch (err) {
+    console.warn('[App] Failed to load theme from server:', err)
+    // Keep localStorage theme
+  }
+}
+
+async function checkActiveOverrides() {
+  if (!isAdmin.value) return
+  try {
+    const overrides = await api.get('/overrides')
+    hasActiveOverride.value = overrides.some(o => o.is_active)
   } catch {
-    // Server unavailable or not logged in — keep localStorage theme
+    // Not critical — don't surface this error
   }
 }
 
@@ -161,7 +180,7 @@ function logout() {
     fetch('/api/auth/logout', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => {})
+    }).catch(err => console.warn('[App] Logout API call failed:', err))
   }
   localStorage.removeItem('tinysignage_token')
   localStorage.removeItem('tinysignage_admin_token')
@@ -194,10 +213,15 @@ onMounted(() => {
 
   // Confirm theme from server (may update if changed on another device)
   loadThemeFromServer()
+
+  // Check for active overrides (for sidebar badge state)
+  checkActiveOverrides()
+  overrideCheckInterval = setInterval(checkActiveOverrides, 30000)
 })
 
 onUnmounted(() => {
   errorBus.removeEventListener('api-error', onApiError)
+  if (overrideCheckInterval) clearInterval(overrideCheckInterval)
 })
 </script>
 
@@ -245,16 +269,32 @@ body {
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  background: rgba(220, 53, 69, 0.15);
-  color: #dc3545;
+  background: rgba(153, 153, 153, 0.15);
+  color: #999;
   text-decoration: none;
   transition: background 0.15s, color 0.15s;
   font-size: 0.95rem;
 }
 
 .emergency-btn:hover {
+  background: #252836;
+  color: #fff;
+}
+
+.emergency-btn.override-active {
+  background: rgba(220, 53, 69, 0.2);
+  color: #dc3545;
+  animation: override-pulse 2s ease-in-out infinite;
+}
+
+.emergency-btn.override-active:hover {
   background: #dc3545;
   color: #fff;
+}
+
+@keyframes override-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+  50% { box-shadow: 0 0 8px 2px rgba(220, 53, 69, 0.3); }
 }
 
 .emergency-nav {
@@ -387,4 +427,6 @@ nav {
   width: 1.2rem;
   text-align: center;
 }
+
+.form-hint { color: #666; font-size: 0.75rem; margin: 0.2rem 0 0.5rem; }
 </style>

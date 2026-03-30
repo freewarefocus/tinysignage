@@ -20,6 +20,84 @@
     const PLAYER_VERSION = '0.7.0';
     const CAPABILITY_REPORT_INTERVAL = 3600000; // 60 min
 
+    // --- Persistent Player Log (ring buffer in localStorage) ---
+    const LOG_STORAGE_KEY = 'tinysignage_player_log';
+    const LOG_MAX_ENTRIES = 200;
+
+    const PlayerLog = {
+        _buffer: null,
+
+        _load() {
+            if (this._buffer !== null) return this._buffer;
+            try {
+                const raw = localStorage.getItem(LOG_STORAGE_KEY);
+                this._buffer = raw ? JSON.parse(raw) : [];
+            } catch {
+                this._buffer = [];
+            }
+            return this._buffer;
+        },
+
+        _save() {
+            try {
+                localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(this._buffer));
+            } catch {
+                // Storage full — drop oldest half and retry
+                if (this._buffer && this._buffer.length > 10) {
+                    this._buffer = this._buffer.slice(Math.floor(this._buffer.length / 2));
+                    try { localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(this._buffer)); } catch { /* give up */ }
+                }
+            }
+        },
+
+        _append(level, message) {
+            const buf = this._load();
+            buf.push({
+                t: new Date().toISOString(),
+                l: level,
+                m: message,
+            });
+            // Trim to ring buffer size
+            while (buf.length > LOG_MAX_ENTRIES) buf.shift();
+            this._save();
+        },
+
+        info(msg) {
+            console.log('[Player]', msg);
+            this._append('info', msg);
+        },
+
+        warn(msg) {
+            console.warn('[Player]', msg);
+            this._append('warn', msg);
+        },
+
+        error(msg) {
+            console.error('[Player]', msg);
+            this._append('error', msg);
+        },
+
+        /** Return all entries (newest last) */
+        getAll() {
+            return this._load().slice();
+        },
+
+        /** Return entries as formatted text for the debug overlay */
+        toText() {
+            const entries = this._load();
+            return entries.map(e => {
+                const lvl = e.l.toUpperCase().padEnd(5);
+                return `${e.t} [${lvl}] ${e.m}`;
+            }).join('\n');
+        },
+
+        /** Clear the log */
+        clear() {
+            this._buffer = [];
+            try { localStorage.removeItem(LOG_STORAGE_KEY); } catch { /* ok */ }
+        },
+    };
+
     // Base URL for split deployment — read from <meta name="server-url">
     const serverMeta = document.querySelector('meta[name="server-url"]');
     const baseUrl = (serverMeta ? serverMeta.content : '').replace(/\/+$/, '');
@@ -268,7 +346,7 @@
                 }
             }
         } catch (e) {
-            console.warn('[TinySignage] Failed to load cached playlist:', e);
+            PlayerLog.warn('Failed to load cached playlist: ' + e);
         }
     }
 
@@ -276,7 +354,7 @@
         try {
             localStorage.setItem('tinysignage_playlist', JSON.stringify(data));
         } catch (e) {
-            console.warn('[TinySignage] Failed to cache playlist:', e);
+            PlayerLog.warn('Failed to cache playlist: ' + e);
         }
     }
 
@@ -298,7 +376,7 @@
         try {
             const resp = await authFetch(apiUrl(`/api/devices/${deviceId}/playlist`));
             if (resp.status === 401) {
-                console.warn('[TinySignage] Token rejected (401), clearing credentials');
+                PlayerLog.warn('Token rejected (401), clearing credentials');
                 localStorage.removeItem('tinysignage_device_id');
                 localStorage.removeItem('tinysignage_device_token');
                 deviceId = '';
@@ -327,7 +405,7 @@
                 activeOverride = data.override;
                 scheduleOverrideExpiry(data.override);
             } else if (activeOverride) {
-                console.log('[TinySignage] Override ended, resuming normal playback');
+                PlayerLog.info('Override ended, resuming normal playback');
                 activeOverride = null;
                 if (overrideExpiryTimer) { clearTimeout(overrideExpiryTimer); overrideExpiryTimer = null; }
                 hideEmergencyMessage();
@@ -339,7 +417,7 @@
             }
 
             if (data.hash !== playlistHash) {
-                console.log('[TinySignage] Playlist updated:', data.hash);
+                PlayerLog.info('Playlist updated: ' + data.hash);
                 const wasEmpty = playlist.length === 0;
                 const hadContent = playlist.length > 0;
 
@@ -348,7 +426,7 @@
                 // --- Transition playlist: play bumper before switching ---
                 if (hadContent && !playingTransition && data.transition_playlist
                     && data.transition_playlist.items && data.transition_playlist.items.length > 0) {
-                    console.log('[TinySignage] Playing transition playlist before switch');
+                    PlayerLog.info('Playing transition playlist before switch');
                     pendingPlaylist = data.items || [];
                     pendingHash = data.hash;
                     pendingSettings = data.settings || {};
@@ -413,7 +491,7 @@
                 }
             }
         } catch (e) {
-            console.warn('[TinySignage] Poll failed:', e.message);
+            PlayerLog.warn('Poll failed: ' + e.message);
             setOnlineStatus(false);
         }
     }
@@ -500,7 +578,7 @@
             }
         });
 
-        console.log('[TinySignage] Multi-zone mode active with', activeZones.length, 'zones');
+        PlayerLog.info('Multi-zone mode active with ' + activeZones.length + ' zones');
     }
 
     function teardownZones() {
@@ -589,7 +667,7 @@
             element.loop = false;
             const videoLoadTimeout = setTimeout(() => {
                 if (element.readyState < 2) {
-                    console.warn('[TinySignage] Video load timeout (zone):', asset.uri);
+                    PlayerLog.warn('Video load timeout (zone): ' + asset.uri);
                     element.oncanplay = null;
                     element.onerror = null;
                     element.onended = null;
@@ -636,6 +714,30 @@
                 inLayer.style.transition = '';
                 outLayer.style.transition = '';
             });
+        } else if (txType === 'slide') {
+            const dur = txDuration != null ? txDuration : 1;
+            inLayer.classList.add('slide-transition', 'slide-ready');
+            outLayer.classList.add('slide-transition');
+            if (txDuration != null) {
+                inLayer.style.setProperty('--transition-duration', txDuration + 's');
+                outLayer.style.setProperty('--transition-duration', txDuration + 's');
+            }
+            void inLayer.offsetWidth;
+            inLayer.classList.remove('slide-ready');
+            inLayer.classList.add('slide-in');
+            outLayer.classList.add('slide-out');
+            const cleanSlide = () => {
+                outLayer.removeEventListener('transitionend', cleanSlide);
+                inLayer.classList.remove('slide-transition', 'slide-in');
+                outLayer.classList.remove('slide-transition', 'slide-out');
+                inLayer.style.removeProperty('--transition-duration');
+                outLayer.style.removeProperty('--transition-duration');
+                inLayer.classList.add('active');
+                outLayer.classList.remove('active');
+                zoneCleanupLayer(outLayer);
+            };
+            outLayer.addEventListener('transitionend', cleanSlide);
+            setTimeout(cleanSlide, (dur + 0.5) * 1000);
         } else {
             if (txDuration != null) {
                 inLayer.style.transitionDuration = txDuration + 's';
@@ -775,7 +877,7 @@
             element = document.createElement('img');
             element.onload = () => { setTimeout(doTx, 300); };
             element.onerror = () => {
-                console.warn('[TinySignage] Image load failed:', asset.uri);
+                PlayerLog.error('Image load failed: ' + asset.uri);
                 setTimeout(doTx, 300);
             };
             element.src = `${baseUrl}/media/${asset.uri}`;
@@ -788,7 +890,7 @@
 
             const videoLoadTimeout = setTimeout(() => {
                 if (element.readyState < 2) {
-                    console.warn('[TinySignage] Video load timeout:', asset.uri);
+                    PlayerLog.error('Video load timeout: ' + asset.uri);
                     element.oncanplay = null;
                     element.onerror = null;
                     element.onended = null;
@@ -800,7 +902,7 @@
 
             element.onerror = () => {
                 clearTimeout(videoLoadTimeout);
-                console.warn('[TinySignage] Video load failed:', asset.uri);
+                PlayerLog.error('Video load failed: ' + asset.uri);
                 advance();
             };
 
@@ -866,6 +968,38 @@
                 inLayer.style.transition = '';
                 outLayer.style.transition = '';
             });
+        } else if (txType === 'slide') {
+            const duration = txDuration != null
+                ? txDuration
+                : (parseFloat(
+                    getComputedStyle(document.documentElement)
+                        .getPropertyValue('--transition-duration')
+                ) || 1);
+            // Set up: incoming layer off-screen right, both visible
+            inLayer.classList.add('slide-transition', 'slide-ready');
+            outLayer.classList.add('slide-transition');
+            if (txDuration != null) {
+                inLayer.style.setProperty('--transition-duration', txDuration + 's');
+                outLayer.style.setProperty('--transition-duration', txDuration + 's');
+            }
+            // Force layout so the starting position is applied before animating
+            void inLayer.offsetWidth;
+            // Animate: incoming slides in, outgoing slides out
+            inLayer.classList.remove('slide-ready');
+            inLayer.classList.add('slide-in');
+            outLayer.classList.add('slide-out');
+            const cleanSlide = () => {
+                outLayer.removeEventListener('transitionend', cleanSlide);
+                inLayer.classList.remove('slide-transition', 'slide-in');
+                outLayer.classList.remove('slide-transition', 'slide-out');
+                inLayer.style.removeProperty('--transition-duration');
+                outLayer.style.removeProperty('--transition-duration');
+                inLayer.classList.add('active');
+                outLayer.classList.remove('active');
+                cleanupLayer(outLayer);
+            };
+            outLayer.addEventListener('transitionend', cleanSlide);
+            setTimeout(cleanSlide, (duration + 0.5) * 1000);
         } else {
             if (txDuration != null) {
                 inLayer.style.transitionDuration = txDuration + 's';
@@ -923,6 +1057,9 @@
 
     // --- Status ---
     function setOnlineStatus(isOnline) {
+        if (online !== isOnline) {
+            PlayerLog.info(isOnline ? 'Connection restored' : 'Connection lost — playing from cache');
+        }
         online = isOnline;
         const indicator = document.getElementById('status-indicator');
         if (indicator) {
@@ -960,8 +1097,25 @@
                     uptime_seconds: Math.round((Date.now() - startTime) / 1000),
                 }),
             });
+            // Upload player log alongside heartbeat (fire-and-forget)
+            uploadPlayerLog();
         } catch (e) {
-            // Offline — silently skip
+            PlayerLog.warn('Heartbeat failed: ' + e.message);
+        }
+    }
+
+    async function uploadPlayerLog() {
+        if (!deviceId) return;
+        try {
+            const entries = PlayerLog.getAll();
+            if (entries.length === 0) return;
+            await authFetch(apiUrl('/api/devices/' + deviceId + '/player-log'), {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({ entries: entries }),
+            });
+        } catch (e) {
+            // Don't log this to PlayerLog to avoid recursion-like noise
         }
     }
 
@@ -997,14 +1151,14 @@
         const expiresAt = new Date(override.expires_at.endsWith('Z') ? override.expires_at : override.expires_at + 'Z');
         const msUntilExpiry = expiresAt.getTime() - Date.now();
         if (msUntilExpiry <= 0) {
-            console.log('[TinySignage] Override already expired client-side, clearing');
+            PlayerLog.info('Override already expired client-side, clearing');
             activeOverride = null;
             hideEmergencyMessage();
             if (playlist.length > 0) { playCurrentAsset(); } else { showSplash(); }
             return;
         }
         overrideExpiryTimer = setTimeout(() => {
-            console.log('[TinySignage] Override expired client-side, clearing');
+            PlayerLog.info('Override expired client-side, clearing');
             activeOverride = null;
             hideEmergencyMessage();
             overrideExpiryTimer = null;
@@ -1048,7 +1202,7 @@
     }
 
     function finishTransition() {
-        console.log('[TinySignage] Transition playlist complete, switching to new content');
+        PlayerLog.info('Transition playlist complete, switching to new content');
         playingTransition = false;
         transitionPlaylist = null;
         transitionIndex = -1;
@@ -1104,7 +1258,7 @@
                 const est = await navigator.storage.estimate();
                 payload.hardware.browser_storage_quota_mb = Math.round((est.quota || 0) / (1024 * 1024));
                 payload.hardware.browser_storage_usage_mb = Math.round((est.usage || 0) / (1024 * 1024));
-            } catch (e) { /* ignore */ }
+            } catch (e) { PlayerLog.warn('Storage quota check failed: ' + e.message); }
         }
 
         return payload;
@@ -1119,9 +1273,9 @@
                 headers: authHeaders(),
                 body: JSON.stringify(payload),
             });
-            console.log('[TinySignage] Capabilities reported');
+            PlayerLog.info('Capabilities reported');
         } catch (e) {
-            console.warn('[TinySignage] Capability report failed:', e.message);
+            PlayerLog.warn('Capability report failed: ' + e.message);
         }
     }
 
@@ -1143,11 +1297,11 @@
         currentSourcePlaylistId = sourcePlaylistId;
         loopCount = restoreLoopCount || 0;
 
-        console.log('[TinySignage] TriggerEngine init — flow:', flowData.id, 'source:', sourcePlaylistId);
+        PlayerLog.info('TriggerEngine init — flow: ' + flowData.id + ' source: ' + sourcePlaylistId);
 
         const branches = findBranchesForSource(sourcePlaylistId);
         if (branches.length === 0) {
-            console.log('[TinySignage] No trigger branches for source playlist');
+            PlayerLog.info('No trigger branches for source playlist');
             return;
         }
 
@@ -1217,14 +1371,14 @@
                 if (modifiers.includes('Meta') !== e.metaKey) continue;
 
                 e.preventDefault();
-                console.log('[TinySignage] Keyboard trigger fired:', config.key);
+                PlayerLog.info('Keyboard trigger fired: ' + config.key);
                 fireTrigger(branch);
                 return;
             }
         };
 
         document.addEventListener('keydown', triggerKeydownHandler);
-        console.log('[TinySignage] Registered', keyBranches.length, 'keyboard trigger(s)');
+        PlayerLog.info('Registered ' + keyBranches.length + ' keyboard trigger(s)');
     }
 
     function createTouchZoneOverlays(branches) {
@@ -1247,7 +1401,7 @@
             const handler = function (e) {
                 if (activeOverride) return;
                 e.preventDefault();
-                console.log('[TinySignage] Touch zone trigger fired');
+                PlayerLog.info('Touch zone trigger fired');
                 fireTrigger(branch);
             };
             zone.addEventListener('click', handler);
@@ -1256,7 +1410,7 @@
             container.appendChild(zone);
         });
 
-        console.log('[TinySignage] Created', touchBranches.length, 'touch zone overlay(s)');
+        PlayerLog.info('Created ' + touchBranches.length + ' touch zone overlay(s)');
     }
 
     function startTimeoutTriggers(branches) {
@@ -1269,11 +1423,11 @@
         if (triggerTimeoutTimer) clearTimeout(triggerTimeoutTimer);
         triggerTimeoutTimer = setTimeout(() => {
             if (activeOverride) return;
-            console.log('[TinySignage] Timeout trigger fired after', seconds, 's');
+            PlayerLog.info('Timeout trigger fired after ' + seconds + 's');
             fireTrigger(timeoutBranch);
         }, seconds * 1000);
 
-        console.log('[TinySignage] Timeout trigger set for', seconds, 's');
+        PlayerLog.info('Timeout trigger set for ' + seconds + 's');
     }
 
     function checkLoopCount() {
@@ -1289,19 +1443,19 @@
         const targetCount = config.count || 3;
 
         if (loopCount >= targetCount) {
-            console.log('[TinySignage] Loop count trigger fired after', loopCount, 'loops');
+            PlayerLog.info('Loop count trigger fired after ' + loopCount + ' loops');
             fireTrigger(loopBranch);
         }
     }
 
     function fireTrigger(branch) {
         if (!branch.target_playlist) {
-            console.warn('[TinySignage] Trigger branch has no target_playlist data');
+            PlayerLog.warn('Trigger branch has no target_playlist data');
             return;
         }
 
         const target = branch.target_playlist;
-        console.log('[TinySignage] Firing trigger → target playlist:', target.name || target.id);
+        PlayerLog.info('Firing trigger → target playlist: ' + (target.name || target.id));
 
         // Teardown current triggers before swapping
         if (triggerKeydownHandler) {
@@ -1370,7 +1524,7 @@
             const lastSeen = lastSeenWebhookFires[branch.id];
             if (!lastSeen || branch.last_webhook_fire !== lastSeen) {
                 lastSeenWebhookFires[branch.id] = branch.last_webhook_fire;
-                console.log('[TinySignage] Webhook trigger fired for branch:', branch.id);
+                PlayerLog.info('Webhook trigger fired for branch: ' + branch.id);
                 fireTrigger(branch);
                 return;
             }
@@ -1398,7 +1552,7 @@
             gpioWebSocket = new WebSocket(GPIO_BRIDGE_URL);
 
             gpioWebSocket.onopen = function () {
-                console.log('[TinySignage] GPIO bridge connected');
+                PlayerLog.info('GPIO bridge connected');
             };
 
             gpioWebSocket.onmessage = function (event) {
@@ -1406,12 +1560,12 @@
                     const data = JSON.parse(event.data);
                     handleGpioEvent(data, activeGpioBranches);
                 } catch (e) {
-                    console.warn('[TinySignage] GPIO message parse error:', e.message);
+                    PlayerLog.warn('GPIO message parse error: ' + e.message);
                 }
             };
 
             gpioWebSocket.onclose = function () {
-                console.log('[TinySignage] GPIO bridge disconnected');
+                PlayerLog.info('GPIO bridge disconnected');
                 gpioWebSocket = null;
                 // Auto-reconnect after 5s if GPIO branches still exist
                 if (triggerFlow) {
@@ -1426,7 +1580,7 @@
                 // onclose will fire after this, handling reconnect
             };
         } catch (e) {
-            console.warn('[TinySignage] GPIO bridge connect failed:', e.message);
+            PlayerLog.warn('GPIO bridge connect failed: ' + e.message);
         }
     }
 
@@ -1453,7 +1607,7 @@
             if (config.pin === data.pin) {
                 const expectedEdge = config.edge || 'falling';
                 if (data.edge === expectedEdge) {
-                    console.log('[TinySignage] GPIO trigger fired: pin', data.pin);
+                    PlayerLog.info('GPIO trigger fired: pin ' + data.pin);
                     fireTrigger(branch);
                     return;
                 }
@@ -1473,16 +1627,71 @@
             } else {
                 localStorage.removeItem('tinysignage_trigger_state');
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) { PlayerLog.warn('Failed to save trigger state: ' + e.message); }
     }
 
     function loadTriggerState() {
         try {
             const raw = localStorage.getItem('tinysignage_trigger_state');
             if (raw) return JSON.parse(raw);
-        } catch (e) { /* ignore */ }
+        } catch (e) { PlayerLog.warn('Failed to load trigger state: ' + e.message); }
         return null;
     }
+
+    // --- Debug overlay (Ctrl+Shift+D) ---
+    function initDebugOverlay() {
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                e.preventDefault();
+                toggleDebugOverlay();
+            }
+        });
+    }
+
+    function toggleDebugOverlay() {
+        let overlay = document.getElementById('debug-log-overlay');
+        if (overlay) {
+            overlay.classList.toggle('hidden');
+            if (!overlay.classList.contains('hidden')) {
+                refreshDebugOverlay();
+            }
+            return;
+        }
+        // Create overlay
+        overlay = document.createElement('div');
+        overlay.id = 'debug-log-overlay';
+        overlay.innerHTML =
+            '<div class="debug-log-header">' +
+                '<span>Player Log (' + LOG_MAX_ENTRIES + ' max)</span>' +
+                '<span>' +
+                    '<button id="debug-log-refresh">Refresh</button> ' +
+                    '<button id="debug-log-clear">Clear</button> ' +
+                    '<button id="debug-log-close">Close</button>' +
+                '</span>' +
+            '</div>' +
+            '<pre id="debug-log-content"></pre>';
+        document.body.appendChild(overlay);
+
+        document.getElementById('debug-log-refresh').addEventListener('click', refreshDebugOverlay);
+        document.getElementById('debug-log-clear').addEventListener('click', () => {
+            PlayerLog.clear();
+            refreshDebugOverlay();
+        });
+        document.getElementById('debug-log-close').addEventListener('click', () => {
+            overlay.classList.add('hidden');
+        });
+        refreshDebugOverlay();
+    }
+
+    function refreshDebugOverlay() {
+        const el = document.getElementById('debug-log-content');
+        if (el) {
+            el.textContent = PlayerLog.toText() || '(empty)';
+            el.scrollTop = el.scrollHeight;
+        }
+    }
+
+    initDebugOverlay();
 
     // --- Go ---
     init();

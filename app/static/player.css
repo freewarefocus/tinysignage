@@ -15,6 +15,25 @@ html, body, #player { width: 100%; height: 100%; overflow: hidden; background: #
     z-index: 2;
 }
 
+/* Slide transition: incoming slides from right, outgoing slides to left */
+.layer.slide-transition {
+    transition: transform var(--transition-duration, 1s) ease-in-out,
+                opacity 0s;
+    opacity: 1;
+}
+
+.layer.slide-transition.slide-ready {
+    transform: translateX(100%);
+}
+
+.layer.slide-transition.slide-in {
+    transform: translateX(0);
+}
+
+.layer.slide-transition.slide-out {
+    transform: translateX(-100%);
+}
+
 .layer img {
     width: 100%;
     height: 100%;
@@ -63,6 +82,24 @@ html, body, #player { width: 100%; height: 100%; overflow: hidden; background: #
 .zone-layer.active {
     opacity: 1;
     z-index: 2;
+}
+
+.zone-layer.slide-transition {
+    transition: transform var(--transition-duration, 1s) ease-in-out,
+                opacity 0s;
+    opacity: 1;
+}
+
+.zone-layer.slide-transition.slide-ready {
+    transform: translateX(100%);
+}
+
+.zone-layer.slide-transition.slide-in {
+    transform: translateX(0);
+}
+
+.zone-layer.slide-transition.slide-out {
+    transform: translateX(-100%);
 }
 
 .zone-layer img {
@@ -288,4 +325,57 @@ html, body, #player { width: 100%; height: 100%; overflow: hidden; background: #
 
 .status-offline {
     background: #f44336;
+}
+
+/* --- Debug Log Overlay (Ctrl+Shift+D) --- */
+#debug-log-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(0, 0, 0, 0.95);
+    display: flex;
+    flex-direction: column;
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: #ccc;
+}
+
+#debug-log-overlay.hidden {
+    display: none;
+}
+
+.debug-log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background: #1a1d27;
+    border-bottom: 1px solid #333;
+    color: #fff;
+    font-size: 0.9rem;
+}
+
+.debug-log-header button {
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 0.8rem;
+}
+
+.debug-log-header button:hover {
+    background: #444;
+}
+
+#debug-log-content {
+    flex: 1;
+    overflow: auto;
+    padding: 0.5rem 1rem;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.4;
 }

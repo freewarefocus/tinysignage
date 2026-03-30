@@ -28,8 +28,8 @@
     <template v-else>
       <div class="playlist-header">
         <div class="header-left">
-          <span v-if="playlist.is_default" class="default-badge">Default</span>
-          <span v-if="playlist.mode === 'advanced'" class="mode-badge">Advanced</span>
+          <span v-if="playlist.is_default" class="default-badge" v-tooltip="'Plays when no schedule is active'">Default</span>
+          <span v-if="playlist.mode === 'advanced'" class="mode-badge" v-tooltip="'Uses trigger-based interactive transitions'">Advanced</span>
           <span class="item-count">{{ items.length }} item(s)</span>
         </div>
         <div class="header-right">
@@ -67,9 +67,9 @@
             <label>Transition Type</label>
             <select v-model="plSettings.transition_type" @change="saveSettings" class="setting-select">
               <option :value="null">Global default</option>
-              <option value="fade">Fade</option>
+              <option value="fade">Crossfade</option>
               <option value="slide">Slide</option>
-              <option value="none">None</option>
+              <option value="cut">Cut</option>
             </select>
           </div>
           <div class="setting-field">
@@ -138,11 +138,13 @@
 
       <!-- Trigger flow editor (advanced mode only) -->
       <div v-if="playlist.mode === 'advanced'" class="trigger-panel">
-        <div class="trigger-panel-header">
+        <div class="trigger-panel-header" @click="showTriggerPanel = !showTriggerPanel" style="cursor: pointer;">
           <i class="pi pi-bolt"></i>
           <span>Trigger Flow</span>
+          <i :class="showTriggerPanel ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" class="trigger-toggle-icon"></i>
         </div>
 
+        <div v-show="showTriggerPanel">
         <!-- Flow selector -->
         <div class="flow-selector">
           <select v-model="selectedFlowId" @change="assignFlow" class="flow-select">
@@ -177,7 +179,7 @@
                 <span class="branch-type-label">{{ triggerLabel(branch.trigger_type, branch.trigger_config) }}</span>
                 <i class="pi pi-arrow-right branch-arrow"></i>
                 <span class="branch-playlist">{{ branch.target_playlist_name || 'Unknown' }}</span>
-                <span v-if="branch.priority" class="branch-priority" title="Priority">P{{ branch.priority }}</span>
+                <span v-if="branch.priority" class="branch-priority" v-tooltip="'Higher priority branches are evaluated first'">P{{ branch.priority }}</span>
               </div>
               <div v-if="canEdit" class="branch-actions">
                 <button class="btn-icon" @click="startEditBranch(branch)" title="Edit"><i class="pi pi-pencil"></i></button>
@@ -349,6 +351,8 @@
             </div>
           </div>
         </template>
+        </div>
+        <p class="form-hint trigger-hint">Trigger flows define how playlists transition based on user interaction (keyboard, touch, GPIO).</p>
       </div>
 
       <div
@@ -392,7 +396,7 @@
             <div class="add-thumb">
               <img
                 v-if="asset.thumbnail_path"
-                :src="`/api/assets/${asset.id}/thumbnail`"
+                :src="`/media/thumbs/${asset.thumbnail_path}`"
                 alt=""
               />
               <i v-else :class="typeIcon(asset)" class="add-icon"></i>
@@ -437,6 +441,7 @@ const plSettings = ref({
 })
 
 // Trigger flow state
+const showTriggerPanel = ref(false)
 const availableFlows = ref([])
 const currentFlow = ref(null)
 const selectedFlowId = ref('')
@@ -581,20 +586,20 @@ async function toggleMode(newMode) {
 async function loadFlows() {
   try {
     availableFlows.value = await api.get('/trigger-flows')
-  } catch { availableFlows.value = [] }
+  } catch (err) { console.warn('[PlaylistEditor] Failed to load flows:', err); availableFlows.value = [] }
 }
 
 async function loadFlow(flowId) {
   if (!flowId) { currentFlow.value = null; return }
   try {
     currentFlow.value = await api.get(`/trigger-flows/${flowId}`)
-  } catch { currentFlow.value = null }
+  } catch (err) { console.warn('[PlaylistEditor] Failed to load flow:', err); currentFlow.value = null }
 }
 
 async function loadAllPlaylists() {
   try {
     allPlaylists.value = await api.get('/playlists')
-  } catch { allPlaylists.value = [] }
+  } catch (err) { console.warn('[PlaylistEditor] Failed to load playlists:', err); allPlaylists.value = [] }
 }
 
 async function assignFlow() {
@@ -1121,6 +1126,16 @@ h3 { margin-bottom: 0.8rem; color: #ddd; font-size: 1rem; }
   margin-bottom: 0.75rem;
 }
 
+.trigger-toggle-icon {
+  margin-left: auto;
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.trigger-hint {
+  margin-top: 0.5rem;
+}
+
 .trigger-placeholder {
   color: #666;
   font-size: 0.85rem;
@@ -1462,4 +1477,5 @@ h3 { margin-bottom: 0.8rem; color: #ddd; font-size: 1rem; }
   cursor: pointer;
   font-size: 0.85rem;
 }
+
 </style>

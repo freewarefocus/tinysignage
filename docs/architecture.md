@@ -145,6 +145,19 @@ The application entry point configures:
 - **Scheduler** (`app/scheduler.py`): async loop that manages playlist cycling. The scheduler tracks state but the player self-advances -- no server push.
 - **Watchdog** (`app/watchdog.py`): checks every 60 seconds, marks devices offline after 120 seconds without a heartbeat.
 
+### Error and log reporting
+
+TinySignage follows a zero-silent-failure policy with two reporting channels:
+
+| Channel | Backend | CMS Frontend | Player |
+|---------|---------|-------------|--------|
+| **User-facing** | HTTP error responses | Toast notifications via `errorBus` | Status indicator + debug overlay |
+| **Debug log** | `logs/tinysignage.log` (rotating) + `logs/errors.jsonl` (ERROR+ with stack traces) | `console.error/warn` with `[ComponentName]` prefix | `PlayerLog` ring buffer in localStorage (uploaded to server on heartbeat) |
+
+The **audit log** (`audit_logs` table) is separate from error logging -- it records who changed what (successful mutations, failed login attempts) for admin review, not debug detail.
+
+Server-side error logs are viewable at `GET /api/logs/errors` (admin). Player logs are viewable at `GET /api/devices/{id}/player-log` (viewer+) or via the Ctrl+Shift+D debug overlay on the player.
+
 ---
 
 ## Frontend structure
@@ -154,8 +167,8 @@ The application entry point configures:
 Three files:
 
 - `player.html` -- two overlay layers, zones container, splash screen, pairing UI
-- `player.js` -- polling, heartbeat, capability reporting, localStorage cache, playback timer, multi-zone engine, override handling
-- `player.css` -- fullscreen layout, CSS transitions, GPU compositing, zone positioning
+- `player.js` -- polling, heartbeat, capability reporting, localStorage cache, playback timer, multi-zone engine, override handling, `PlayerLog` persistent ring buffer (200 entries, uploaded to server on heartbeat), debug overlay (Ctrl+Shift+D)
+- `player.css` -- fullscreen layout, CSS transitions, GPU compositing, zone positioning, debug overlay styles
 
 The player has zero build dependencies. It is vanilla HTML, CSS, and JavaScript.
 
@@ -165,7 +178,7 @@ Vue 3 + PrimeVue (Aura dark theme) single-page application:
 
 - 14 views covering all CMS functionality
 - 4 reusable components (AssetCard, PlaylistRow, UploadZone, MiniPlayer)
-- Fetch-based API client with automatic Bearer token injection
+- Fetch-based API client with automatic Bearer token injection and `errorBus` for toast notifications on API errors
 - Client-side route guards for authentication and admin-only pages
 
 Built with Vite. During development, Vite proxies API and media requests to the backend.

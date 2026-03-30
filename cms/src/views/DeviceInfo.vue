@@ -96,7 +96,10 @@
         <div class="detail-fields">
           <div class="detail-field">
             <label>Status</label>
-            <span :class="'status-badge status-' + selectedDevice.status">{{ selectedDevice.status }}</span>
+            <span :class="'status-badge status-' + selectedDevice.status"
+              v-tooltip="selectedDevice.status === 'online' ? 'Device checked in recently and is receiving content'
+                : selectedDevice.status === 'offline' ? 'Device has not checked in — may be powered off or disconnected'
+                : 'Device has never checked in'">{{ selectedDevice.status }}</span>
           </div>
           <div class="detail-field">
             <label>Last Seen</label>
@@ -222,6 +225,18 @@
       </div>
     </div>
 
+    <!-- Delete device confirmation -->
+    <div v-if="deleteTarget" class="dialog-overlay" @click.self="deleteTarget = null">
+      <div class="dialog">
+        <h3>Delete Device</h3>
+        <p>Delete <strong>{{ deleteTarget.name }}</strong>? This will remove all associated schedules, tokens, and overrides. The device will stop receiving content immediately.</p>
+        <div class="dialog-actions">
+          <button class="btn-secondary" @click="deleteTarget = null">Cancel</button>
+          <button class="btn-danger" @click="doDeleteDevice">Delete</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="loading" class="loading">Loading devices...</div>
 
     <div v-else-if="sortedDevices.length === 0" class="empty">
@@ -241,9 +256,12 @@
             <template v-if="healthMap[d.id]">
               <span v-for="(sig, key) in healthMap[d.id].signals" :key="key"
                 :class="'signal-dot signal-' + sig.level"
-                :title="key + ': ' + (sig.message || 'OK')"></span>
+                v-tooltip="key + ': ' + (sig.message || 'OK')"></span>
             </template>
-            <span :class="'status-dot status-' + d.status" :title="d.status"></span>
+            <span :class="'status-dot status-' + d.status"
+              v-tooltip="d.status === 'online' ? 'Device checked in recently and is receiving content'
+                : d.status === 'offline' ? 'Device has not checked in — may be powered off or disconnected'
+                : 'Device has never checked in'"></span>
           </div>
         </div>
         <div class="card-body">
@@ -319,6 +337,7 @@ const detailPlaylistId = ref('')
 const detailLayoutId = ref('')
 const devicePairing = ref(null)
 const deviceHealth = ref(null)
+const deleteTarget = ref(null)
 
 // Pre-flight
 const showPreflightDialog = ref(false)
@@ -385,7 +404,7 @@ async function loadHealthDashboard() {
   try {
     const dashboard = await api.get('/health/dashboard')
     healthData.value = dashboard.devices || []
-  } catch { /* ignore */ }
+  } catch (err) { console.warn('[DeviceInfo] Health dashboard load failed:', err) }
 }
 
 async function loadPlaylists() {
@@ -430,7 +449,7 @@ async function openDevice(d) {
     const dashboard = await api.get('/health/dashboard')
     healthData.value = dashboard.devices || []
     deviceHealth.value = healthMap.value[d.id] || null
-  } catch { /* ignore */ }
+  } catch (err) { console.warn('[DeviceInfo] Health refresh failed:', err) }
 }
 
 function closeDetail() {
@@ -440,10 +459,16 @@ function closeDetail() {
   if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null }
 }
 
-async function confirmDeleteDevice() {
+function confirmDeleteDevice() {
   if (!selectedDevice.value) return
-  if (!confirm(`Delete device "${selectedDevice.value.name}"? This will remove all associated schedules, tokens, and overrides.`)) return
-  await api.delete(`/devices/${selectedDevice.value.id}`)
+  deleteTarget.value = selectedDevice.value
+}
+
+async function doDeleteDevice() {
+  if (!deleteTarget.value) return
+  const id = deleteTarget.value.id
+  deleteTarget.value = null
+  await api.delete(`/devices/${id}`)
   closeDetail()
   await loadDevices()
 }
@@ -482,8 +507,9 @@ async function assignPlaylist() {
       showPreflightDialog.value = true
       return
     }
-  } catch {
-    // Pre-flight endpoint failed — proceed silently (advisory, not a gate)
+  } catch (err) {
+    console.warn('[DeviceInfo] Pre-flight check failed:', err)
+    // Advisory, not a gate — proceed with assignment
   }
 
   await doAssignPlaylist(playlistId)

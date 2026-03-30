@@ -874,7 +874,9 @@ POST /api/player/heartbeat
 Auth: device
 ```
 
-Body: `{"player_time": "2026-03-29T12:00:00Z", "timezone": "America/New_York", "version": "1.0", "storage_free_mb": 2048}`.
+Body: `{"device_id": "uuid", "player_time": "2026-03-29T12:00:00Z", "player_timezone": "America/New_York", "player_version": "0.7.0", "uptime_seconds": 3600}`.
+
+After each successful heartbeat, the player also uploads its log (see below).
 
 ### Report capabilities
 
@@ -884,6 +886,43 @@ Auth: device
 ```
 
 Body: hardware and software profile (screen resolution, RAM, CPU cores, touch, audio, storage quota). Supported fields are promoted to device columns; the full report is stored as a JSON blob.
+
+### Upload player log
+
+```
+POST /api/devices/{id}/player-log
+Auth: device
+```
+
+Receives the player's persistent log entries. The player sends this automatically after each successful heartbeat.
+
+Body: `{"entries": [{"t": "2026-03-29T12:00:00.000Z", "l": "info", "m": "Playlist updated: abc123"}, ...]}`.
+
+Entries are stored in the device record (last 200 kept). Overwrites the previous upload.
+
+### Get player log
+
+```
+GET /api/devices/{id}/player-log
+Auth: viewer
+```
+
+Retrieves the last uploaded player log for a device. Useful for remote debugging of players on Raspberry Pi, Android, or other devices where you cannot open a browser console.
+
+Query parameters:
+- `level` (string, optional) -- filter by level (`info`, `warn`, `error`)
+- `search` (string, optional) -- filter by message content (case-insensitive)
+
+Response:
+```json
+{
+  "device_id": "uuid",
+  "device_name": "Lobby TV",
+  "entries": [{"t": "...", "l": "warn", "m": "Poll failed: ..."}],
+  "total": 42,
+  "updated_at": "2026-03-29T12:01:00"
+}
+```
 
 ### Health dashboard
 
@@ -961,6 +1000,8 @@ Returns disk usage summary and per-asset file size breakdown.
 
 ## System Logs
 
+TinySignage has two types of logs accessible via the API: the **server error log** (backend errors with stack traces) and **player logs** (per-device ring buffers uploaded from players). For player logs, see [Upload player log](#upload-player-log) and [Get player log](#get-player-log) under Health and Monitoring.
+
 ### Read error log
 
 ```
@@ -968,7 +1009,15 @@ GET /api/logs/errors
 Auth: admin
 ```
 
-Returns error log entries with pagination and filtering.
+Returns backend error log entries from `logs/errors.jsonl` with pagination and filtering.
+
+Query parameters:
+- `level` (string, optional) -- filter by level (e.g. `ERROR`, `CRITICAL`)
+- `search` (string, optional) -- search in message, module, and traceback (case-insensitive)
+- `limit` (integer, optional, default 100, max 1000) -- page size
+- `offset` (integer, optional) -- pagination offset
+
+Each entry includes: `timestamp`, `level`, `logger`, `message`, `module`, `function`, `lineno`, optional `traceback`, optional `request` (method, path, client_ip).
 
 ### Clear error log
 
@@ -976,6 +1025,8 @@ Returns error log entries with pagination and filtering.
 DELETE /api/logs/errors
 Auth: admin
 ```
+
+Clears the error log file.
 
 ---
 

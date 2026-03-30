@@ -4,6 +4,40 @@ Common issues and fixes for TinySignage. For platform-specific issues, also see 
 
 ---
 
+## Checking logs
+
+Before troubleshooting specific issues, know where to find diagnostic information. TinySignage has three log channels:
+
+### Backend logs
+
+| Log | Location | What it contains |
+|-----|----------|-----------------|
+| **Application log** | `logs/tinysignage.log` | All INFO+ messages, rotating (5 MB x 3 backups) |
+| **Error log** | `logs/errors.jsonl` | ERROR+ with stack traces and request context (JSON, one entry per line) |
+| **Console output** | stdout/stderr | Same as application log, useful in Docker (`docker compose logs`) |
+
+The error log is also viewable in the CMS at **System > System Log** (admin only), or via `GET /api/logs/errors`.
+
+### Player logs
+
+The player stores a persistent ring buffer (last 200 entries) in the browser's localStorage. Three ways to access it:
+
+1. **Debug overlay** -- press **Ctrl+Shift+D** on the player screen to open a full-screen log viewer with Refresh, Clear, and Close buttons
+2. **Remote API** -- `GET /api/devices/{id}/player-log` (requires viewer+ auth). Supports `?level=error` and `?search=poll` filters. Useful for headless devices (Raspberry Pi, kiosk) where you cannot open a browser console
+3. **Browser DevTools** -- Application tab > Local Storage > `tinysignage_player_log`
+
+The player uploads its log to the server after each successful heartbeat, so remote logs are at most 60 seconds behind.
+
+### Audit log
+
+The audit log (CMS > Audit Log, admin only) records **who changed what** -- it is not an error log. Use it to track:
+
+- Who deleted an asset, modified a playlist, or changed device settings
+- Failed login attempts (`auth_failed` action with username and IP)
+- Timeline of CMS mutations for compliance or debugging user-reported issues
+
+---
+
 ## Installation issues
 
 **`pip install` fails with compilation errors:**
@@ -45,7 +79,7 @@ The player cannot reach the backend. Verify:
 3. No firewall is blocking the connection
 
 **Player not updating after CMS changes:**
-The player polls every 30 seconds. Wait at least 30 seconds. If content still does not update, check the browser console for errors. Try a hard refresh (Ctrl+Shift+R).
+The player polls every 30 seconds. Wait at least 30 seconds. If content still does not update, press **Ctrl+Shift+D** on the player to open the debug log and look for poll errors. You can also check `GET /api/devices/{id}/player-log?level=warn` remotely. Try a hard refresh (Ctrl+Shift+R).
 
 **Player won't go fullscreen:**
 Use the browser's fullscreen shortcut: **F11** (most browsers), **Ctrl+Cmd+F** (Safari on macOS). For a dedicated display, use Chrome's kiosk mode:
@@ -60,8 +94,8 @@ Most browsers require user interaction before autoplaying video with sound. For 
 
 ## Media issues
 
-**Upload fails with no error:**
-Check that the `media/` directory exists and is writable. Check disk space. The maximum upload size depends on your web server configuration.
+**Upload fails with no error message in the UI:**
+Check the browser console (F12 > Console) for `[UploadZone]` errors. Also check `logs/errors.jsonl` or the CMS System Log for server-side errors. Verify that the `media/` directory exists and is writable, and check disk space.
 
 **No thumbnails for uploaded videos:**
 FFmpeg is required for video thumbnails. Install it:

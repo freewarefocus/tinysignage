@@ -17,6 +17,18 @@ uvicorn app.main:app --reload --port 8080
 - **Auth required** — All `/api/*` endpoints require Bearer token. Use dependencies from `app/auth.py` (`require_admin`, `require_editor`, `require_viewer`, `require_device`). Only `/health`, `/setup`, and `/api/devices/register` are public.
 - **Alembic migrations** — Use Alembic for all schema changes (`alembic revision --autogenerate -m "description"`). Never use raw ALTER TABLE.
 
+## Error Reporting Standard
+
+Zero silent failures. Every error flows through two channels: user-facing (toast/status) and debug log. See `.planning/ERROR_REPORTING_STANDARD.md` for full details.
+
+### Rules for new code
+- **No empty catch blocks** — every `catch` must log (`console.error/warn` in CMS, `PlayerLog.*` in player, `log.error/exception` in Python)
+- **No `.catch(() => {})`** — use `.catch(err => console.warn('[ComponentName] <context>:', err))` at minimum
+- **CMS**: Use `api.get/post/put/del()` from `client.js` — errors auto-dispatch to toast via errorBus. Only catch locally when cleanup/component-specific UI is needed
+- **Player**: Use `PlayerLog.info/warn/error()` instead of raw `console.*` — persists to localStorage ring buffer, uploaded to server on heartbeat, viewable via Ctrl+Shift+D debug overlay
+- **Backend**: Let exceptions propagate to `error_handlers.py`. Background tasks: catch, `log.exception()`, recover. File ops: catch, log, return meaningful error
+- **Audit log**: Failed auth attempts are logged with `action: "auth_failed"`. Auth failures (401/403) on API routes are logged at WARNING level
+
 ## Project Layout
 
 - `app/` — FastAPI application package

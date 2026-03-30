@@ -456,8 +456,6 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 
 .select-input { cursor: pointer; }
 .form-row { display: flex; gap: 0.75rem; }
-.form-hint { color: #666; font-size: 0.75rem; margin: 0.2rem 0 0.5rem; }
-
 /* Radio */
 .radio-row { display: flex; gap: 1rem; }
 .radio-label {

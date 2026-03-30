@@ -12,16 +12,16 @@
       <!-- Layer A -->
       <div
         class="mp-layer"
-        :class="{ 'mp-visible': activeLayer === 'a' }"
-        :style="{ transitionDuration: transitionDur + 's' }"
+        :class="layerClasses('a')"
+        :style="layerStyle"
       >
         <component :is="layerComponent(layerA)" v-bind="layerProps(layerA)" />
       </div>
       <!-- Layer B -->
       <div
         class="mp-layer"
-        :class="{ 'mp-visible': activeLayer === 'b' }"
-        :style="{ transitionDuration: transitionDur + 's' }"
+        :class="layerClasses('b')"
+        :style="layerStyle"
       >
         <component :is="layerComponent(layerB)" v-bind="layerProps(layerB)" />
       </div>
@@ -67,6 +67,24 @@ const orderedAssets = computed(() => {
 })
 
 const transitionDur = computed(() => props.transitionDuration ?? 1)
+const txType = computed(() => props.transitionType || 'fade')
+const prevLayer = ref(null)   // tracks which layer just became inactive (for slide-out)
+
+const layerStyle = computed(() => {
+  if (txType.value === 'cut') return { transitionDuration: '0s' }
+  return { '--mp-tx-dur': transitionDur.value + 's' }
+})
+
+function layerClasses(id) {
+  const isActive = activeLayer.value === id
+  const isSlide = txType.value === 'slide'
+  return {
+    'mp-visible': isActive && !isSlide,
+    'mp-slide': isSlide,
+    'mp-slide-in': isSlide && isActive,
+    'mp-slide-out': isSlide && !isActive && prevLayer.value === id,
+  }
+}
 
 function assetSrc(asset) {
   if (!asset) return ''
@@ -109,13 +127,14 @@ function showAsset(index) {
   const asset = orderedAssets.value[index]
   if (!asset) return
 
+  const prev = activeLayer.value
   // Load into the inactive layer, then flip
-  if (activeLayer.value === 'a') {
+  if (prev === 'a') {
     layerB.value = asset
-    nextTick(() => { activeLayer.value = 'b' })
+    nextTick(() => { prevLayer.value = 'a'; activeLayer.value = 'b' })
   } else {
     layerA.value = asset
-    nextTick(() => { activeLayer.value = 'a' })
+    nextTick(() => { prevLayer.value = 'b'; activeLayer.value = 'a' })
   }
   currentIndex.value = index
 }
@@ -232,7 +251,7 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   opacity: 0;
-  transition: opacity ease-in-out;
+  transition: opacity var(--mp-tx-dur, 1s) ease-in-out;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -240,6 +259,21 @@ onUnmounted(() => {
 
 .mp-layer.mp-visible {
   opacity: 1;
+}
+
+/* Slide transition */
+.mp-layer.mp-slide {
+  opacity: 1;
+  transition: transform var(--mp-tx-dur, 1s) ease-in-out, opacity 0s;
+  transform: translateX(100%);  /* off-screen right by default */
+}
+
+.mp-layer.mp-slide.mp-slide-in {
+  transform: translateX(0);
+}
+
+.mp-layer.mp-slide.mp-slide-out {
+  transform: translateX(-100%);
 }
 
 .mp-media {

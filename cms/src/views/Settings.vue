@@ -10,7 +10,8 @@
       <div class="form-group">
         <label>Transition Type</label>
         <select v-model="settings.transition_type">
-          <option value="fade">Fade</option>
+          <option value="fade">Crossfade</option>
+          <option value="slide">Slide</option>
           <option value="cut">Cut</option>
         </select>
       </div>

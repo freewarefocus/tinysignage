@@ -30,6 +30,7 @@
 
     <div v-if="canEdit" class="action-row">
       <UploadZone @uploaded="loadAssets" />
+      <p class="form-hint upload-hint">Large video files may take longer to load on the player.</p>
       <button class="btn-html-add" @click="openHtmlEditor()">
         <i class="pi pi-code"></i> Add HTML Slide
       </button>
@@ -37,7 +38,7 @@
 
     <div v-if="assets.length === 0" class="empty">
       <p v-if="activeTagFilter">No assets with this tag.</p>
-      <p v-else>No media yet. Upload images or videos to get started.</p>
+      <p v-else>No media yet. Upload images and videos to use in your playlists. Drag files here or click Upload.</p>
     </div>
 
     <div v-else class="asset-grid">
@@ -162,6 +163,23 @@
         </div>
       </div>
     </div>
+
+    <!-- Delete confirmation -->
+    <div v-if="deleteTarget" class="dialog-overlay" @click.self="deleteTarget = null">
+      <div class="dialog" style="padding: 1.5rem;">
+        <h3>{{ deleteTarget.type === 'asset' ? 'Delete Media' : 'Delete Tag' }}</h3>
+        <p v-if="deleteTarget.type === 'asset'">
+          Delete <strong>{{ deleteTarget.name }}</strong>? It will be removed from any playlists that currently use it.
+        </p>
+        <p v-else>
+          Delete tag <strong>{{ deleteTarget.name }}</strong>? It will be removed from all assets.
+        </p>
+        <div class="dialog-actions">
+          <button class="btn-secondary" @click="deleteTarget = null">Cancel</button>
+          <button class="btn-danger" @click="doDelete">Delete</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -187,6 +205,8 @@ const newTagColor = ref('#7c83ff')
 const editingTag = ref(null)
 const editTagName = ref('')
 const editTagColor = ref('#7c83ff')
+
+const deleteTarget = ref(null)
 
 // Widget state
 const widgets = ref([])
@@ -242,10 +262,8 @@ async function duplicateAsset(asset) {
   await loadAssets()
 }
 
-async function deleteAsset(asset) {
-  if (!confirm(`Delete "${asset.name}"?`)) return
-  await api.delete(`/assets/${asset.id}`)
-  await loadAll()
+function deleteAsset(asset) {
+  deleteTarget.value = { ...asset, type: 'asset' }
 }
 
 // Tag manager actions
@@ -271,10 +289,20 @@ async function saveTag(tag) {
   await loadTags()
 }
 
-async function deleteTag(tag) {
-  if (!confirm(`Delete tag "${tag.name}"? It will be removed from all assets.`)) return
-  await api.delete(`/tags/${tag.id}`)
-  if (activeTagFilter.value === tag.id) activeTagFilter.value = null
+function deleteTag(tag) {
+  deleteTarget.value = { ...tag, type: 'tag' }
+}
+
+async function doDelete() {
+  if (!deleteTarget.value) return
+  const target = deleteTarget.value
+  deleteTarget.value = null
+  if (target.type === 'asset') {
+    await api.delete(`/assets/${target.id}`)
+  } else {
+    await api.delete(`/tags/${target.id}`)
+    if (activeTagFilter.value === target.id) activeTagFilter.value = null
+  }
   await loadAll()
 }
 
@@ -291,7 +319,8 @@ async function openHtmlEditor(asset = null) {
       if (resp.ok) {
         htmlContent.value = await resp.text()
       }
-    } catch {
+    } catch (err) {
+      console.warn('[MediaLibrary] Failed to load HTML content for asset:', asset.id, err)
       htmlContent.value = ''
     }
   } else {
@@ -340,7 +369,8 @@ async function saveHtmlAsset() {
 async function loadWidgets() {
   try {
     widgets.value = await api.get('/widgets')
-  } catch {
+  } catch (err) {
+    console.warn('[MediaLibrary] Failed to load widgets:', err)
     widgets.value = []
   }
 }
@@ -747,4 +777,37 @@ h2 {
   background: #1f3a4a;
   border-color: #6cb8e6;
 }
+
+.upload-hint { flex-basis: 100%; }
+
+.dialog h3 {
+  color: #fff;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.dialog p {
+  color: #aaa;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.btn-danger {
+  background: #5a2030;
+  color: #f88;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.btn-danger:hover { background: #7a2840; }
 </style>

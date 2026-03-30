@@ -119,8 +119,8 @@ async function loadFilterOptions() {
     const data = await api.get('/audit/actions')
     availableActions.value = data.actions
     availableTypes.value = data.entity_types
-  } catch {
-    // Filters will just be empty
+  } catch (err) {
+    console.warn('[AuditLog] Failed to load filter options:', err)
   }
 }
 
