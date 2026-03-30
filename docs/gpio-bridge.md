@@ -98,9 +98,9 @@ python bridge.py
 The bridge logs pin events to the console:
 
 ```
-[Bridge] WebSocket server on ws://0.0.0.0:8765
-[Bridge] Watching 3 pins: 17, 27, 22
-[Bridge] Pin 17 (Button 1): falling edge
+2026-03-29 12:00:00 [INFO] WebSocket server listening on ws://0.0.0.0:8765
+2026-03-29 12:00:00 [INFO] Configured pin 17 (Button 1) pull_up=True bounce=0.20s
+2026-03-29 12:00:05 [INFO] GPIO event: pin=17 name=Button 1 edge=falling
 ```
 
 ### Mock mode
@@ -109,11 +109,11 @@ On machines without GPIO hardware (development, testing), the bridge falls back 
 
 ```
 $ python bridge.py
-[Bridge] gpiozero not available — running in mock mode
-[Bridge] WebSocket server on ws://0.0.0.0:8765
-Type pin number to simulate press (e.g., "17"):
+2026-03-29 12:00:00 [WARNING] gpiozero not available — running in MOCK mode
+2026-03-29 12:00:00 [INFO] WebSocket server listening on ws://0.0.0.0:8765
+2026-03-29 12:00:00 [INFO] MOCK MODE: Type a pin number and press Enter to simulate a button press.
 17
-[Bridge] Mock: Pin 17 falling edge
+2026-03-29 12:00:05 [INFO] MOCK event: pin=17
 ```
 
 ---
@@ -156,12 +156,13 @@ The bridge broadcasts JSON events over WebSocket:
 {
   "type": "gpio",
   "pin": 17,
+  "name": "Button 1",
   "edge": "falling",
-  "timestamp": 1234567890.123
+  "timestamp": 1711699200000
 }
 ```
 
-The player matches `pin` and `edge` against GPIO trigger branch configurations. The highest-priority matching branch fires.
+Fields: `pin` (GPIO number), `name` (from config), `edge` (`"falling"` or `"rising"`), `timestamp` (integer milliseconds since epoch). The player matches `pin` and `edge` against GPIO trigger branch configurations. The highest-priority matching branch fires.
 
 ---
 

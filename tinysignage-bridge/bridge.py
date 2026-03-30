@@ -65,8 +65,12 @@ async def broadcast(message: dict):
     clients.difference_update(disconnected)
 
 
-def make_callback(pin_number: int, pin_name: str, edge: str):
-    """Create a GPIO callback that broadcasts the event."""
+def make_callback(pin_number: int, pin_name: str, edge: str, loop: asyncio.AbstractEventLoop):
+    """Create a GPIO callback that broadcasts the event.
+
+    The loop parameter is captured at setup time because gpiozero fires
+    callbacks from a background thread that has no running asyncio loop.
+    """
     def callback():
         event = {
             "type": "gpio",
@@ -76,14 +80,12 @@ def make_callback(pin_number: int, pin_name: str, edge: str):
             "timestamp": int(time.time() * 1000),
         }
         log.info("GPIO event: pin=%d name=%s edge=%s", pin_number, pin_name, edge)
-        # Schedule broadcast on the event loop
-        asyncio.get_event_loop().call_soon_threadsafe(
-            asyncio.ensure_future, broadcast(event)
-        )
+        # Schedule broadcast on the event loop (safe from any thread)
+        loop.call_soon_threadsafe(asyncio.ensure_future, broadcast(event))
     return callback
 
 
-def setup_gpio(config: dict) -> list:
+def setup_gpio(config: dict, loop: asyncio.AbstractEventLoop) -> list:
     """Set up gpiozero Button listeners from config."""
     buttons = []
     for pin_cfg in config.get("pins", []):
@@ -93,8 +95,8 @@ def setup_gpio(config: dict) -> list:
         bounce_time = pin_cfg.get("bounce_time", 0.2)
 
         btn = Button(pin, pull_up=pull_up, bounce_time=bounce_time)
-        btn.when_pressed = make_callback(pin, name, "falling")
-        btn.when_released = make_callback(pin, name, "rising")
+        btn.when_pressed = make_callback(pin, name, "falling", loop)
+        btn.when_released = make_callback(pin, name, "rising", loop)
         buttons.append(btn)
         log.info("Configured pin %d (%s) pull_up=%s bounce=%.2fs", pin, name, pull_up, bounce_time)
 
@@ -105,7 +107,7 @@ async def mock_gpio_loop(config: dict):
     """In mock mode, simulate GPIO events from stdin."""
     log.info("MOCK MODE: Type a pin number and press Enter to simulate a button press.")
     pin_map = {str(p["pin"]): p for p in config.get("pins", [])}
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     while True:
         line = await loop.run_in_executor(None, sys.stdin.readline)
@@ -147,7 +149,8 @@ async def main():
     port = config.get("websocket_port", 8765)
 
     if not MOCK_MODE:
-        buttons = setup_gpio(config)
+        loop = asyncio.get_running_loop()
+        buttons = setup_gpio(config, loop)
         log.info("GPIO mode: %d pin(s) configured", len(buttons))
     else:
         log.warning("gpiozero not available — running in MOCK mode")

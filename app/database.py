@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 from alembic import command
 from alembic.config import Config as AlembicConfig
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -22,6 +23,13 @@ engine = create_async_engine(
     poolclass=NullPool,
     echo=False,
 )
+
+
+@event.listens_for(engine.sync_engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    """Enable foreign key enforcement for every SQLite connection."""
+    dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
 
 async_session = async_sessionmaker(engine, expire_on_commit=False)
 

@@ -62,13 +62,14 @@
     let triggerFlow = null;           // Current trigger flow data from server
     let currentSourcePlaylistId = ''; // Which playlist is currently active in the flow
     let loopCount = 0;               // How many times the current playlist has looped
+    let shuffleAdvanceCount = 0;     // Track advances in shuffle mode for loop detection
     let triggerTimeoutTimer = null;   // Timeout trigger timer
-    let triggerListenersActive = false; // Whether keyboard listener is registered
     let triggerKeydownHandler = null; // Reference to keydown handler for cleanup
 
     // --- GPIO bridge state ---
     let gpioWebSocket = null;         // WebSocket connection to GPIO bridge
     let gpioReconnectTimer = null;    // Auto-reconnect timer
+    let activeGpioBranches = [];      // Current GPIO branches for onmessage matching
     const GPIO_BRIDGE_URL = 'ws://localhost:8765';
 
     // --- Webhook trigger state ---
@@ -249,6 +250,7 @@
                 // Restore trigger flow from cache
                 if (data.trigger_flow) {
                     let sourceId = data.trigger_flow.source_playlist_id;
+                    let restoredLoopCount = 0;
                     const savedState = loadTriggerState();
                     if (savedState && savedState.flowId === data.trigger_flow.id && savedState.sourcePlaylistId) {
                         const savedBranch = data.trigger_flow.branches.find(
@@ -259,10 +261,10 @@
                             playlist = savedBranch.target_playlist.items || [];
                             settings = savedBranch.target_playlist.settings || {};
                             applySettings(settings);
-                            loopCount = savedState.loopCount || 0;
+                            restoredLoopCount = savedState.loopCount || 0;
                         }
                     }
-                    initTriggerEngine(data.trigger_flow, sourceId);
+                    initTriggerEngine(data.trigger_flow, sourceId, restoredLoopCount);
                 }
             }
         } catch (e) {
@@ -378,6 +380,7 @@
                 if (data.trigger_flow) {
                     // Restore source playlist from saved state if resuming same flow
                     let sourceId = data.trigger_flow.source_playlist_id;
+                    let restoredLoopCount = 0;
                     const savedState = loadTriggerState();
                     if (savedState && savedState.flowId === data.trigger_flow.id && savedState.sourcePlaylistId) {
                         // Find the saved source in the flow's branches as a target
@@ -390,10 +393,10 @@
                             playlist = savedBranch.target_playlist.items || [];
                             settings = savedBranch.target_playlist.settings || {};
                             applySettings(settings);
-                            loopCount = savedState.loopCount || 0;
+                            restoredLoopCount = savedState.loopCount || 0;
                         }
                     }
-                    initTriggerEngine(data.trigger_flow, sourceId);
+                    initTriggerEngine(data.trigger_flow, sourceId, restoredLoopCount);
                     checkWebhookTriggers();
                 } else if (triggerFlow) {
                     teardownTriggerEngine();
@@ -721,6 +724,14 @@
             let next;
             do { next = Math.floor(Math.random() * playlist.length); } while (next === currentIndex);
             currentIndex = next;
+            // Track shuffle advances to detect logical loop completion
+            if (triggerFlow && playlist.length > 0) {
+                shuffleAdvanceCount++;
+                if (shuffleAdvanceCount >= playlist.length) {
+                    shuffleAdvanceCount = 0;
+                    checkLoopCount();
+                }
+            }
         } else {
             currentIndex++;
             if (currentIndex >= playlist.length) {
@@ -1126,11 +1137,11 @@
     // and swaps the active playlist when a trigger fires.
     // ===================================================================
 
-    function initTriggerEngine(flowData, sourcePlaylistId) {
+    function initTriggerEngine(flowData, sourcePlaylistId, restoreLoopCount) {
         teardownTriggerEngine();
         triggerFlow = flowData;
         currentSourcePlaylistId = sourcePlaylistId;
-        loopCount = 0;
+        loopCount = restoreLoopCount || 0;
 
         console.log('[TinySignage] TriggerEngine init — flow:', flowData.id, 'source:', sourcePlaylistId);
 
@@ -1155,7 +1166,6 @@
             document.removeEventListener('keydown', triggerKeydownHandler);
             triggerKeydownHandler = null;
         }
-        triggerListenersActive = false;
 
         // Remove touch zones
         const container = document.getElementById('touch-zones-container');
@@ -1173,6 +1183,7 @@
         triggerFlow = null;
         currentSourcePlaylistId = '';
         loopCount = 0;
+        shuffleAdvanceCount = 0;
         lastSeenWebhookFires = {};
     }
 
@@ -1213,7 +1224,6 @@
         };
 
         document.addEventListener('keydown', triggerKeydownHandler);
-        triggerListenersActive = true;
         console.log('[TinySignage] Registered', keyBranches.length, 'keyboard trigger(s)');
     }
 
@@ -1269,6 +1279,7 @@
     function checkLoopCount() {
         if (!triggerFlow) return;
         loopCount++;
+        saveTriggerState();
 
         const branches = findBranchesForSource(currentSourcePlaylistId);
         const loopBranch = branches.find(b => b.trigger_type === 'loop_count');
@@ -1297,7 +1308,6 @@
             document.removeEventListener('keydown', triggerKeydownHandler);
             triggerKeydownHandler = null;
         }
-        triggerListenersActive = false;
         const touchContainer = document.getElementById('touch-zones-container');
         if (touchContainer) touchContainer.innerHTML = '';
         if (triggerTimeoutTimer) {
@@ -1312,6 +1322,7 @@
         currentSourcePlaylistId = branch.target_playlist_id;
         currentIndex = 0;
         loopCount = 0;
+        shuffleAdvanceCount = 0;
 
         applySettings(settings);
         cancelPlayback();
@@ -1330,6 +1341,7 @@
             createTouchZoneOverlays(newBranches);
             startTimeoutTriggers(newBranches);
             connectGpioBridge(newBranches);
+            initWebhookTracking(newBranches);
         } else {
             disconnectGpioBridge();
         }
@@ -1373,10 +1385,14 @@
             return;
         }
 
-        // Already connected
+        // Always update the branch set so onmessage uses current branches
+        activeGpioBranches = gpioBranches;
+
+        // Already connected — branch set updated above, no reconnect needed
         if (gpioWebSocket && gpioWebSocket.readyState === WebSocket.OPEN) return;
 
         disconnectGpioBridge();
+        activeGpioBranches = gpioBranches; // restore after disconnectGpioBridge clears it
 
         try {
             gpioWebSocket = new WebSocket(GPIO_BRIDGE_URL);
@@ -1388,7 +1404,7 @@
             gpioWebSocket.onmessage = function (event) {
                 try {
                     const data = JSON.parse(event.data);
-                    handleGpioEvent(data, gpioBranches);
+                    handleGpioEvent(data, activeGpioBranches);
                 } catch (e) {
                     console.warn('[TinySignage] GPIO message parse error:', e.message);
                 }
@@ -1424,6 +1440,7 @@
             gpioWebSocket.close();
             gpioWebSocket = null;
         }
+        activeGpioBranches = [];
     }
 
     function handleGpioEvent(data, gpioBranches) {

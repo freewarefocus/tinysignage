@@ -440,28 +440,15 @@ async def get_device_playlist(
         )
         if tf_payload:
             resp["trigger_flow"] = tf_payload
-            # Extend hash to detect changes in branches, target playlists, and webhook fires
-            branch_parts = []
-            for b in tf_payload["branches"]:
-                target_item_ids = "|".join(i["id"] for i in b["target_playlist"]["items"])
-                wh = b.get("last_webhook_fire", "")
-                branch_parts.append(f"{b['id']}:{b['target_playlist_id']}:{target_item_ids}:{wh}")
-            tf_hash = hashlib.sha256(";".join(branch_parts).encode()).hexdigest()[:12]
-            resp["hash"] += f"-tf{tf_hash}"
+            resp["hash"] += f"-tf{_trigger_flow_hash(tf_payload)}"
 
     if zones_data:
         resp["zones"] = zones_data
-        # Rebuild hash including zones; preserve any trigger_flow hash suffix
         base_hash = _playlist_hash(active_items) + "-" + _zones_hash(zones_data)
-        # Re-append trigger_flow hash if present
+        if "transition_playlist" in resp:
+            base_hash += f"-tp{resp['transition_playlist']['id'][:8]}"
         if "trigger_flow" in resp:
-            branch_parts = []
-            for b in resp["trigger_flow"]["branches"]:
-                target_item_ids = "|".join(i["id"] for i in b["target_playlist"]["items"])
-                wh = b.get("last_webhook_fire", "")
-                branch_parts.append(f"{b['id']}:{b['target_playlist_id']}:{target_item_ids}:{wh}")
-            tf_hash = hashlib.sha256(";".join(branch_parts).encode()).hexdigest()[:12]
-            base_hash += f"-tf{tf_hash}"
+            base_hash += f"-tf{_trigger_flow_hash(resp['trigger_flow'])}"
         resp["hash"] = base_hash
 
     return resp
@@ -516,12 +503,15 @@ async def _build_trigger_flow_payload(
         except (json.JSONDecodeError, TypeError):
             config = {}
 
+        # Strip webhook token from config sent to players — they don't need it
+        player_config = {k: v for k, v in config.items() if k != "token"}
+
         branch_data = {
             "id": branch.id,
             "source_playlist_id": branch.source_playlist_id,
             "target_playlist_id": branch.target_playlist_id,
             "trigger_type": branch.trigger_type,
-            "trigger_config": config,
+            "trigger_config": player_config,
             "priority": branch.priority,
         }
         if branch.trigger_type == "webhook" and branch.last_webhook_fire:
@@ -617,6 +607,20 @@ async def _build_zones_payload(layout_id: str, session: AsyncSession) -> list[di
         zones_out.append(zone_dict)
 
     return zones_out
+
+
+def _trigger_flow_hash(tf_payload: dict) -> str:
+    """Compute a short hash for trigger flow branches, targets, and webhook fires."""
+    branch_parts = []
+    for b in tf_payload["branches"]:
+        target_item_ids = "|".join(i["id"] for i in b["target_playlist"]["items"])
+        wh = b.get("last_webhook_fire", "")
+        cfg = json.dumps(b.get("trigger_config", {}), sort_keys=True)
+        branch_parts.append(
+            f"{b['id']}:{b['trigger_type']}:{b.get('priority', 0)}:"
+            f"{b['target_playlist_id']}:{target_item_ids}:{cfg}:{wh}"
+        )
+    return hashlib.sha256(";".join(branch_parts).encode()).hexdigest()[:12]
 
 
 def _zones_hash(zones_data: list[dict] | None) -> str:

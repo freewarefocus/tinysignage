@@ -66,7 +66,7 @@ TinySignage/
     media.py             # Thumbnail generation, content hashing
     error_handlers.py    # Structured error response handlers
     logging_config.py    # File and console logging with rotation
-    api/                 # REST API route modules (18 modules)
+    api/                 # REST API route modules (19 modules)
     static/              # Player HTML/JS/CSS
   cms/                   # Vue 3 + PrimeVue CMS source
     src/
@@ -76,7 +76,7 @@ TinySignage/
       router/index.js    # Routes, auth guard, admin protection
   install/               # Raspberry Pi / Linux install scripts
   systemd/               # Systemd service units
-  alembic/               # Database migration framework (17 migrations)
+  alembic/               # Database migration framework (20 migrations)
   media/                 # Uploaded files (gitignored)
   db/                    # SQLite database (gitignored)
   config.yaml            # User configuration
@@ -97,11 +97,11 @@ The application entry point configures:
 - **Static mounts**: player files, media directory, built CMS files
 - **Middleware**: CORS configuration, Cache-Control headers for media
 - **Routes**: `/player` (injects `server_url` meta tag), `/cms` (Vue catch-all), `/admin` (redirect), `/health`, `/setup`
-- **API routers**: all 18 modules from `app/api/`
+- **API routers**: all 19 modules from `app/api/`
 
 ### Models (`app/models.py`)
 
-17 SQLAlchemy models using async mapped columns:
+19 SQLAlchemy models using async mapped columns:
 
 | Model | Purpose |
 |-------|---------|
@@ -115,6 +115,8 @@ The application entry point configures:
 | LayoutZone | Positioned zones within layouts |
 | Schedule | Time-based playlist switching rules |
 | Override | Emergency content overrides |
+| TriggerFlow | Interactive trigger flow definitions |
+| TriggerBranch | Trigger flow branches linking playlists |
 | User | CMS user accounts with roles |
 | ApiToken | Authentication tokens (session and API) |
 | Tag | Media organization labels |

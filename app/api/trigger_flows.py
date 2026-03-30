@@ -364,9 +364,9 @@ async def fire_webhook(
     except (json.JSONDecodeError, TypeError):
         config = {}
 
-    expected_token = config.get("token")
-    provided_token = body.get("token")
-    if not expected_token or not provided_token or provided_token != expected_token:
+    expected_token = str(config.get("token", ""))
+    provided_token = str(body.get("token", ""))
+    if not expected_token or not provided_token or not secrets.compare_digest(provided_token, expected_token):
         raise HTTPException(status_code=403, detail="Invalid webhook token")
 
     branch.last_webhook_fire = datetime.now(timezone.utc).replace(tzinfo=None)
