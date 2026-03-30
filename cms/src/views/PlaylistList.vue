@@ -71,6 +71,7 @@
             <template v-else>
               <span class="card-name">{{ pl.name }}</span>
               <span v-if="pl.is_default" class="default-badge">Default</span>
+              <span v-if="pl.mode === 'advanced'" class="mode-badge">Advanced</span>
             </template>
           </div>
           <div class="card-actions" @click.stop v-if="editingId !== pl.id">
@@ -299,6 +300,17 @@ h3 { color: #fff; margin-bottom: 1rem; }
 .default-badge {
   background: #252836;
   color: #7c83ff;
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.mode-badge {
+  background: #2d2545;
+  color: #a78bfa;
   font-size: 0.65rem;
   padding: 2px 6px;
   border-radius: 3px;

@@ -29,10 +29,29 @@
       <div class="playlist-header">
         <div class="header-left">
           <span v-if="playlist.is_default" class="default-badge">Default</span>
+          <span v-if="playlist.mode === 'advanced'" class="mode-badge">Advanced</span>
           <span class="item-count">{{ items.length }} item(s)</span>
         </div>
         <div class="header-right">
           <span class="hash-label">Hash: {{ playlist.hash?.slice(0, 8) }}</span>
+          <button
+            v-if="canEdit && playlist.mode !== 'advanced'"
+            class="btn-mode"
+            @click="toggleMode('advanced')"
+            title="Enable advanced trigger features"
+          >
+            <i class="pi pi-bolt"></i>
+            <span>Make Advanced</span>
+          </button>
+          <button
+            v-if="canEdit && playlist.mode === 'advanced'"
+            class="btn-mode simplify"
+            @click="confirmSimplify"
+            title="Switch back to simple mode"
+          >
+            <i class="pi pi-minus-circle"></i>
+            <span>Simplify</span>
+          </button>
           <button class="btn-toggle" @click="showSettings = !showSettings">
             <i class="pi pi-cog"></i>
             <span>Settings</span>
@@ -103,6 +122,27 @@
         <p class="settings-hint">
           Leave blank or "Global default" to inherit from global settings.
         </p>
+      </div>
+
+      <!-- Simplify confirmation dialog -->
+      <div v-if="showSimplifyConfirm" class="dialog-overlay" @click.self="showSimplifyConfirm = false">
+        <div class="dialog">
+          <h3>Simplify Playlist</h3>
+          <p>Switch <strong>{{ playlist.name }}</strong> back to simple mode? Any trigger flow configuration will need to be re-assigned if you make it advanced again later.</p>
+          <div class="dialog-actions">
+            <button class="btn-danger" @click="toggleMode('simple')">Simplify</button>
+            <button class="btn-secondary" @click="showSimplifyConfirm = false">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trigger flow placeholder (advanced mode only) -->
+      <div v-if="playlist.mode === 'advanced'" class="trigger-panel">
+        <div class="trigger-panel-header">
+          <i class="pi pi-bolt"></i>
+          <span>Trigger Flows</span>
+        </div>
+        <p class="trigger-placeholder">Trigger flow configuration will appear here when available.</p>
       </div>
 
       <div
@@ -179,6 +219,7 @@ const editingName = ref(false)
 const nameInput = ref('')
 const nameInputEl = ref(null)
 const showSettings = ref(false)
+const showSimplifyConfirm = ref(false)
 const plSettings = ref({
   transition_type: null,
   transition_duration: null,
@@ -234,6 +275,17 @@ async function saveName() {
     await loadPlaylist()
   }
   editingName.value = false
+}
+
+function confirmSimplify() {
+  showSimplifyConfirm.value = true
+}
+
+async function toggleMode(newMode) {
+  if (!playlist.value) return
+  await api.patch(`/playlists/${playlist.value.id}`, { mode: newMode })
+  showSimplifyConfirm.value = false
+  await loadPlaylist()
 }
 
 async function saveSettings() {
@@ -406,6 +458,16 @@ h3 { margin-bottom: 0.8rem; color: #ddd; font-size: 1rem; }
   letter-spacing: 0.5px;
 }
 
+.mode-badge {
+  background: #2d2545;
+  color: #a78bfa;
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .item-count { color: #888; font-size: 0.85rem; }
 
 .header-right {
@@ -432,6 +494,29 @@ h3 { margin-bottom: 0.8rem; color: #ddd; font-size: 1rem; }
 
 .btn-toggle:hover { color: #fff; background: #2f3348; }
 .toggle-arrow { font-size: 0.65rem; }
+
+.btn-mode {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #2d2545;
+  color: #a78bfa;
+  border: none;
+  padding: 0.35rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: color 0.15s, background 0.15s;
+}
+
+.btn-mode:hover { color: #c4b5fd; background: #3d3560; }
+
+.btn-mode.simplify {
+  background: #252836;
+  color: #999;
+}
+
+.btn-mode.simplify:hover { color: #fff; background: #2f3348; }
 
 /* Per-playlist settings */
 .settings-panel {
@@ -563,5 +648,91 @@ h3 { margin-bottom: 0.8rem; color: #ddd; font-size: 1rem; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Trigger panel */
+.trigger-panel {
+  background: #1a1d27;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid #2d2545;
+}
+
+.trigger-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #a78bfa;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 0.75rem;
+}
+
+.trigger-placeholder {
+  color: #666;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+/* Simplify confirmation dialog */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dialog {
+  background: #1a1d27;
+  border-radius: 10px;
+  padding: 1.5rem;
+  width: 380px;
+  max-width: 90vw;
+  border: 1px solid #2a2d3a;
+}
+
+.dialog h3 {
+  color: #fff;
+  margin-bottom: 1rem;
+}
+
+.dialog p {
+  color: #aaa;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.btn-danger:hover { background: #c82333; }
+
+.btn-secondary {
+  background: #3a3a5a;
+  color: #ccc;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
 }
 </style>
