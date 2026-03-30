@@ -136,13 +136,204 @@
         </div>
       </div>
 
-      <!-- Trigger flow placeholder (advanced mode only) -->
+      <!-- Trigger flow editor (advanced mode only) -->
       <div v-if="playlist.mode === 'advanced'" class="trigger-panel">
         <div class="trigger-panel-header">
           <i class="pi pi-bolt"></i>
-          <span>Trigger Flows</span>
+          <span>Trigger Flow</span>
         </div>
-        <p class="trigger-placeholder">Trigger flow configuration will appear here when available.</p>
+
+        <!-- Flow selector -->
+        <div class="flow-selector">
+          <select v-model="selectedFlowId" @change="assignFlow" class="flow-select">
+            <option value="">— No flow assigned —</option>
+            <option v-for="f in availableFlows" :key="f.id" :value="f.id">
+              {{ f.name }} ({{ f.branch_count }} branch{{ f.branch_count !== 1 ? 'es' : '' }})
+            </option>
+          </select>
+          <button v-if="canEdit" class="btn-flow" @click="showCreateFlow = true" title="Create new flow">
+            <i class="pi pi-plus"></i>
+          </button>
+          <button v-if="canEdit && selectedFlowId" class="btn-flow detach" @click="detachFlow" title="Detach flow from playlist">
+            <i class="pi pi-times"></i>
+          </button>
+        </div>
+
+        <!-- Create flow dialog -->
+        <div v-if="showCreateFlow" class="inline-form">
+          <input v-model="newFlowName" placeholder="Flow name" class="setting-number" @keydown.enter="createFlow" />
+          <button class="btn-sm" @click="createFlow">Create</button>
+          <button class="btn-sm secondary" @click="showCreateFlow = false; newFlowName = ''">Cancel</button>
+        </div>
+
+        <!-- Flow content (when assigned) -->
+        <template v-if="currentFlow">
+          <!-- Branch list -->
+          <div v-if="currentFlow.branches && currentFlow.branches.length > 0" class="branch-list">
+            <div v-for="branch in sortedBranches" :key="branch.id" class="branch-row">
+              <div class="branch-info">
+                <span class="branch-playlist">{{ branch.source_playlist_name || 'Unknown' }}</span>
+                <i :class="triggerIcon(branch.trigger_type)" class="branch-trigger-icon" :title="branch.trigger_type"></i>
+                <span class="branch-type-label">{{ triggerLabel(branch.trigger_type, branch.trigger_config) }}</span>
+                <i class="pi pi-arrow-right branch-arrow"></i>
+                <span class="branch-playlist">{{ branch.target_playlist_name || 'Unknown' }}</span>
+                <span v-if="branch.priority" class="branch-priority" title="Priority">P{{ branch.priority }}</span>
+              </div>
+              <div v-if="canEdit" class="branch-actions">
+                <button class="btn-icon" @click="startEditBranch(branch)" title="Edit"><i class="pi pi-pencil"></i></button>
+                <button class="btn-icon danger" @click="deleteBranch(branch.id)" title="Delete"><i class="pi pi-trash"></i></button>
+              </div>
+            </div>
+          </div>
+          <p v-else class="trigger-placeholder">No branches yet. Add one to define trigger transitions.</p>
+
+          <!-- Add / Edit branch form -->
+          <button v-if="canEdit && !showBranchForm" class="btn-add-branch" @click="startAddBranch">
+            <i class="pi pi-plus"></i> Add Branch
+          </button>
+
+          <div v-if="showBranchForm" class="branch-form">
+            <h4>{{ editingBranchId ? 'Edit Branch' : 'Add Branch' }}</h4>
+            <div class="branch-form-grid">
+              <div class="setting-field">
+                <label>Source Playlist</label>
+                <select v-model="branchForm.source_playlist_id" class="setting-select">
+                  <option value="">— Select —</option>
+                  <option v-for="p in allPlaylists" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </select>
+              </div>
+              <div class="setting-field">
+                <label>Target Playlist</label>
+                <select v-model="branchForm.target_playlist_id" class="setting-select">
+                  <option value="">— Select —</option>
+                  <option v-for="p in allPlaylists" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </select>
+              </div>
+              <div class="setting-field">
+                <label>Trigger Type</label>
+                <select v-model="branchForm.trigger_type" class="setting-select" @change="onTriggerTypeChange">
+                  <option value="keyboard">Keyboard</option>
+                  <option value="touch_zone">Touch Zone</option>
+                  <option value="timeout">Timeout</option>
+                  <option value="loop_count">Loop Count</option>
+                  <option value="gpio">GPIO</option>
+                  <option value="webhook">Webhook</option>
+                </select>
+              </div>
+              <div class="setting-field">
+                <label>Priority</label>
+                <input type="number" v-model.number="branchForm.priority" min="0" max="100" class="setting-number" />
+              </div>
+            </div>
+
+            <!-- Dynamic config per trigger type -->
+            <div class="trigger-config-section">
+              <label class="config-label">Trigger Configuration</label>
+
+              <!-- Keyboard -->
+              <div v-if="branchForm.trigger_type === 'keyboard'" class="config-grid">
+                <div class="setting-field">
+                  <label>Key</label>
+                  <select v-model="branchForm.trigger_config.key" class="setting-select">
+                    <option value="ArrowLeft">Arrow Left</option>
+                    <option value="ArrowRight">Arrow Right</option>
+                    <option value="ArrowUp">Arrow Up</option>
+                    <option value="ArrowDown">Arrow Down</option>
+                    <option value="Enter">Enter</option>
+                    <option value=" ">Space</option>
+                    <option value="Escape">Escape</option>
+                    <option v-for="n in 9" :key="n" :value="String(n)">{{ n }}</option>
+                    <option value="_custom">Custom...</option>
+                  </select>
+                </div>
+                <div v-if="branchForm.trigger_config.key === '_custom'" class="setting-field">
+                  <label>Custom Key Name</label>
+                  <input v-model="branchForm.trigger_config.customKey" class="setting-number" placeholder="e.g. a, F1, Tab" />
+                </div>
+                <div class="setting-field">
+                  <label>Modifiers</label>
+                  <div class="modifier-checks">
+                    <label class="check-label"><input type="checkbox" v-model="keyModifiers.shift" /> Shift</label>
+                    <label class="check-label"><input type="checkbox" v-model="keyModifiers.ctrl" /> Ctrl</label>
+                    <label class="check-label"><input type="checkbox" v-model="keyModifiers.alt" /> Alt</label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Touch Zone -->
+              <div v-if="branchForm.trigger_type === 'touch_zone'" class="config-grid">
+                <div class="setting-field">
+                  <label>X Position (%)</label>
+                  <input type="number" v-model.number="branchForm.trigger_config.x_percent" min="0" max="100" class="setting-number" />
+                </div>
+                <div class="setting-field">
+                  <label>Y Position (%)</label>
+                  <input type="number" v-model.number="branchForm.trigger_config.y_percent" min="0" max="100" class="setting-number" />
+                </div>
+                <div class="setting-field">
+                  <label>Width (%)</label>
+                  <input type="number" v-model.number="branchForm.trigger_config.width_percent" min="1" max="100" class="setting-number" />
+                </div>
+                <div class="setting-field">
+                  <label>Height (%)</label>
+                  <input type="number" v-model.number="branchForm.trigger_config.height_percent" min="1" max="100" class="setting-number" />
+                </div>
+              </div>
+
+              <!-- Timeout -->
+              <div v-if="branchForm.trigger_type === 'timeout'" class="config-grid">
+                <div class="setting-field">
+                  <label>Seconds</label>
+                  <input type="number" v-model.number="branchForm.trigger_config.seconds" min="1" max="3600" class="setting-number" />
+                </div>
+              </div>
+
+              <!-- Loop Count -->
+              <div v-if="branchForm.trigger_type === 'loop_count'" class="config-grid">
+                <div class="setting-field">
+                  <label>Loop Count</label>
+                  <input type="number" v-model.number="branchForm.trigger_config.count" min="1" max="1000" class="setting-number" />
+                </div>
+              </div>
+
+              <!-- GPIO -->
+              <div v-if="branchForm.trigger_type === 'gpio'" class="config-grid">
+                <div class="setting-field">
+                  <label>Pin Number</label>
+                  <input type="number" v-model.number="branchForm.trigger_config.pin" min="0" max="40" class="setting-number" />
+                </div>
+                <div class="setting-field">
+                  <label>Edge</label>
+                  <select v-model="branchForm.trigger_config.edge" class="setting-select">
+                    <option value="falling">Falling (button press)</option>
+                    <option value="rising">Rising</option>
+                  </select>
+                </div>
+                <div class="setting-field">
+                  <label>Debounce (ms)</label>
+                  <input type="number" v-model.number="branchForm.trigger_config.debounce_ms" min="0" max="2000" class="setting-number" />
+                </div>
+              </div>
+
+              <!-- Webhook -->
+              <div v-if="branchForm.trigger_type === 'webhook'" class="config-grid">
+                <div class="setting-field">
+                  <label>Token</label>
+                  <div class="webhook-token-row">
+                    <input :value="branchForm.trigger_config.token" class="setting-number" readonly />
+                    <button class="btn-flow" @click="regenerateToken" title="Regenerate token"><i class="pi pi-refresh"></i></button>
+                  </div>
+                  <span class="config-hint">Auto-generated. External systems POST this token to fire the trigger.</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="branch-form-actions">
+              <button class="btn-sm" @click="saveBranch">{{ editingBranchId ? 'Update' : 'Add' }}</button>
+              <button class="btn-sm secondary" @click="cancelBranchForm">Cancel</button>
+            </div>
+          </div>
+        </template>
       </div>
 
       <div
@@ -227,9 +418,78 @@ const plSettings = ref({
   shuffle: null,
 })
 
+// Trigger flow state
+const availableFlows = ref([])
+const currentFlow = ref(null)
+const selectedFlowId = ref('')
+const allPlaylists = ref([])
+const showBranchForm = ref(false)
+const editingBranchId = ref(null)
+const showCreateFlow = ref(false)
+const newFlowName = ref('')
+const keyModifiers = ref({ shift: false, ctrl: false, alt: false })
+const branchForm = ref(getDefaultBranchForm())
+
 const availableAssets = computed(() => allAssets.value)
 
 const playlistId = computed(() => route.params.id)
+
+const sortedBranches = computed(() => {
+  if (!currentFlow.value?.branches) return []
+  return [...currentFlow.value.branches].sort((a, b) => (b.priority || 0) - (a.priority || 0))
+})
+
+function getDefaultBranchForm() {
+  return {
+    source_playlist_id: '',
+    target_playlist_id: '',
+    trigger_type: 'keyboard',
+    priority: 0,
+    trigger_config: { key: 'ArrowRight', modifiers: [] },
+  }
+}
+
+function getDefaultConfigForType(type) {
+  switch (type) {
+    case 'keyboard': return { key: 'ArrowRight', modifiers: [] }
+    case 'touch_zone': return { x_percent: 0, y_percent: 0, width_percent: 100, height_percent: 100 }
+    case 'timeout': return { seconds: 30 }
+    case 'loop_count': return { count: 3 }
+    case 'gpio': return { pin: 17, edge: 'falling', debounce_ms: 200 }
+    case 'webhook': return { token: generateToken() }
+    default: return {}
+  }
+}
+
+function generateToken() {
+  const arr = new Uint8Array(8)
+  crypto.getRandomValues(arr)
+  return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('')
+}
+
+function triggerIcon(type) {
+  switch (type) {
+    case 'keyboard': return 'pi pi-desktop'
+    case 'touch_zone': return 'pi pi-th-large'
+    case 'timeout': return 'pi pi-clock'
+    case 'loop_count': return 'pi pi-replay'
+    case 'gpio': return 'pi pi-microchip'
+    case 'webhook': return 'pi pi-globe'
+    default: return 'pi pi-question'
+  }
+}
+
+function triggerLabel(type, config) {
+  switch (type) {
+    case 'keyboard': return `Key: ${config?.key || '?'}${config?.modifiers?.length ? ' +' + config.modifiers.join('+') : ''}`
+    case 'touch_zone': return `Zone: ${config?.x_percent ?? 0}%,${config?.y_percent ?? 0}% ${config?.width_percent ?? 100}x${config?.height_percent ?? 100}`
+    case 'timeout': return `${config?.seconds ?? 0}s timeout`
+    case 'loop_count': return `After ${config?.count ?? 0} loops`
+    case 'gpio': return `Pin ${config?.pin ?? '?'} (${config?.edge || 'falling'})`
+    case 'webhook': return 'Webhook'
+    default: return type
+  }
+}
 
 function typeIcon(asset) {
   switch (asset.asset_type) {
@@ -252,6 +512,16 @@ async function loadPlaylist() {
       transition_duration: full.transition_duration ?? null,
       default_duration: full.default_duration ?? null,
       shuffle: full.shuffle ?? null,
+    }
+    // Load trigger flow data for advanced playlists
+    if (full.mode === 'advanced') {
+      await loadFlows()
+      selectedFlowId.value = full.trigger_flow_id || ''
+      if (full.trigger_flow_id) {
+        await loadFlow(full.trigger_flow_id)
+      } else {
+        currentFlow.value = null
+      }
     }
   } catch (e) {
     router.push('/playlists')
@@ -286,6 +556,141 @@ async function toggleMode(newMode) {
   await api.patch(`/playlists/${playlist.value.id}`, { mode: newMode })
   showSimplifyConfirm.value = false
   await loadPlaylist()
+}
+
+// --- Trigger Flow functions ---
+
+async function loadFlows() {
+  try {
+    availableFlows.value = await api.get('/trigger-flows')
+  } catch { availableFlows.value = [] }
+}
+
+async function loadFlow(flowId) {
+  if (!flowId) { currentFlow.value = null; return }
+  try {
+    currentFlow.value = await api.get(`/trigger-flows/${flowId}`)
+  } catch { currentFlow.value = null }
+}
+
+async function loadAllPlaylists() {
+  try {
+    allPlaylists.value = await api.get('/playlists')
+  } catch { allPlaylists.value = [] }
+}
+
+async function assignFlow() {
+  if (!playlist.value) return
+  const flowId = selectedFlowId.value || null
+  await api.patch(`/playlists/${playlist.value.id}`, { trigger_flow_id: flowId })
+  await loadPlaylist()
+  if (flowId) {
+    await loadFlow(flowId)
+  } else {
+    currentFlow.value = null
+  }
+}
+
+async function detachFlow() {
+  selectedFlowId.value = ''
+  await assignFlow()
+}
+
+async function createFlow() {
+  const name = newFlowName.value.trim()
+  if (!name) return
+  const flow = await api.post('/trigger-flows', { name })
+  newFlowName.value = ''
+  showCreateFlow.value = false
+  await loadFlows()
+  selectedFlowId.value = flow.id
+  await assignFlow()
+}
+
+function onTriggerTypeChange() {
+  branchForm.value.trigger_config = getDefaultConfigForType(branchForm.value.trigger_type)
+  keyModifiers.value = { shift: false, ctrl: false, alt: false }
+}
+
+function startAddBranch() {
+  editingBranchId.value = null
+  branchForm.value = getDefaultBranchForm()
+  // Default source to current playlist
+  if (playlist.value) branchForm.value.source_playlist_id = playlist.value.id
+  keyModifiers.value = { shift: false, ctrl: false, alt: false }
+  showBranchForm.value = true
+}
+
+function startEditBranch(branch) {
+  editingBranchId.value = branch.id
+  const config = typeof branch.trigger_config === 'string' ? JSON.parse(branch.trigger_config) : { ...branch.trigger_config }
+  branchForm.value = {
+    source_playlist_id: branch.source_playlist_id,
+    target_playlist_id: branch.target_playlist_id,
+    trigger_type: branch.trigger_type,
+    priority: branch.priority || 0,
+    trigger_config: config,
+  }
+  if (branch.trigger_type === 'keyboard') {
+    const mods = config.modifiers || []
+    keyModifiers.value = { shift: mods.includes('Shift'), ctrl: mods.includes('Control'), alt: mods.includes('Alt') }
+  } else {
+    keyModifiers.value = { shift: false, ctrl: false, alt: false }
+  }
+  showBranchForm.value = true
+}
+
+function cancelBranchForm() {
+  showBranchForm.value = false
+  editingBranchId.value = null
+}
+
+function buildTriggerConfig() {
+  const cfg = { ...branchForm.value.trigger_config }
+  if (branchForm.value.trigger_type === 'keyboard') {
+    // Resolve custom key
+    if (cfg.key === '_custom') cfg.key = cfg.customKey || 'a'
+    delete cfg.customKey
+    // Build modifiers
+    const mods = []
+    if (keyModifiers.value.shift) mods.push('Shift')
+    if (keyModifiers.value.ctrl) mods.push('Control')
+    if (keyModifiers.value.alt) mods.push('Alt')
+    cfg.modifiers = mods
+  }
+  return cfg
+}
+
+async function saveBranch() {
+  if (!currentFlow.value) return
+  const payload = {
+    source_playlist_id: branchForm.value.source_playlist_id,
+    target_playlist_id: branchForm.value.target_playlist_id,
+    trigger_type: branchForm.value.trigger_type,
+    trigger_config: buildTriggerConfig(),
+    priority: branchForm.value.priority,
+  }
+  if (!payload.source_playlist_id || !payload.target_playlist_id) return
+
+  if (editingBranchId.value) {
+    await api.patch(`/trigger-branches/${editingBranchId.value}`, payload)
+  } else {
+    await api.post(`/trigger-flows/${currentFlow.value.id}/branches`, payload)
+  }
+  showBranchForm.value = false
+  editingBranchId.value = null
+  await loadFlow(currentFlow.value.id)
+  await loadFlows()
+}
+
+async function deleteBranch(branchId) {
+  await api.delete(`/trigger-branches/${branchId}`)
+  await loadFlow(currentFlow.value.id)
+  await loadFlows()
+}
+
+function regenerateToken() {
+  branchForm.value.trigger_config.token = generateToken()
 }
 
 async function saveSettings() {
@@ -356,7 +761,7 @@ watch(playlistId, () => {
 })
 
 onMounted(async () => {
-  await Promise.all([loadPlaylist(), loadAssets()])
+  await Promise.all([loadPlaylist(), loadAssets(), loadAllPlaylists()])
 })
 </script>
 
@@ -674,6 +1079,230 @@ h3 { margin-bottom: 0.8rem; color: #ddd; font-size: 1rem; }
   font-size: 0.85rem;
   text-align: center;
   padding: 1.5rem 0;
+}
+
+/* Flow selector */
+.flow-selector {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.flow-select {
+  flex: 1;
+  background: #0f1117;
+  border: 1px solid #3a3a5a;
+  color: #eee;
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  outline: none;
+  font-size: 0.85rem;
+}
+
+.flow-select:focus { border-color: #a78bfa; }
+
+.btn-flow {
+  background: #2d2545;
+  color: #a78bfa;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  transition: background 0.15s;
+}
+
+.btn-flow:hover { background: #3d3560; }
+.btn-flow.detach { color: #999; background: #252836; }
+.btn-flow.detach:hover { color: #fff; background: #3a3a5a; }
+
+.inline-form {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.inline-form input { flex: 1; }
+
+/* Branch list */
+.branch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.75rem;
+}
+
+.branch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #0f1117;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  border: 1px solid #2a2d3a;
+}
+
+.branch-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.branch-playlist {
+  color: #ccc;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.branch-trigger-icon {
+  color: #a78bfa;
+  font-size: 0.85rem;
+}
+
+.branch-type-label {
+  color: #888;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.branch-arrow {
+  color: #555;
+  font-size: 0.7rem;
+}
+
+.branch-priority {
+  color: #666;
+  font-size: 0.65rem;
+  background: #252836;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.branch-actions {
+  display: flex;
+  gap: 0.3rem;
+  margin-left: 0.5rem;
+}
+
+.btn-icon {
+  background: transparent;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 0.2rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  transition: color 0.15s;
+}
+
+.btn-icon:hover { color: #a78bfa; }
+.btn-icon.danger:hover { color: #dc3545; }
+
+.btn-add-branch {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #2d2545;
+  color: #a78bfa;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background 0.15s;
+}
+
+.btn-add-branch:hover { background: #3d3560; }
+
+/* Branch form */
+.branch-form {
+  background: #0f1117;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-top: 0.75rem;
+  border: 1px solid #2a2d3a;
+}
+
+.branch-form h4 {
+  color: #a78bfa;
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.branch-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.trigger-config-section {
+  margin-bottom: 0.75rem;
+}
+
+.config-label {
+  display: block;
+  font-size: 0.7rem;
+  color: #a78bfa;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.modifier-checks {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #aaa;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.check-label input[type="checkbox"] {
+  accent-color: #a78bfa;
+}
+
+.webhook-token-row {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.webhook-token-row input { flex: 1; }
+
+.config-hint {
+  color: #555;
+  font-size: 0.7rem;
+  margin-top: 0.25rem;
+  display: block;
+}
+
+.branch-form-actions {
+  display: flex;
+  gap: 0.4rem;
 }
 
 /* Simplify confirmation dialog */
