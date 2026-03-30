@@ -8,6 +8,8 @@
 /** Parse a server ISO timestamp as UTC. */
 export function parseUTC(iso) {
   if (!iso) return null
+  if (iso instanceof Date) return iso
+  if (typeof iso !== 'string') return new Date(iso)
   return new Date(iso.endsWith('Z') ? iso : iso + 'Z')
 }
 
