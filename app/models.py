@@ -171,6 +171,9 @@ class Playlist(Base):
     mode: Mapped[str] = mapped_column(
         String(10), nullable=False, default="simple", server_default="simple"
     )
+    trigger_flow_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("trigger_flows.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )
@@ -185,6 +188,60 @@ class Playlist(Base):
         order_by="PlaylistItem.order"
     )
     devices: Mapped[list["Device"]] = relationship(back_populates="playlist")
+    trigger_flow: Mapped["TriggerFlow | None"] = relationship(foreign_keys=[trigger_flow_id])
+
+
+class TriggerFlow(Base):
+    __tablename__ = "trigger_flows"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+
+    branches: Mapped[list["TriggerBranch"]] = relationship(
+        back_populates="flow", cascade="all, delete-orphan"
+    )
+
+
+class TriggerBranch(Base):
+    __tablename__ = "trigger_branches"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    flow_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("trigger_flows.id", ondelete="CASCADE"), nullable=False
+    )
+    source_playlist_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("playlists.id", ondelete="CASCADE"), nullable=False
+    )
+    target_playlist_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("playlists.id", ondelete="CASCADE"), nullable=False
+    )
+    trigger_type: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # "keyboard", "touch_zone", "gpio", "webhook", "timeout", "loop_count"
+    trigger_config: Mapped[str] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+
+    flow: Mapped["TriggerFlow"] = relationship(back_populates="branches")
+    source_playlist: Mapped["Playlist"] = relationship(foreign_keys=[source_playlist_id])
+    target_playlist: Mapped["Playlist"] = relationship(foreign_keys=[target_playlist_id])
 
 
 class DeviceGroup(Base):

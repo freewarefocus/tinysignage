@@ -25,6 +25,7 @@ from app.api.setup import router as setup_router
 from app.api.storage import router as storage_router
 from app.api.tags import router as tags_router
 from app.api.tokens import router as tokens_router
+from app.api.trigger_flows import router as trigger_flows_router
 from app.api.users import router as users_router
 from app.api.widgets import router as widgets_router
 from app.database import engine, init_db
@@ -107,6 +108,7 @@ app.include_router(settings_router, prefix="/api")
 app.include_router(storage_router, prefix="/api")
 app.include_router(tags_router, prefix="/api")
 app.include_router(tokens_router, prefix="/api")
+app.include_router(trigger_flows_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(widgets_router, prefix="/api")
 app.include_router(setup_router, prefix="/api")

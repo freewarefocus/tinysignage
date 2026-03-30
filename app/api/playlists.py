@@ -75,6 +75,7 @@ def _playlist_summary(p: Playlist) -> dict:
         "default_duration": p.default_duration,
         "shuffle": p.shuffle,
         "mode": p.mode,
+        "trigger_flow_id": p.trigger_flow_id,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
     }
@@ -103,6 +104,7 @@ async def create_playlist(
         "is_default": playlist.is_default,
         "item_count": 0,
         "mode": playlist.mode,
+        "trigger_flow_id": playlist.trigger_flow_id,
         "created_at": playlist.created_at.isoformat() if playlist.created_at else None,
         "updated_at": playlist.updated_at.isoformat() if playlist.updated_at else None,
     }
@@ -135,6 +137,7 @@ async def get_playlist(
         "default_duration": playlist.default_duration,
         "shuffle": playlist.shuffle,
         "mode": playlist.mode,
+        "trigger_flow_id": playlist.trigger_flow_id,
         "created_at": playlist.created_at.isoformat() if playlist.created_at else None,
         "updated_at": playlist.updated_at.isoformat() if playlist.updated_at else None,
     }
@@ -153,7 +156,7 @@ async def update_playlist(
         raise HTTPException(status_code=404, detail="Playlist not found")
     if "mode" in body and body["mode"] not in ("simple", "advanced"):
         raise HTTPException(status_code=400, detail="mode must be 'simple' or 'advanced'")
-    allowed = {"name", "transition_type", "transition_duration", "default_duration", "shuffle", "mode"}
+    allowed = {"name", "transition_type", "transition_duration", "default_duration", "shuffle", "mode", "trigger_flow_id"}
     for key, value in body.items():
         if key in allowed:
             setattr(playlist, key, value)
@@ -171,6 +174,7 @@ async def update_playlist(
         "default_duration": playlist.default_duration,
         "shuffle": playlist.shuffle,
         "mode": playlist.mode,
+        "trigger_flow_id": playlist.trigger_flow_id,
     }
 
 
