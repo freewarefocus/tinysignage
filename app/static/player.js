@@ -66,6 +66,11 @@
     let triggerListenersActive = false; // Whether keyboard listener is registered
     let triggerKeydownHandler = null; // Reference to keydown handler for cleanup
 
+    // --- GPIO bridge state ---
+    let gpioWebSocket = null;         // WebSocket connection to GPIO bridge
+    let gpioReconnectTimer = null;    // Auto-reconnect timer
+    const GPIO_BRIDGE_URL = 'ws://localhost:8765';
+
     // --- Auth ---
     function authHeaders() {
         const headers = { 'Content-Type': 'application/json' };
@@ -1134,6 +1139,7 @@
         registerKeyboardTriggers(branches);
         createTouchZoneOverlays(branches);
         startTimeoutTriggers(branches);
+        connectGpioBridge(branches);
 
         saveTriggerState();
     }
@@ -1155,6 +1161,9 @@
             clearTimeout(triggerTimeoutTimer);
             triggerTimeoutTimer = null;
         }
+
+        // Disconnect GPIO bridge
+        disconnectGpioBridge();
 
         triggerFlow = null;
         currentSourcePlaylistId = '';
@@ -1314,9 +1323,91 @@
             registerKeyboardTriggers(newBranches);
             createTouchZoneOverlays(newBranches);
             startTimeoutTriggers(newBranches);
+            connectGpioBridge(newBranches);
+        } else {
+            disconnectGpioBridge();
         }
 
         saveTriggerState();
+    }
+
+    // --- GPIO WebSocket client ---
+    function connectGpioBridge(branches) {
+        const gpioBranches = branches.filter(b => b.trigger_type === 'gpio');
+        if (gpioBranches.length === 0) {
+            disconnectGpioBridge();
+            return;
+        }
+
+        // Already connected
+        if (gpioWebSocket && gpioWebSocket.readyState === WebSocket.OPEN) return;
+
+        disconnectGpioBridge();
+
+        try {
+            gpioWebSocket = new WebSocket(GPIO_BRIDGE_URL);
+
+            gpioWebSocket.onopen = function () {
+                console.log('[TinySignage] GPIO bridge connected');
+            };
+
+            gpioWebSocket.onmessage = function (event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleGpioEvent(data, gpioBranches);
+                } catch (e) {
+                    console.warn('[TinySignage] GPIO message parse error:', e.message);
+                }
+            };
+
+            gpioWebSocket.onclose = function () {
+                console.log('[TinySignage] GPIO bridge disconnected');
+                gpioWebSocket = null;
+                // Auto-reconnect after 5s if GPIO branches still exist
+                if (triggerFlow) {
+                    gpioReconnectTimer = setTimeout(() => {
+                        const currentBranches = findBranchesForSource(currentSourcePlaylistId);
+                        connectGpioBridge(currentBranches);
+                    }, 5000);
+                }
+            };
+
+            gpioWebSocket.onerror = function () {
+                // onclose will fire after this, handling reconnect
+            };
+        } catch (e) {
+            console.warn('[TinySignage] GPIO bridge connect failed:', e.message);
+        }
+    }
+
+    function disconnectGpioBridge() {
+        if (gpioReconnectTimer) {
+            clearTimeout(gpioReconnectTimer);
+            gpioReconnectTimer = null;
+        }
+        if (gpioWebSocket) {
+            gpioWebSocket.onclose = null; // Prevent reconnect on intentional close
+            gpioWebSocket.close();
+            gpioWebSocket = null;
+        }
+    }
+
+    function handleGpioEvent(data, gpioBranches) {
+        if (activeOverride) return;
+        if (data.type !== 'gpio') return;
+
+        // Match pin and edge against GPIO branches (sorted by priority)
+        for (const branch of gpioBranches) {
+            const config = branch.trigger_config || {};
+            if (config.pin === data.pin) {
+                const expectedEdge = config.edge || 'falling';
+                if (data.edge === expectedEdge) {
+                    console.log('[TinySignage] GPIO trigger fired: pin', data.pin);
+                    fireTrigger(branch);
+                    return;
+                }
+            }
+        }
     }
 
     // --- Trigger state persistence ---

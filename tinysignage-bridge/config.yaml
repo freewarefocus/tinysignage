@@ -1,0 +1,19 @@
+# TinySignage GPIO Bridge — Pin Configuration
+# Each pin maps to a physical button connected to the Raspberry Pi.
+# The bridge broadcasts GPIO events via WebSocket to the player.
+
+websocket_port: 8765
+
+pins:
+  - pin: 17
+    name: "Button 1"
+    pull_up: true
+    bounce_time: 0.2
+  - pin: 27
+    name: "Button 2"
+    pull_up: true
+    bounce_time: 0.2
+  - pin: 22
+    name: "Button 3"
+    pull_up: true
+    bounce_time: 0.2

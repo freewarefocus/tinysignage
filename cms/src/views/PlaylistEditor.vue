@@ -185,7 +185,22 @@
               </div>
             </div>
           </div>
-          <p v-else class="trigger-placeholder">No branches yet. Add one to define trigger transitions.</p>
+          <!-- Preset selector (shown when no branches exist) -->
+          <div v-else class="preset-section">
+            <p class="preset-intro">Start from a preset or add branches manually.</p>
+            <div class="preset-grid">
+              <div
+                v-for="preset in triggerPresets"
+                :key="preset.id"
+                class="preset-card"
+                @click="applyPreset(preset)"
+              >
+                <i :class="preset.icon" class="preset-icon"></i>
+                <div class="preset-name">{{ preset.name }}</div>
+                <div class="preset-desc">{{ preset.description }}</div>
+              </div>
+            </div>
+          </div>
 
           <!-- Add / Edit branch form -->
           <button v-if="canEdit && !showBranchForm" class="btn-add-branch" @click="startAddBranch">
@@ -396,6 +411,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client.js'
 import PlaylistRow from '../components/PlaylistRow.vue'
 import MiniPlayer from '../components/MiniPlayer.vue'
+import { TRIGGER_PRESETS } from '../presets/triggerPresets.js'
+
+const triggerPresets = TRIGGER_PRESETS
 
 const route = useRoute()
 const router = useRouter()
@@ -605,6 +623,35 @@ async function createFlow() {
   await loadFlows()
   selectedFlowId.value = flow.id
   await assignFlow()
+}
+
+async function applyPreset(preset) {
+  // Create a flow if none assigned
+  if (!currentFlow.value) {
+    const flowName = preset.name + ' Flow'
+    const flow = await api.post('/trigger-flows', { name: flowName })
+    await loadFlows()
+    selectedFlowId.value = flow.id
+    await assignFlow()
+  }
+  // Pre-fill branch form with the first preset branch
+  const firstBranch = preset.branches[0]
+  if (!firstBranch) return
+  editingBranchId.value = null
+  const config = { ...firstBranch.trigger_config }
+  // Auto-generate webhook token if needed
+  if (firstBranch.trigger_type === 'webhook' && !config.token) {
+    config.token = generateToken()
+  }
+  branchForm.value = {
+    source_playlist_id: playlist.value?.id || '',
+    target_playlist_id: '',
+    trigger_type: firstBranch.trigger_type,
+    priority: 0,
+    trigger_config: config,
+  }
+  keyModifiers.value = { shift: false, ctrl: false, alt: false }
+  showBranchForm.value = true
 }
 
 function onTriggerTypeChange() {
@@ -1079,6 +1126,57 @@ h3 { margin-bottom: 0.8rem; color: #ddd; font-size: 1rem; }
   font-size: 0.85rem;
   text-align: center;
   padding: 1.5rem 0;
+}
+
+/* Preset selector */
+.preset-section {
+  margin-bottom: 0.75rem;
+}
+
+.preset-intro {
+  color: #666;
+  font-size: 0.8rem;
+  margin-bottom: 0.75rem;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.5rem;
+}
+
+.preset-card {
+  background: #0f1117;
+  border: 1px solid #2a2d3a;
+  border-radius: 6px;
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.preset-card:hover {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 1px #a78bfa33;
+}
+
+.preset-icon {
+  color: #a78bfa;
+  font-size: 1.2rem;
+  margin-bottom: 0.4rem;
+  display: block;
+}
+
+.preset-name {
+  color: #ddd;
+  font-size: 0.82rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.preset-desc {
+  color: #666;
+  font-size: 0.7rem;
+  line-height: 1.4;
 }
 
 /* Flow selector */
