@@ -75,10 +75,26 @@ You can delete any playlist except the default playlist. Before deletion, TinySi
 
 ---
 
+## Simple and advanced mode
+
+Each playlist has a mode: **simple** (default) or **advanced**.
+
+- **Simple** playlists work exactly as described above -- a linear sequence of assets
+- **Advanced** playlists can have an interactive TriggerFlow assigned, enabling trigger-driven transitions between playlists
+
+To make a playlist advanced, open it in the editor and click **Make Advanced**. This reveals the trigger configuration panel where you can assign a TriggerFlow and define branches. To revert, click **Simplify** (with confirmation if branches exist).
+
+Advanced playlists show a purple "Advanced" badge in the playlist list.
+
+See [Interactive Triggers](interactive-triggers.md) for the full trigger system documentation.
+
+---
+
 ## See also
 
 - [Managing Media](managing-media.md) -- Uploading and organizing assets
 - [Devices](devices.md) -- Assigning playlists to devices
 - [Scheduling](scheduling.md) -- Time-based playlist switching
 - [Multi-Zone Layouts](multi-zone-layouts.md) -- Per-zone playlists
+- [Interactive Triggers](interactive-triggers.md) -- Trigger-driven playlist transitions
 - [API Reference](api-reference.md) -- Playlist endpoints

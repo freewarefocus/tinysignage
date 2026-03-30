@@ -71,6 +71,9 @@
     let gpioReconnectTimer = null;    // Auto-reconnect timer
     const GPIO_BRIDGE_URL = 'ws://localhost:8765';
 
+    // --- Webhook trigger state ---
+    let lastSeenWebhookFires = {};    // { branchId: isoTimestamp } — tracks last processed webhook fire
+
     // --- Auth ---
     function authHeaders() {
         const headers = { 'Content-Type': 'application/json' };
@@ -391,6 +394,7 @@
                         }
                     }
                     initTriggerEngine(data.trigger_flow, sourceId);
+                    checkWebhookTriggers();
                 } else if (triggerFlow) {
                     teardownTriggerEngine();
                 }
@@ -1140,6 +1144,7 @@
         createTouchZoneOverlays(branches);
         startTimeoutTriggers(branches);
         connectGpioBridge(branches);
+        initWebhookTracking(branches);
 
         saveTriggerState();
     }
@@ -1168,6 +1173,7 @@
         triggerFlow = null;
         currentSourcePlaylistId = '';
         loopCount = 0;
+        lastSeenWebhookFires = {};
     }
 
     function findBranchesForSource(sourceId) {
@@ -1329,6 +1335,34 @@
         }
 
         saveTriggerState();
+    }
+
+    // --- Webhook trigger tracking ---
+    function initWebhookTracking(branches) {
+        const webhookBranches = branches.filter(b => b.trigger_type === 'webhook');
+        webhookBranches.forEach(b => {
+            if (b.last_webhook_fire && !lastSeenWebhookFires[b.id]) {
+                // On first init, record current fire time so we don't immediately trigger
+                lastSeenWebhookFires[b.id] = b.last_webhook_fire;
+            }
+        });
+    }
+
+    function checkWebhookTriggers() {
+        if (!triggerFlow || !triggerFlow.branches || activeOverride) return;
+        const branches = findBranchesForSource(currentSourcePlaylistId);
+        const webhookBranches = branches.filter(b => b.trigger_type === 'webhook');
+
+        for (const branch of webhookBranches) {
+            if (!branch.last_webhook_fire) continue;
+            const lastSeen = lastSeenWebhookFires[branch.id];
+            if (!lastSeen || branch.last_webhook_fire !== lastSeen) {
+                lastSeenWebhookFires[branch.id] = branch.last_webhook_fire;
+                console.log('[TinySignage] Webhook trigger fired for branch:', branch.id);
+                fireTrigger(branch);
+                return;
+            }
+        }
     }
 
     // --- GPIO WebSocket client ---

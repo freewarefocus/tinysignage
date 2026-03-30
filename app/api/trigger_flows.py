@@ -1,4 +1,6 @@
 import json
+import secrets
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
@@ -37,6 +39,8 @@ def _branch_to_dict(branch: TriggerBranch) -> dict:
         "priority": branch.priority,
         "created_at": branch.created_at.isoformat() if branch.created_at else None,
     }
+    if branch.last_webhook_fire:
+        d["last_webhook_fire"] = branch.last_webhook_fire.isoformat()
     if branch.source_playlist:
         d["source_playlist_name"] = branch.source_playlist.name
     if branch.target_playlist:
@@ -212,7 +216,18 @@ async def add_branch(
 
     trigger_config = body.get("trigger_config", "{}")
     if isinstance(trigger_config, dict):
-        trigger_config = json.dumps(trigger_config)
+        trigger_config_dict = trigger_config
+    else:
+        try:
+            trigger_config_dict = json.loads(trigger_config)
+        except (json.JSONDecodeError, TypeError):
+            trigger_config_dict = {}
+
+    # Auto-generate webhook token if not provided
+    if trigger_type == "webhook" and not trigger_config_dict.get("token"):
+        trigger_config_dict["token"] = secrets.token_hex(8)
+
+    trigger_config = json.dumps(trigger_config_dict)
     _validate_trigger_config(trigger_config)
 
     branch = TriggerBranch(
@@ -326,3 +341,34 @@ async def delete_branch(
     await session.delete(branch)
     await session.commit()
     return {"ok": True}
+
+
+# --- Webhook trigger (public, token-validated) ---
+
+@router.post("/triggers/webhook/{branch_id}")
+async def fire_webhook(
+    branch_id: str,
+    body: dict,
+    session: AsyncSession = Depends(get_session),
+):
+    branch = await session.get(TriggerBranch, branch_id)
+    if not branch:
+        raise HTTPException(status_code=404, detail="Trigger branch not found")
+
+    if branch.trigger_type != "webhook":
+        raise HTTPException(status_code=400, detail="Branch is not a webhook trigger")
+
+    # Validate token
+    try:
+        config = json.loads(branch.trigger_config) if branch.trigger_config else {}
+    except (json.JSONDecodeError, TypeError):
+        config = {}
+
+    expected_token = config.get("token")
+    provided_token = body.get("token")
+    if not expected_token or not provided_token or provided_token != expected_token:
+        raise HTTPException(status_code=403, detail="Invalid webhook token")
+
+    branch.last_webhook_fire = datetime.now(timezone.utc).replace(tzinfo=None)
+    await session.commit()
+    return {"status": "triggered"}

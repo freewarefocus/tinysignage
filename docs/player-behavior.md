@@ -161,6 +161,40 @@ A small colored dot in the corner of the player screen indicates connection stat
 
 ---
 
+## Trigger engine
+
+When a playlist has an assigned TriggerFlow, the player activates the TriggerEngine. This engine registers listeners for each trigger type and swaps the active playlist when a trigger fires.
+
+The trigger engine manipulates the same `playlist`, `settings`, and `playlistHash` variables used by the existing playback loop. Crossfade transitions, multi-zone rendering, and preloading all continue working unchanged.
+
+### Trigger evaluation
+
+| Trigger type | Evaluated | Mechanism |
+|-------------|-----------|-----------|
+| Keyboard | Client-side | `keydown` event listener |
+| Touch zone | Client-side | Invisible overlay `<div>` elements |
+| Timeout | Client-side | `setTimeout` countdown |
+| Loop count | Client-side | Counter incremented on playlist wrap |
+| GPIO | Client-side via bridge | WebSocket connection to GPIO bridge |
+| Webhook | Server-side, polled | `last_webhook_fire` timestamp comparison |
+
+### Webhook trigger flow
+
+1. External system POSTs to `/api/triggers/webhook/{branch_id}` with token
+2. Server records `last_webhook_fire` timestamp on the branch
+3. On next poll, player sees updated timestamp in trigger flow data
+4. Player compares against last seen timestamp and fires trigger if newer
+
+### Trigger state persistence
+
+Trigger state (active flow ID, current source playlist, loop count) is saved to `localStorage`. On reboot, the player resumes from the same position in the trigger flow rather than resetting to the entry playlist.
+
+### Override interaction
+
+Emergency overrides suspend all trigger evaluation. When an override ends, the player returns to the flow's entry playlist.
+
+---
+
 ## See also
 
 - [Devices](devices.md) -- Pairing and health monitoring

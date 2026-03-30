@@ -440,11 +440,12 @@ async def get_device_playlist(
         )
         if tf_payload:
             resp["trigger_flow"] = tf_payload
-            # Extend hash to detect changes in branches and target playlists
+            # Extend hash to detect changes in branches, target playlists, and webhook fires
             branch_parts = []
             for b in tf_payload["branches"]:
                 target_item_ids = "|".join(i["id"] for i in b["target_playlist"]["items"])
-                branch_parts.append(f"{b['id']}:{b['target_playlist_id']}:{target_item_ids}")
+                wh = b.get("last_webhook_fire", "")
+                branch_parts.append(f"{b['id']}:{b['target_playlist_id']}:{target_item_ids}:{wh}")
             tf_hash = hashlib.sha256(";".join(branch_parts).encode()).hexdigest()[:12]
             resp["hash"] += f"-tf{tf_hash}"
 
@@ -457,7 +458,8 @@ async def get_device_playlist(
             branch_parts = []
             for b in resp["trigger_flow"]["branches"]:
                 target_item_ids = "|".join(i["id"] for i in b["target_playlist"]["items"])
-                branch_parts.append(f"{b['id']}:{b['target_playlist_id']}:{target_item_ids}")
+                wh = b.get("last_webhook_fire", "")
+                branch_parts.append(f"{b['id']}:{b['target_playlist_id']}:{target_item_ids}:{wh}")
             tf_hash = hashlib.sha256(";".join(branch_parts).encode()).hexdigest()[:12]
             base_hash += f"-tf{tf_hash}"
         resp["hash"] = base_hash
@@ -514,25 +516,30 @@ async def _build_trigger_flow_payload(
         except (json.JSONDecodeError, TypeError):
             config = {}
 
-        branches_out.append({
+        branch_data = {
             "id": branch.id,
             "source_playlist_id": branch.source_playlist_id,
             "target_playlist_id": branch.target_playlist_id,
             "trigger_type": branch.trigger_type,
             "trigger_config": config,
             "priority": branch.priority,
-            "target_playlist": {
-                "id": target_pl.id,
-                "name": target_pl.name,
-                "items": [_item_to_dict(item) for item in active_items],
-                "settings": {
-                    "transition_duration": _tr("transition_duration", 1.0),
-                    "transition_type": _tr("transition_type", "fade"),
-                    "default_duration": _tr("default_duration", 10),
-                    "shuffle": _tr("shuffle", False),
-                },
+        }
+        if branch.trigger_type == "webhook" and branch.last_webhook_fire:
+            branch_data["last_webhook_fire"] = branch.last_webhook_fire.isoformat()
+
+        branch_data["target_playlist"] = {
+            "id": target_pl.id,
+            "name": target_pl.name,
+            "items": [_item_to_dict(item) for item in active_items],
+            "settings": {
+                "transition_duration": _tr("transition_duration", 1.0),
+                "transition_type": _tr("transition_type", "fade"),
+                "default_duration": _tr("default_duration", 10),
+                "shuffle": _tr("shuffle", False),
             },
-        })
+        }
+
+        branches_out.append(branch_data)
 
     if not branches_out:
         return None

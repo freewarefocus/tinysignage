@@ -1003,6 +1003,113 @@ Body: `{"device_name": "My Display", "username": "admin", "password": "yourpassw
 
 ---
 
+## Trigger flows
+
+Manage interactive trigger flows and branches. See [Interactive Triggers](interactive-triggers.md) for concepts.
+
+### List trigger flows
+
+```
+GET /api/trigger-flows
+Auth: viewer
+```
+
+Returns all trigger flows with branch counts.
+
+Response: array of `{ id, name, description, branch_count, created_at, updated_at }`.
+
+### Create trigger flow
+
+```
+POST /api/trigger-flows
+Auth: editor
+```
+
+Body: `{"name": "Museum Kiosk", "description": "Interactive exhibit flow"}`.
+
+### Get trigger flow
+
+```
+GET /api/trigger-flows/{flow_id}
+Auth: viewer
+```
+
+Returns the flow with all branches (including source/target playlist names).
+
+### Update trigger flow
+
+```
+PATCH /api/trigger-flows/{flow_id}
+Auth: editor
+```
+
+Body: `{"name": "New Name"}`. Updatable fields: `name`, `description`.
+
+### Delete trigger flow
+
+```
+DELETE /api/trigger-flows/{flow_id}
+Auth: editor
+```
+
+Deletes the flow and all branches. Clears `trigger_flow_id` on any playlists referencing this flow.
+
+### Add branch
+
+```
+POST /api/trigger-flows/{flow_id}/branches
+Auth: editor
+```
+
+Body:
+
+```json
+{
+  "source_playlist_id": "playlist-a-uuid",
+  "target_playlist_id": "playlist-b-uuid",
+  "trigger_type": "keyboard",
+  "trigger_config": {"key": "ArrowRight", "modifiers": []},
+  "priority": 0
+}
+```
+
+Valid trigger types: `keyboard`, `touch_zone`, `gpio`, `webhook`, `timeout`, `loop_count`.
+
+For `webhook` branches, a 16-character hex token is auto-generated in `trigger_config` if not provided.
+
+### Update branch
+
+```
+PATCH /api/trigger-branches/{branch_id}
+Auth: editor
+```
+
+Body: any subset of `trigger_type`, `trigger_config`, `source_playlist_id`, `target_playlist_id`, `priority`.
+
+### Delete branch
+
+```
+DELETE /api/trigger-branches/{branch_id}
+Auth: editor
+```
+
+### Fire webhook trigger
+
+```
+POST /api/triggers/webhook/{branch_id}
+Auth: public (token-validated)
+```
+
+Fires a webhook trigger. The branch must be of type `webhook`. The token in the body must match the token in the branch's `trigger_config`.
+
+Body: `{"token": "your-webhook-token"}`.
+
+Response: `{"status": "triggered"}`.
+
+The player picks up the webhook fire on its next poll (up to 30 seconds).
+
+---
+
 ## Static pages
 
 These are not API endpoints but are served by the application:

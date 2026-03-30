@@ -23,6 +23,7 @@ Upload images and videos through a web CMS, arrange them into playlists, and a f
 - **Multi-device management** -- pair devices, monitor health, group them, bulk-assign playlists
 - **Scheduling** -- time windows, day-of-week, RRULE recurrence, priority system
 - **Multi-zone layouts** -- split screens into positioned zones with independent playlists
+- **Interactive triggers** -- keyboard, touch zones, GPIO buttons, webhooks, timeouts -- link playlists with trigger-driven transitions for kiosks, wayfinding, and emergency alerts
 - **Emergency overrides** -- instant message or playlist push to all/group/device, auto-expiry
 - **Role-based access** -- admin, editor, viewer roles with API tokens
 - **Backup and restore** -- one-click ZIP export of database and media
@@ -76,12 +77,12 @@ TinySignage runs on anything with a browser and a screen. No proprietary hardwar
 
 | Component | Approx. cost |
 |-----------|-------------|
-| Raspberry Pi 5 (4GB) | ~$60 |
-| Power supply | ~$12 |
-| Case with heatsink | ~$12 |
-| Micro HDMI cable | ~$8 |
-| 32GB SD card | ~$9 |
-| **Total** | **~$100** |
+| Raspberry Pi 5 (4GB) | ~$85 |
+| Power supply | ~$15 |
+| Case with heatsink | ~$15 |
+| Micro HDMI cable | ~$10 |
+| 16GB SD card | ~$10 |
+| **Total** | **~$135** |
 
 Also works on: any x86 mini PC, retired office PC, Mac, Linux server, or Docker host.
 
@@ -101,6 +102,8 @@ Also works on: any x86 mini PC, retired office PC, Mac, Linux server, or Docker 
 | [Devices](docs/devices.md) | Pairing, health monitoring, groups |
 | [Scheduling](docs/scheduling.md) | Time windows, recurrence, priority |
 | [Multi-Zone Layouts](docs/multi-zone-layouts.md) | Split-screen zone positioning |
+| [Interactive Triggers](docs/interactive-triggers.md) | Keyboard, touch, GPIO, webhook triggers |
+| [GPIO Bridge](docs/gpio-bridge.md) | Physical buttons on Raspberry Pi |
 | [Emergency Overrides](docs/emergency-overrides.md) | Instant override push and auto-expiry |
 | [Users and Permissions](docs/users-and-permissions.md) | RBAC roles, API tokens, sessions |
 | [Backup and Restore](docs/backup-and-restore.md) | ZIP export and import |

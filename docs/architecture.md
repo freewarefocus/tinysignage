@@ -210,8 +210,14 @@ The database uses 17 tables managed by 17 Alembic migrations. Key relationships:
 - ApiTokens reference a User and optionally a Device
 - Assets have Tags via the AssetTag junction table
 - Devices belong to DeviceGroups via DeviceGroupMembership
+- TriggerFlows contain TriggerBranches, which link source and target Playlists
+- Playlists optionally reference a TriggerFlow for interactive trigger behavior
 
 All primary keys are UUID4 strings. All timestamps are naive UTC datetimes.
+
+### Interactive trigger system
+
+The trigger system is a layer above playlists. A TriggerFlow links multiple playlists via trigger-driven transitions (keyboard, touch zones, GPIO, webhooks, timeout, loop count). The player's TriggerEngine evaluates triggers client-side for instant response, with webhooks handled via server-side timestamp comparison on each poll. See [Interactive Triggers](interactive-triggers.md) for details.
 
 ---
 

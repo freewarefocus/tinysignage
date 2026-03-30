@@ -1,5 +1,6 @@
-# Planning docs (private)
+# Planning / testing docs (private)
 .planning/
+.testing/
 
 # Local scripts
 ccdsp.bat
@@ -53,4 +54,3 @@ cms/test_upload.png
 
 # Claude
 .claude/*
-!.claude/CLAUDE.md

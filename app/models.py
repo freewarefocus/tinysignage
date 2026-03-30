@@ -235,6 +235,7 @@ class TriggerBranch(Base):
         Text, nullable=False, default="{}"
     )
     priority: Mapped[int] = mapped_column(Integer, default=0)
+    last_webhook_fire: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )
