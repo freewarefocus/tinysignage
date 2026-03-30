@@ -53,6 +53,7 @@ class PlaylistOut(BaseModel):
     id: str
     name: str
     is_default: bool
+    mode: str = "simple"
     items: list[PlaylistItemOut] = []
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -66,6 +67,7 @@ class PlaylistCreate(BaseModel):
 
 class PlaylistUpdate(BaseModel):
     name: str | None = None
+    mode: str | None = None
 
 
 class PlaylistItemAdd(BaseModel):

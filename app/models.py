@@ -168,6 +168,9 @@ class Playlist(Base):
     transition_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     default_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
     shuffle: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    mode: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="simple", server_default="simple"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )
