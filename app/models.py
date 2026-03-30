@@ -478,6 +478,9 @@ class PlaylistItem(Base):
         String(36), ForeignKey("assets.id", ondelete="CASCADE"), nullable=False
     )
     order: Mapped[int] = mapped_column(Integer, default=0)
+    transition_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    transition_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
+    duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )

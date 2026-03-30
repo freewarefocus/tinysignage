@@ -677,14 +677,18 @@
             return;
         }
 
-        zoneLoadAsset(ctrl, asset);
+        zoneLoadAsset(ctrl, item);
 
-        const duration = zoneGetDuration(ctrl, asset);
+        const duration = zoneGetDuration(ctrl, item);
         if (ctrl.timer) clearTimeout(ctrl.timer);
         ctrl.timer = setTimeout(() => zoneAdvance(ctrl), duration * 1000);
     }
 
-    function zoneGetDuration(ctrl, asset) {
+    function zoneGetDuration(ctrl, item) {
+        const asset = item.asset || item;
+        if (item.duration != null && item.duration > 0) {
+            return item.duration;
+        }
         if (asset.duration === 0 && asset.asset_type === 'video') {
             return MAX_VIDEO_DURATION;
         }
@@ -704,14 +708,15 @@
         zonePlayAsset(ctrl);
     }
 
-    function zoneLoadAsset(ctrl, asset) {
+    function zoneLoadAsset(ctrl, item) {
+        const asset = item.asset || item;
         const isLayerA = ctrl.currentLayer === 'a';
         const nextLayer = isLayerA ? ctrl.layerB : ctrl.layerA;
         const outLayer = isLayerA ? ctrl.layerA : ctrl.layerB;
 
         zoneCleanupLayer(nextLayer);
 
-        const transition = getEffectiveTransition(asset);
+        const transition = getEffectiveTransition(item);
         const doTx = () => zoneDoTransition(ctrl, nextLayer, outLayer, isLayerA ? 'b' : 'a', transition);
 
         let element;
@@ -867,14 +872,19 @@
             return;
         }
 
-        loadAsset(asset);
+        loadAsset(item);
 
-        const duration = getAssetDuration(asset);
+        const duration = getAssetDuration(item);
         cancelPlayback();
         playbackTimer = setTimeout(() => advance(), duration * 1000);
     }
 
-    function getAssetDuration(asset) {
+    function getAssetDuration(item) {
+        const asset = item.asset || item;
+        // Item-level duration override takes precedence
+        if (item.duration != null && item.duration > 0) {
+            return item.duration;
+        }
         if (asset.duration === 0 && asset.asset_type === 'video') {
             return MAX_VIDEO_DURATION;
         }
@@ -913,24 +923,28 @@
         }
     }
 
-    // --- Per-asset transition overrides ---
-    function getEffectiveTransition(asset) {
-        const type = asset.transition_type || currentTransitionType;
-        const duration = (asset.transition_duration != null)
-            ? asset.transition_duration
-            : (settings.transition_duration != null ? settings.transition_duration : 1);
+    // --- Per-item → per-asset → global transition cascade ---
+    function getEffectiveTransition(item) {
+        const asset = item.asset || item;
+        const type = item.transition_type || asset.transition_type || currentTransitionType;
+        const duration = (item.transition_duration != null)
+            ? item.transition_duration
+            : (asset.transition_duration != null)
+                ? asset.transition_duration
+                : (settings.transition_duration != null ? settings.transition_duration : 1);
         return { type, duration };
     }
 
     // --- Asset Loading ---
-    function loadAsset(asset) {
+    function loadAsset(item) {
+        const asset = item.asset || item;
         const nextLayerId = currentLayer === 'a' ? 'b' : 'a';
         const nextLayer = document.getElementById(`layer-${nextLayerId}`);
         const currentLayerEl = document.getElementById(`layer-${currentLayer}`);
 
         cleanupLayer(nextLayer);
 
-        const transition = getEffectiveTransition(asset);
+        const transition = getEffectiveTransition(item);
         const doTx = () => doTransition(nextLayer, currentLayerEl, nextLayerId, transition);
 
         let element;
@@ -1252,9 +1266,9 @@
             return;
         }
 
-        loadAsset(asset);
+        loadAsset(item);
 
-        const duration = getAssetDuration(asset);
+        const duration = getAssetDuration(item);
         cancelPlayback();
         playbackTimer = setTimeout(() => {
             transitionIndex++;

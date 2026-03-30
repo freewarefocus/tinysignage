@@ -20,8 +20,11 @@ def _make_asset(asset_id="a1", content_hash="hash1", duration=10,
     )
 
 
-def _make_item(order, asset):
-    return SimpleNamespace(order=order, asset=asset)
+def _make_item(order, asset, transition_type=None, transition_duration=None, duration=None):
+    return SimpleNamespace(order=order, asset=asset,
+                           transition_type=transition_type,
+                           transition_duration=transition_duration,
+                           duration=duration)
 
 
 def test_playlist_hash_deterministic():

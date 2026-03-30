@@ -24,7 +24,7 @@ from app.auth import (
     require_viewer,
 )
 from app.database import get_session
-from app.models import ApiToken, Asset, Device, DeviceGroupMembership, Layout, LayoutZone, Override, Playlist, PlaylistItem, Schedule, Settings, TriggerBranch, TriggerFlow
+from app.models import ApiToken, Asset, AssetTag, Device, DeviceGroupMembership, Layout, LayoutZone, Override, Playlist, PlaylistItem, Schedule, Settings, TriggerBranch, TriggerFlow
 
 PAIRING_CODE_TTL = timedelta(minutes=10)
 _config_path = Path("config.yaml")
@@ -431,7 +431,7 @@ async def get_device_playlist(
                 select(Playlist)
                 .where(Playlist.id == effective_playlist_id)
                 .options(
-                    selectinload(Playlist.items).selectinload(PlaylistItem.asset)
+                    selectinload(Playlist.items).selectinload(PlaylistItem.asset).selectinload(Asset.asset_tags).selectinload(AssetTag.tag)
                 )
             )
             playlist = result.scalars().first()
@@ -495,7 +495,7 @@ async def get_device_playlist(
         select(Playlist)
         .where(Playlist.id == effective_playlist_id)
         .options(
-            selectinload(Playlist.items).selectinload(PlaylistItem.asset)
+            selectinload(Playlist.items).selectinload(PlaylistItem.asset).selectinload(Asset.asset_tags).selectinload(AssetTag.tag)
         )
     )
     playlist = result.scalars().first()
@@ -542,7 +542,7 @@ async def get_device_playlist(
         tp_result = await session.execute(
             select(Playlist)
             .where(Playlist.id == transition_playlist_id)
-            .options(selectinload(Playlist.items).selectinload(PlaylistItem.asset))
+            .options(selectinload(Playlist.items).selectinload(PlaylistItem.asset).selectinload(Asset.asset_tags).selectinload(AssetTag.tag))
         )
         tp = tp_result.scalars().first()
         if tp:
@@ -599,7 +599,7 @@ async def _build_trigger_flow_payload(
     pl_result = await session.execute(
         select(Playlist)
         .where(Playlist.id.in_(target_ids))
-        .options(selectinload(Playlist.items).selectinload(PlaylistItem.asset))
+        .options(selectinload(Playlist.items).selectinload(PlaylistItem.asset).selectinload(Asset.asset_tags).selectinload(AssetTag.tag))
     )
     targets_by_id = {pl.id: pl for pl in pl_result.scalars().all()}
 
@@ -687,7 +687,7 @@ async def _build_zones_payload(layout_id: str, session: AsyncSession) -> list[di
         pl_result = await session.execute(
             select(Playlist)
             .where(Playlist.id.in_(playlist_ids))
-            .options(selectinload(Playlist.items).selectinload(PlaylistItem.asset))
+            .options(selectinload(Playlist.items).selectinload(PlaylistItem.asset).selectinload(Asset.asset_tags).selectinload(AssetTag.tag))
         )
         for pl in pl_result.scalars().all():
             playlists_by_id[pl.id] = pl
@@ -821,7 +821,7 @@ async def preflight_check(
     result = await session.execute(
         select(Playlist)
         .where(Playlist.id == playlist_id)
-        .options(selectinload(Playlist.items).selectinload(PlaylistItem.asset))
+        .options(selectinload(Playlist.items).selectinload(PlaylistItem.asset).selectinload(Asset.asset_tags).selectinload(AssetTag.tag))
     )
     playlist = result.scalars().first()
     if not playlist:

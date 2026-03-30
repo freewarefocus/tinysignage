@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.audit import record as audit
 from app.auth import require_editor, require_token, require_viewer
 from app.database import get_session
-from app.models import ApiToken, Asset, Device, LayoutZone, Override, Playlist, PlaylistItem, Schedule
+from app.models import ApiToken, Asset, AssetTag, Device, LayoutZone, Override, Playlist, PlaylistItem, Schedule, Tag
 
 router = APIRouter()
 
@@ -19,18 +19,23 @@ def _playlist_hash(items: list[PlaylistItem]) -> str:
     for item in sorted(items, key=lambda i: i.order):
         asset = item.asset
         content = asset.content_hash or asset.id
-        parts.append(f"{item.order}:{asset.id}:{content}:{asset.duration}:{asset.is_enabled}:{asset.transition_type}:{asset.transition_duration}")
+        parts.append(
+            f"{item.order}:{asset.id}:{content}:{asset.duration}:{asset.is_enabled}"
+            f":{asset.transition_type}:{asset.transition_duration}"
+            f":{item.transition_type}:{item.transition_duration}:{item.duration}"
+        )
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
 
 def _item_to_dict(item: PlaylistItem) -> dict:
     asset = item.asset
-    return {
-        "id": item.id,
-        "playlist_id": item.playlist_id,
-        "asset_id": item.asset_id,
-        "order": item.order,
-        "asset": {
+    asset_dict = None
+    if asset:
+        tags = []
+        if hasattr(asset, 'asset_tags') and asset.asset_tags:
+            tags = [{"id": at.tag.id, "name": at.tag.name, "color": at.tag.color}
+                    for at in asset.asset_tags if at.tag]
+        asset_dict = {
             "id": asset.id,
             "name": asset.name,
             "asset_type": asset.asset_type,
@@ -44,7 +49,17 @@ def _item_to_dict(item: PlaylistItem) -> dict:
             "content_hash": asset.content_hash,
             "transition_type": asset.transition_type,
             "transition_duration": asset.transition_duration,
-        } if asset else None,
+            "tags": tags,
+        }
+    return {
+        "id": item.id,
+        "playlist_id": item.playlist_id,
+        "asset_id": item.asset_id,
+        "order": item.order,
+        "transition_type": item.transition_type,
+        "transition_duration": item.transition_duration,
+        "duration": item.duration,
+        "asset": asset_dict,
         "created_at": item.created_at.isoformat() if item.created_at else None,
     }
 
@@ -57,6 +72,7 @@ async def list_playlists(
     result = await session.execute(
         select(Playlist).options(
             selectinload(Playlist.items).selectinload(PlaylistItem.asset)
+            .selectinload(Asset.asset_tags).selectinload(AssetTag.tag)
         )
     )
     playlists = result.scalars().all()
@@ -121,6 +137,7 @@ async def get_playlist(
         .where(Playlist.id == playlist_id)
         .options(
             selectinload(Playlist.items).selectinload(PlaylistItem.asset)
+            .selectinload(Asset.asset_tags).selectinload(AssetTag.tag)
         )
     )
     playlist = result.scalars().first()
@@ -271,6 +288,7 @@ async def get_playlist_hash(
         .where(Playlist.id == playlist_id)
         .options(
             selectinload(Playlist.items).selectinload(PlaylistItem.asset)
+            .selectinload(Asset.asset_tags).selectinload(AssetTag.tag)
         )
     )
     playlist = result.scalars().first()
@@ -315,11 +333,14 @@ async def add_item_to_playlist(
                 token=_admin, request=request)
     await session.commit()
 
-    # Re-fetch with asset loaded
+    # Re-fetch with asset and tags loaded
     result = await session.execute(
         select(PlaylistItem)
         .where(PlaylistItem.id == item.id)
-        .options(selectinload(PlaylistItem.asset))
+        .options(
+            selectinload(PlaylistItem.asset)
+            .selectinload(Asset.asset_tags).selectinload(AssetTag.tag)
+        )
     )
     item = result.scalars().first()
     return _item_to_dict(item)
@@ -347,6 +368,50 @@ async def remove_item_from_playlist(
     await session.delete(item)
     await session.commit()
     return {"ok": True}
+
+
+@router.patch("/playlists/{playlist_id}/items/{item_id}")
+async def update_playlist_item(
+    playlist_id: str,
+    item_id: str,
+    body: dict,
+    request: Request,
+    _admin: ApiToken = Depends(require_editor),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(PlaylistItem).where(
+            PlaylistItem.id == item_id,
+            PlaylistItem.playlist_id == playlist_id,
+        )
+    )
+    item = result.scalars().first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Playlist item not found")
+
+    allowed = {"transition_type", "transition_duration", "duration"}
+    changes = {}
+    for key, value in body.items():
+        if key in allowed:
+            setattr(item, key, value)
+            changes[key] = value
+
+    await audit(session, action="update_item", entity_type="playlist", entity_id=playlist_id,
+                details={"item_id": item_id, "changes": changes},
+                token=_admin, request=request)
+    await session.commit()
+
+    # Re-fetch with asset and tags loaded
+    result = await session.execute(
+        select(PlaylistItem)
+        .where(PlaylistItem.id == item.id)
+        .options(
+            selectinload(PlaylistItem.asset)
+            .selectinload(Asset.asset_tags).selectinload(AssetTag.tag)
+        )
+    )
+    item = result.scalars().first()
+    return _item_to_dict(item)
 
 
 @router.post("/playlists/{playlist_id}/reorder")

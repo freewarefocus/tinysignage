@@ -13,12 +13,55 @@
         <i :class="typeIcon"></i>
       </div>
     </div>
-    <div class="row-info">
-      <div class="row-name">{{ item.asset?.name || 'Unknown' }}</div>
-      <div class="row-meta">
-        <span class="type-badge">{{ item.asset?.asset_type }}</span>
-        <span v-if="item.asset?.duration">{{ item.asset.duration }}s</span>
-        <span v-else-if="item.asset?.asset_type === 'video'">auto</span>
+    <div class="row-body">
+      <div class="row-top">
+        <div class="row-info">
+          <div class="row-name">{{ item.asset?.name || 'Unknown' }}</div>
+          <div class="row-meta">
+            <span class="type-badge">{{ item.asset?.asset_type }}</span>
+            <span v-if="item.asset?.duration">{{ item.asset.duration }}s</span>
+            <span v-else-if="item.asset?.asset_type === 'video'">auto</span>
+            <span
+              v-for="t in tags"
+              :key="t.id"
+              class="item-tag"
+              :style="{ background: t.color + '22', color: t.color, borderColor: t.color + '55' }"
+            >{{ t.name }}</span>
+          </div>
+        </div>
+      </div>
+      <div v-if="canEdit" class="row-controls">
+        <div class="control-group">
+          <label>Transition</label>
+          <select :value="item.transition_type || ''" @change="onUpdate('transition_type', $event.target.value || null)">
+            <option value="">Default</option>
+            <option value="fade">Fade</option>
+            <option value="slide">Slide</option>
+            <option value="cut">Cut</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label>Tx dur</label>
+          <input
+            type="number"
+            :value="item.transition_duration ?? ''"
+            @change="onUpdate('transition_duration', $event.target.value === '' ? null : Number($event.target.value))"
+            min="0" max="30" step="0.5"
+            placeholder="--"
+            class="num-input"
+          />
+        </div>
+        <div class="control-group">
+          <label>Display</label>
+          <input
+            type="number"
+            :value="item.duration ?? ''"
+            @change="onUpdate('duration', $event.target.value === '' ? null : Number($event.target.value))"
+            min="1" max="3600" step="1"
+            placeholder="--"
+            class="num-input"
+          />
+        </div>
       </div>
     </div>
     <div class="row-actions">
@@ -32,8 +75,13 @@
 <script setup>
 import { computed } from 'vue'
 
-const props = defineProps({ item: Object })
-defineEmits(['remove'])
+const props = defineProps({
+  item: Object,
+  canEdit: { type: Boolean, default: false },
+})
+const emit = defineEmits(['remove', 'update'])
+
+const tags = computed(() => props.item.asset?.tags || [])
 
 const typeIcon = computed(() => {
   switch (props.item.asset?.asset_type) {
@@ -43,6 +91,10 @@ const typeIcon = computed(() => {
     default: return 'pi pi-image'
   }
 })
+
+function onUpdate(field, value) {
+  emit('update', { id: props.item.id, field, value })
+}
 
 function onDragStart(e) {
   e.dataTransfer.effectAllowed = 'move'
@@ -58,7 +110,7 @@ function onDragEnd(e) {
 <style scoped>
 .playlist-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.75rem;
   padding: 0.5rem 0.75rem;
   background: #1a1d27;
@@ -78,6 +130,7 @@ function onDragEnd(e) {
 .drag-handle {
   color: #555;
   cursor: grab;
+  padding-top: 0.4rem;
 }
 
 .row-thumb {
@@ -87,6 +140,7 @@ function onDragEnd(e) {
   border-radius: 4px;
   overflow: hidden;
   background: #0f1117;
+  margin-top: 0.15rem;
 }
 
 .row-thumb img {
@@ -108,6 +162,16 @@ function onDragEnd(e) {
   font-size: 1rem;
 }
 
+.row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-top {
+  display: flex;
+  align-items: center;
+}
+
 .row-info {
   flex: 1;
   min-width: 0;
@@ -123,7 +187,8 @@ function onDragEnd(e) {
 
 .row-meta {
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.35rem;
   font-size: 0.75rem;
   color: #888;
   margin-top: 2px;
@@ -136,6 +201,68 @@ function onDragEnd(e) {
   text-transform: uppercase;
   font-size: 0.6rem;
   letter-spacing: 0.5px;
+}
+
+.item-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0px 5px;
+  border-radius: 10px;
+  font-size: 0.6rem;
+  border: 1px solid;
+  line-height: 1.4;
+}
+
+/* Per-item controls */
+.row-controls {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.35rem;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.control-group label {
+  font-size: 0.6rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.control-group select {
+  background: #0f1117;
+  border: 1px solid #2a2d3a;
+  color: #aaa;
+  font-size: 0.7rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+}
+
+.control-group select:focus { border-color: #7c83ff; }
+
+.num-input {
+  width: 42px;
+  background: #0f1117;
+  border: 1px solid #2a2d3a;
+  color: #aaa;
+  font-size: 0.7rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  outline: none;
+  text-align: center;
+}
+
+.num-input:focus { border-color: #7c83ff; }
+
+.row-actions {
+  padding-top: 0.3rem;
 }
 
 .btn-remove {

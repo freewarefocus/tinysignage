@@ -50,9 +50,7 @@ const layerB = ref(null)
 let timer = null
 
 const assets = computed(() =>
-  props.items
-    .filter(item => item.asset)
-    .map(item => item.asset)
+  props.items.filter(item => item.asset)
 )
 
 const orderedAssets = computed(() => {
@@ -66,18 +64,18 @@ const orderedAssets = computed(() => {
   return arr
 })
 
-const transitionDur = computed(() => props.transitionDuration ?? 1)
-const txType = computed(() => props.transitionType || 'fade')
+const currentTxType = ref(props.transitionType || 'fade')
+const currentTxDur = ref(props.transitionDuration ?? 1)
 const prevLayer = ref(null)   // tracks which layer just became inactive (for slide-out)
 
 const layerStyle = computed(() => {
-  if (txType.value === 'cut') return { transitionDuration: '0s' }
-  return { '--mp-tx-dur': transitionDur.value + 's' }
+  if (currentTxType.value === 'cut') return { transitionDuration: '0s' }
+  return { '--mp-tx-dur': currentTxDur.value + 's' }
 })
 
 function layerClasses(id) {
   const isActive = activeLayer.value === id
-  const isSlide = txType.value === 'slide'
+  const isSlide = currentTxType.value === 'slide'
   return {
     'mp-visible': isActive && !isSlide,
     'mp-slide': isSlide,
@@ -86,14 +84,26 @@ function layerClasses(id) {
   }
 }
 
-function assetSrc(asset) {
+function getItemTransition(item) {
+  if (!item) return { type: props.transitionType || 'fade', dur: props.transitionDuration ?? 1 }
+  const type = item.transition_type || item.asset?.transition_type || props.transitionType || 'fade'
+  const dur = item.transition_duration ?? item.asset?.transition_duration ?? props.transitionDuration ?? 1
+  return { type, dur }
+}
+
+function getAsset(item) {
+  return item?.asset || item
+}
+
+function assetSrc(item) {
+  const asset = getAsset(item)
   if (!asset) return ''
   if (asset.asset_type === 'url') return asset.uri
-  // For images/videos, use the media path
   return asset.uri.startsWith('http') ? asset.uri : `/media/${asset.uri}`
 }
 
-function layerComponent(asset) {
+function layerComponent(item) {
+  const asset = getAsset(item)
   if (!asset) return 'div'
   switch (asset.asset_type) {
     case 'video': return 'video'
@@ -103,9 +113,10 @@ function layerComponent(asset) {
   }
 }
 
-function layerProps(asset) {
+function layerProps(item) {
+  const asset = getAsset(item)
   if (!asset) return {}
-  const src = assetSrc(asset)
+  const src = assetSrc(item)
   switch (asset.asset_type) {
     case 'video':
       return { src, autoplay: true, muted: true, loop: true, class: 'mp-media' }
@@ -118,22 +129,30 @@ function layerProps(asset) {
   }
 }
 
-function getDuration(asset) {
-  if (!asset) return props.defaultDuration
+function getDuration(item) {
+  if (!item) return props.defaultDuration
+  // Item-level override → asset duration → global default
+  if (item.duration != null && item.duration > 0) return item.duration
+  const asset = item.asset || item
   return asset.duration || props.defaultDuration
 }
 
 function showAsset(index) {
-  const asset = orderedAssets.value[index]
-  if (!asset) return
+  const item = orderedAssets.value[index]
+  if (!item) return
+
+  // Apply this item's transition settings
+  const tx = getItemTransition(item)
+  currentTxType.value = tx.type
+  currentTxDur.value = tx.dur
 
   const prev = activeLayer.value
   // Load into the inactive layer, then flip
   if (prev === 'a') {
-    layerB.value = asset
+    layerB.value = item
     nextTick(() => { prevLayer.value = 'a'; activeLayer.value = 'b' })
   } else {
-    layerA.value = asset
+    layerA.value = item
     nextTick(() => { prevLayer.value = 'b'; activeLayer.value = 'a' })
   }
   currentIndex.value = index
@@ -149,8 +168,8 @@ function advance() {
 function scheduleNext() {
   clearTimeout(timer)
   if (!playing.value) return
-  const asset = orderedAssets.value[currentIndex.value]
-  const dur = getDuration(asset) * 1000
+  const item = orderedAssets.value[currentIndex.value]
+  const dur = getDuration(item) * 1000
   timer = setTimeout(advance, dur)
 }
 
@@ -167,6 +186,8 @@ function reset() {
   clearTimeout(timer)
   currentIndex.value = 0
   activeLayer.value = 'a'
+  currentTxType.value = props.transitionType || 'fade'
+  currentTxDur.value = props.transitionDuration ?? 1
   if (orderedAssets.value.length > 0) {
     layerA.value = orderedAssets.value[0]
     layerB.value = null

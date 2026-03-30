@@ -367,8 +367,10 @@
           v-for="item in items"
           :key="item.id"
           :item="item"
+          :can-edit="canEdit"
           :data-item-id="item.id"
           @remove="removeItem"
+          @update="updateItem"
         />
       </div>
 
@@ -775,6 +777,12 @@ async function addToPlaylist(asset) {
 async function removeItem(item) {
   if (!playlist.value) return
   await api.delete(`/playlists/${playlist.value.id}/items/${item.id}`)
+  await loadPlaylist()
+}
+
+async function updateItem({ id, field, value }) {
+  if (!playlist.value) return
+  await api.patch(`/playlists/${playlist.value.id}/items/${id}`, { [field]: value })
   await loadPlaylist()
 }
 
