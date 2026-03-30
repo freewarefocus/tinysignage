@@ -1,4 +1,5 @@
 import hashlib
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -22,7 +23,7 @@ from app.auth import (
     require_viewer,
 )
 from app.database import get_session
-from app.models import ApiToken, Asset, Device, DeviceGroupMembership, Layout, LayoutZone, Override, Playlist, PlaylistItem, Schedule, Settings
+from app.models import ApiToken, Asset, Device, DeviceGroupMembership, Layout, LayoutZone, Override, Playlist, PlaylistItem, Schedule, Settings, TriggerBranch, TriggerFlow
 
 PAIRING_CODE_TTL = timedelta(minutes=10)
 _config_path = Path("config.yaml")
@@ -432,11 +433,115 @@ async def get_device_playlist(
             }
             resp["hash"] += f"-tp{tp.id[:8]}"
 
+    # Include trigger_flow when playlist has one (not during overrides)
+    if playlist.trigger_flow_id:
+        tf_payload = await _build_trigger_flow_payload(
+            playlist.trigger_flow_id, playlist.id, session, settings
+        )
+        if tf_payload:
+            resp["trigger_flow"] = tf_payload
+            # Extend hash to detect changes in branches and target playlists
+            branch_parts = []
+            for b in tf_payload["branches"]:
+                target_item_ids = "|".join(i["id"] for i in b["target_playlist"]["items"])
+                branch_parts.append(f"{b['id']}:{b['target_playlist_id']}:{target_item_ids}")
+            tf_hash = hashlib.sha256(";".join(branch_parts).encode()).hexdigest()[:12]
+            resp["hash"] += f"-tf{tf_hash}"
+
     if zones_data:
         resp["zones"] = zones_data
-        resp["hash"] = _playlist_hash(active_items) + "-" + _zones_hash(zones_data)
+        # Rebuild hash including zones; preserve any trigger_flow hash suffix
+        base_hash = _playlist_hash(active_items) + "-" + _zones_hash(zones_data)
+        # Re-append trigger_flow hash if present
+        if "trigger_flow" in resp:
+            branch_parts = []
+            for b in resp["trigger_flow"]["branches"]:
+                target_item_ids = "|".join(i["id"] for i in b["target_playlist"]["items"])
+                branch_parts.append(f"{b['id']}:{b['target_playlist_id']}:{target_item_ids}")
+            tf_hash = hashlib.sha256(";".join(branch_parts).encode()).hexdigest()[:12]
+            base_hash += f"-tf{tf_hash}"
+        resp["hash"] = base_hash
 
     return resp
+
+
+async def _build_trigger_flow_payload(
+    flow_id: str, source_playlist_id: str, session: AsyncSession, global_settings: Settings | None
+) -> dict | None:
+    """Load a TriggerFlow with branches and pre-resolved target playlists."""
+    result = await session.execute(
+        select(TriggerFlow)
+        .where(TriggerFlow.id == flow_id)
+        .options(selectinload(TriggerFlow.branches))
+    )
+    flow = result.scalars().first()
+    if not flow or not flow.branches:
+        return None
+
+    # Batch-load all target playlists (avoids N+1)
+    target_ids = list({b.target_playlist_id for b in flow.branches})
+    pl_result = await session.execute(
+        select(Playlist)
+        .where(Playlist.id.in_(target_ids))
+        .options(selectinload(Playlist.items).selectinload(PlaylistItem.asset))
+    )
+    targets_by_id = {pl.id: pl for pl in pl_result.scalars().all()}
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    branches_out = []
+    for branch in flow.branches:
+        target_pl = targets_by_id.get(branch.target_playlist_id)
+        if not target_pl:
+            continue
+
+        # Filter target items same as main playlist
+        active_items = [
+            item for item in target_pl.items
+            if item.asset and item.asset.is_enabled
+            and (not item.asset.start_date or item.asset.start_date <= now)
+            and (not item.asset.end_date or item.asset.end_date >= now)
+        ]
+
+        # Resolve per-playlist > global settings
+        def _tr(field, default, _pl=target_pl):
+            val = getattr(_pl, field, None)
+            if val is not None:
+                return val
+            return getattr(global_settings, field, default) if global_settings else default
+
+        try:
+            config = json.loads(branch.trigger_config) if branch.trigger_config else {}
+        except (json.JSONDecodeError, TypeError):
+            config = {}
+
+        branches_out.append({
+            "id": branch.id,
+            "source_playlist_id": branch.source_playlist_id,
+            "target_playlist_id": branch.target_playlist_id,
+            "trigger_type": branch.trigger_type,
+            "trigger_config": config,
+            "priority": branch.priority,
+            "target_playlist": {
+                "id": target_pl.id,
+                "name": target_pl.name,
+                "items": [_item_to_dict(item) for item in active_items],
+                "settings": {
+                    "transition_duration": _tr("transition_duration", 1.0),
+                    "transition_type": _tr("transition_type", "fade"),
+                    "default_duration": _tr("default_duration", 10),
+                    "shuffle": _tr("shuffle", False),
+                },
+            },
+        })
+
+    if not branches_out:
+        return None
+
+    return {
+        "id": flow.id,
+        "source_playlist_id": source_playlist_id,
+        "branches": branches_out,
+    }
 
 
 async def _build_zones_payload(layout_id: str, session: AsyncSession) -> list[dict]:
