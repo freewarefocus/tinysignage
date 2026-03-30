@@ -58,6 +58,14 @@
     let activeZones = [];             // Array of zone playback controllers
     let zonesActive = false;          // Whether we're in multi-zone mode
 
+    // --- Trigger engine state ---
+    let triggerFlow = null;           // Current trigger flow data from server
+    let currentSourcePlaylistId = ''; // Which playlist is currently active in the flow
+    let loopCount = 0;               // How many times the current playlist has looped
+    let triggerTimeoutTimer = null;   // Timeout trigger timer
+    let triggerListenersActive = false; // Whether keyboard listener is registered
+    let triggerKeydownHandler = null; // Reference to keydown handler for cleanup
+
     // --- Auth ---
     function authHeaders() {
         const headers = { 'Content-Type': 'application/json' };
@@ -229,6 +237,25 @@
                 playlistHash = data.hash || '';
                 settings = data.settings || {};
                 applySettings(settings);
+
+                // Restore trigger flow from cache
+                if (data.trigger_flow) {
+                    let sourceId = data.trigger_flow.source_playlist_id;
+                    const savedState = loadTriggerState();
+                    if (savedState && savedState.flowId === data.trigger_flow.id && savedState.sourcePlaylistId) {
+                        const savedBranch = data.trigger_flow.branches.find(
+                            b => b.target_playlist_id === savedState.sourcePlaylistId
+                        );
+                        if (savedBranch && savedBranch.target_playlist) {
+                            sourceId = savedState.sourcePlaylistId;
+                            playlist = savedBranch.target_playlist.items || [];
+                            settings = savedBranch.target_playlist.settings || {};
+                            applySettings(settings);
+                            loopCount = savedState.loopCount || 0;
+                        }
+                    }
+                    initTriggerEngine(data.trigger_flow, sourceId);
+                }
             }
         } catch (e) {
             console.warn('[TinySignage] Failed to load cached playlist:', e);
@@ -268,6 +295,7 @@
                 deviceToken = '';
                 cancelPlayback();
                 teardownZones();
+                teardownTriggerEngine();
                 showPairingOverlay();
                 return;
             }
@@ -336,6 +364,30 @@
                     return;
                 } else {
                     teardownZones();
+                }
+
+                // --- Trigger engine integration ---
+                if (data.trigger_flow) {
+                    // Restore source playlist from saved state if resuming same flow
+                    let sourceId = data.trigger_flow.source_playlist_id;
+                    const savedState = loadTriggerState();
+                    if (savedState && savedState.flowId === data.trigger_flow.id && savedState.sourcePlaylistId) {
+                        // Find the saved source in the flow's branches as a target
+                        const savedBranch = data.trigger_flow.branches.find(
+                            b => b.target_playlist_id === savedState.sourcePlaylistId
+                        );
+                        if (savedBranch && savedBranch.target_playlist) {
+                            // Resume on the previously active playlist
+                            sourceId = savedState.sourcePlaylistId;
+                            playlist = savedBranch.target_playlist.items || [];
+                            settings = savedBranch.target_playlist.settings || {};
+                            applySettings(settings);
+                            loopCount = savedState.loopCount || 0;
+                        }
+                    }
+                    initTriggerEngine(data.trigger_flow, sourceId);
+                } else if (triggerFlow) {
+                    teardownTriggerEngine();
                 }
 
                 preloadAssets();
@@ -662,7 +714,11 @@
             currentIndex = next;
         } else {
             currentIndex++;
-            if (currentIndex >= playlist.length) currentIndex = 0;
+            if (currentIndex >= playlist.length) {
+                currentIndex = 0;
+                // Playlist wrapped — check loop count triggers
+                if (triggerFlow) checkLoopCount();
+            }
         }
         playCurrentAsset();
     }
@@ -1053,6 +1109,237 @@
         sendCapabilities();
         if (capabilityTimer) clearInterval(capabilityTimer);
         capabilityTimer = setInterval(sendCapabilities, CAPABILITY_REPORT_INTERVAL);
+    }
+
+    // ===================================================================
+    // TRIGGER ENGINE
+    // Listens for keyboard, touch, timeout, and loop_count triggers
+    // and swaps the active playlist when a trigger fires.
+    // ===================================================================
+
+    function initTriggerEngine(flowData, sourcePlaylistId) {
+        teardownTriggerEngine();
+        triggerFlow = flowData;
+        currentSourcePlaylistId = sourcePlaylistId;
+        loopCount = 0;
+
+        console.log('[TinySignage] TriggerEngine init — flow:', flowData.id, 'source:', sourcePlaylistId);
+
+        const branches = findBranchesForSource(sourcePlaylistId);
+        if (branches.length === 0) {
+            console.log('[TinySignage] No trigger branches for source playlist');
+            return;
+        }
+
+        registerKeyboardTriggers(branches);
+        createTouchZoneOverlays(branches);
+        startTimeoutTriggers(branches);
+
+        saveTriggerState();
+    }
+
+    function teardownTriggerEngine() {
+        // Remove keyboard listener
+        if (triggerKeydownHandler) {
+            document.removeEventListener('keydown', triggerKeydownHandler);
+            triggerKeydownHandler = null;
+        }
+        triggerListenersActive = false;
+
+        // Remove touch zones
+        const container = document.getElementById('touch-zones-container');
+        if (container) container.innerHTML = '';
+
+        // Clear timeout timer
+        if (triggerTimeoutTimer) {
+            clearTimeout(triggerTimeoutTimer);
+            triggerTimeoutTimer = null;
+        }
+
+        triggerFlow = null;
+        currentSourcePlaylistId = '';
+        loopCount = 0;
+    }
+
+    function findBranchesForSource(sourceId) {
+        if (!triggerFlow || !triggerFlow.branches) return [];
+        return triggerFlow.branches
+            .filter(b => b.source_playlist_id === sourceId)
+            .sort((a, b) => (b.priority || 0) - (a.priority || 0));
+    }
+
+    function registerKeyboardTriggers(branches) {
+        const keyBranches = branches.filter(b => b.trigger_type === 'keyboard');
+        if (keyBranches.length === 0) return;
+
+        triggerKeydownHandler = function (e) {
+            // Skip if override is active or pairing form is visible
+            if (activeOverride) return;
+            const pairingOverlay = document.getElementById('pairing-overlay');
+            if (pairingOverlay && !pairingOverlay.classList.contains('hidden')) return;
+
+            for (const branch of keyBranches) {
+                const config = branch.trigger_config || {};
+                if (!config.key) continue;
+
+                if (e.key !== config.key) continue;
+
+                const modifiers = config.modifiers || [];
+                if (modifiers.includes('Shift') !== e.shiftKey) continue;
+                if (modifiers.includes('Ctrl') !== e.ctrlKey) continue;
+                if (modifiers.includes('Alt') !== e.altKey) continue;
+                if (modifiers.includes('Meta') !== e.metaKey) continue;
+
+                e.preventDefault();
+                console.log('[TinySignage] Keyboard trigger fired:', config.key);
+                fireTrigger(branch);
+                return;
+            }
+        };
+
+        document.addEventListener('keydown', triggerKeydownHandler);
+        triggerListenersActive = true;
+        console.log('[TinySignage] Registered', keyBranches.length, 'keyboard trigger(s)');
+    }
+
+    function createTouchZoneOverlays(branches) {
+        const touchBranches = branches.filter(b => b.trigger_type === 'touch_zone');
+        if (touchBranches.length === 0) return;
+
+        const container = document.getElementById('touch-zones-container');
+        if (!container) return;
+        container.innerHTML = '';
+
+        touchBranches.forEach(branch => {
+            const config = branch.trigger_config || {};
+            const zone = document.createElement('div');
+            zone.className = 'touch-zone';
+            zone.style.left = (config.x_percent || 0) + '%';
+            zone.style.top = (config.y_percent || 0) + '%';
+            zone.style.width = (config.width_percent || 20) + '%';
+            zone.style.height = (config.height_percent || 20) + '%';
+
+            const handler = function (e) {
+                if (activeOverride) return;
+                e.preventDefault();
+                console.log('[TinySignage] Touch zone trigger fired');
+                fireTrigger(branch);
+            };
+            zone.addEventListener('click', handler);
+            zone.addEventListener('touchstart', handler, { passive: false });
+
+            container.appendChild(zone);
+        });
+
+        console.log('[TinySignage] Created', touchBranches.length, 'touch zone overlay(s)');
+    }
+
+    function startTimeoutTriggers(branches) {
+        const timeoutBranch = branches.find(b => b.trigger_type === 'timeout');
+        if (!timeoutBranch) return;
+
+        const config = timeoutBranch.trigger_config || {};
+        const seconds = config.seconds || 30;
+
+        if (triggerTimeoutTimer) clearTimeout(triggerTimeoutTimer);
+        triggerTimeoutTimer = setTimeout(() => {
+            if (activeOverride) return;
+            console.log('[TinySignage] Timeout trigger fired after', seconds, 's');
+            fireTrigger(timeoutBranch);
+        }, seconds * 1000);
+
+        console.log('[TinySignage] Timeout trigger set for', seconds, 's');
+    }
+
+    function checkLoopCount() {
+        if (!triggerFlow) return;
+        loopCount++;
+
+        const branches = findBranchesForSource(currentSourcePlaylistId);
+        const loopBranch = branches.find(b => b.trigger_type === 'loop_count');
+        if (!loopBranch) return;
+
+        const config = loopBranch.trigger_config || {};
+        const targetCount = config.count || 3;
+
+        if (loopCount >= targetCount) {
+            console.log('[TinySignage] Loop count trigger fired after', loopCount, 'loops');
+            fireTrigger(loopBranch);
+        }
+    }
+
+    function fireTrigger(branch) {
+        if (!branch.target_playlist) {
+            console.warn('[TinySignage] Trigger branch has no target_playlist data');
+            return;
+        }
+
+        const target = branch.target_playlist;
+        console.log('[TinySignage] Firing trigger → target playlist:', target.name || target.id);
+
+        // Teardown current triggers before swapping
+        if (triggerKeydownHandler) {
+            document.removeEventListener('keydown', triggerKeydownHandler);
+            triggerKeydownHandler = null;
+        }
+        triggerListenersActive = false;
+        const touchContainer = document.getElementById('touch-zones-container');
+        if (touchContainer) touchContainer.innerHTML = '';
+        if (triggerTimeoutTimer) {
+            clearTimeout(triggerTimeoutTimer);
+            triggerTimeoutTimer = null;
+        }
+
+        // Swap playlist and settings
+        playlist = target.items || [];
+        settings = target.settings || {};
+        playlistHash = playlistHash + '-trig' + Date.now();
+        currentSourcePlaylistId = branch.target_playlist_id;
+        currentIndex = 0;
+        loopCount = 0;
+
+        applySettings(settings);
+        cancelPlayback();
+
+        if (playlist.length > 0) {
+            playCurrentAsset();
+            preloadAssets();
+        } else {
+            showSplash();
+        }
+
+        // Re-register triggers for the new source playlist
+        const newBranches = findBranchesForSource(currentSourcePlaylistId);
+        if (newBranches.length > 0) {
+            registerKeyboardTriggers(newBranches);
+            createTouchZoneOverlays(newBranches);
+            startTimeoutTriggers(newBranches);
+        }
+
+        saveTriggerState();
+    }
+
+    // --- Trigger state persistence ---
+    function saveTriggerState() {
+        try {
+            if (triggerFlow) {
+                localStorage.setItem('tinysignage_trigger_state', JSON.stringify({
+                    flowId: triggerFlow.id,
+                    sourcePlaylistId: currentSourcePlaylistId,
+                    loopCount: loopCount,
+                }));
+            } else {
+                localStorage.removeItem('tinysignage_trigger_state');
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    function loadTriggerState() {
+        try {
+            const raw = localStorage.getItem('tinysignage_trigger_state');
+            if (raw) return JSON.parse(raw);
+        } catch (e) { /* ignore */ }
+        return null;
     }
 
     // --- Go ---
