@@ -17,6 +17,7 @@ from app.auth import (
     generate_pairing_code,
     generate_token,
     hash_pairing_code,
+    hash_registration_key,
     hash_token,
     require_admin,
     require_device,
@@ -51,12 +52,20 @@ async def list_devices(
 
 
 @router.post("/devices/register")
-async def register_with_pairing_code(
+async def register_device(
     body: dict,
     request: Request,
     session: AsyncSession = Depends(get_session),
 ):
-    """Public endpoint: exchange a pairing code for a device token."""
+    """Public endpoint: register via pairing code or registration key."""
+    # Dispatch on body shape
+    if "registration_key" in body:
+        return await _register_with_key(body, request, session)
+    return await _register_with_pairing_code(body, request, session)
+
+
+async def _register_with_pairing_code(body: dict, request: Request, session: AsyncSession):
+    """Exchange a pairing code for a device token (pre-approved path)."""
     code = body.get("code", "").strip().upper()
     if not code:
         raise HTTPException(status_code=400, detail="Pairing code required")
@@ -94,13 +103,70 @@ async def register_with_pairing_code(
     matched_device.registration_expires = None
 
     await audit(session, action="register", entity_type="device", entity_id=matched_device.id,
-                details={"name": matched_device.name}, request=request)
+                details={"name": matched_device.name, "method": "pairing_code"}, request=request)
     await session.commit()
 
     return {
         "device_id": matched_device.id,
         "device_name": matched_device.name,
         "token": plaintext,
+    }
+
+
+async def _register_with_key(body: dict, request: Request, session: AsyncSession):
+    """Register a new device using the shared registration key (pending approval)."""
+    key = body.get("registration_key", "").strip()
+    name = body.get("name", "New Display").strip() or "New Display"
+
+    if not key:
+        raise HTTPException(status_code=400, detail="Registration key required")
+
+    # Validate key against stored hash
+    settings = await session.get(Settings, 1)
+    if not settings or not settings.registration_key_hash:
+        raise HTTPException(status_code=400, detail="Registration key not configured on this server")
+
+    if hash_registration_key(key) != settings.registration_key_hash:
+        raise HTTPException(status_code=400, detail="Invalid registration key")
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # Assign default playlist
+    playlist_result = await session.execute(
+        select(Playlist).where(Playlist.is_default == True)
+    )
+    default_playlist = playlist_result.scalars().first()
+
+    # Create device in pending status
+    device = Device(
+        name=name,
+        status="pending",
+        playlist_id=default_playlist.id if default_playlist else None,
+        ip_address=request.client.host if request.client else None,
+    )
+    session.add(device)
+    await session.flush()
+
+    # Generate device token
+    plaintext = generate_token()
+    token = ApiToken(
+        token_hash=hash_token(plaintext),
+        name=f"Device: {name}",
+        role="device",
+        device_id=device.id,
+        created_by="registration_key",
+    )
+    session.add(token)
+
+    await audit(session, action="register", entity_type="device", entity_id=device.id,
+                details={"name": name, "method": "registration_key"}, request=request)
+    await session.commit()
+
+    return {
+        "device_id": device.id,
+        "device_name": name,
+        "token": plaintext,
+        "status": "pending",
     }
 
 
@@ -264,6 +330,55 @@ async def generate_device_pairing_code(
     }
 
 
+@router.post("/devices/{device_id}/approve")
+async def approve_device(
+    device_id: str,
+    request: Request,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    """Admin-only: approve a pending device."""
+    device = await session.get(Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    if device.status != "pending":
+        raise HTTPException(status_code=400, detail="Device is not pending approval")
+
+    device.status = "offline"  # Will become online on next heartbeat
+    await audit(session, action="approve", entity_type="device", entity_id=device_id,
+                details={"name": device.name}, token=_admin, request=request)
+    await session.commit()
+    return {"ok": True, "status": "offline"}
+
+
+@router.post("/devices/{device_id}/reject")
+async def reject_device(
+    device_id: str,
+    request: Request,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    """Admin-only: reject a pending device (deletes it)."""
+    device = await session.get(Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    if device.status != "pending":
+        raise HTTPException(status_code=400, detail="Device is not pending approval")
+
+    # Delete API tokens for this device
+    result = await session.execute(
+        select(ApiToken).where(ApiToken.device_id == device_id)
+    )
+    for token in result.scalars().all():
+        await session.delete(token)
+
+    await audit(session, action="reject", entity_type="device", entity_id=device_id,
+                details={"name": device.name}, token=_admin, request=request)
+    await session.delete(device)
+    await session.commit()
+    return {"ok": True}
+
+
 @router.get("/devices/{device_id}/playlist")
 async def get_device_playlist(
     device_id: str,
@@ -278,8 +393,16 @@ async def get_device_playlist(
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
 
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # Pending devices get no content — just update last_seen
+    if device.status == "pending":
+        device.last_seen = now
+        await session.commit()
+        return {"status": "pending"}
+
     # Update last_seen (strip tzinfo — SQLite stores naive datetimes)
-    device.last_seen = datetime.now(timezone.utc).replace(tzinfo=None)
+    device.last_seen = now
     device.status = "online"
     await session.commit()
 

@@ -256,6 +256,61 @@ html, body, #player { width: 100%; height: 100%; overflow: hidden; background: #
     display: none;
 }
 
+/* --- Pending Approval Overlay --- */
+#pending-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    background: #0f1117;
+}
+
+#pending-overlay.hidden {
+    display: none;
+}
+
+.pending-card {
+    text-align: center;
+    max-width: 420px;
+    padding: 2.5rem;
+}
+
+.pending-card h1 {
+    font-family: system-ui, sans-serif;
+    font-size: 1.5rem;
+    color: #fff;
+    margin-bottom: 0.5rem;
+}
+
+.pending-card p {
+    font-family: system-ui, sans-serif;
+    font-size: 1rem;
+    color: #f0ad4e;
+    margin-bottom: 0.3rem;
+}
+
+.pending-hint {
+    color: #888 !important;
+    font-size: 0.85rem !important;
+    margin-top: 1rem !important;
+}
+
+.pending-spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid #2a2d3a;
+    border-top-color: #f0ad4e;
+    border-radius: 50%;
+    margin: 0 auto 1.5rem;
+    animation: pending-spin 1s linear infinite;
+}
+
+@keyframes pending-spin {
+    to { transform: rotate(360deg); }
+}
+
 /* --- Emergency Override Overlay --- */
 #emergency-overlay {
     position: absolute;

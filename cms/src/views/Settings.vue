@@ -31,6 +31,35 @@
 
     <hr class="section-divider" />
 
+    <h3>Registration Key</h3>
+    <p class="section-desc">Players use this key to self-register. They appear as "pending" until you approve them.</p>
+
+    <div class="regkey-section">
+      <div v-if="regKeyStatus">
+        <div class="regkey-status">
+          <span v-if="regKeyStatus.has_key" class="regkey-active">Active</span>
+          <span v-else class="regkey-none">Not configured</span>
+          <span v-if="regKeyStatus.has_key && regKeyStatus.created_at" class="regkey-date">
+            Created {{ relativeDate(regKeyStatus.created_at) }}
+          </span>
+        </div>
+      </div>
+
+      <div v-if="generatedKey" class="regkey-display">
+        <div class="regkey-value">
+          <input type="text" :value="generatedKey" readonly @click="$event.target.select()" class="regkey-input" />
+          <button @click="copyRegKey" class="btn-copy">Copy</button>
+        </div>
+        <p class="regkey-warning">This key is shown once. If lost, regenerate a new one. Already-registered devices are not affected.</p>
+      </div>
+
+      <button @click="regenerateRegKey" :disabled="regenerating" class="btn-save">
+        {{ regKeyStatus?.has_key ? 'Regenerate Key' : 'Generate Key' }}
+      </button>
+    </div>
+
+    <hr class="section-divider" />
+
     <h3>Backup & Restore</h3>
     <p class="section-desc">Export or import a complete backup of your database and media files.</p>
 
@@ -88,8 +117,44 @@ const importing = ref(false)
 const selectedFile = ref(null)
 const fileInput = ref(null)
 
+// Registration key
+const regKeyStatus = ref(null)
+const generatedKey = ref(null)
+const regenerating = ref(false)
+
 async function loadSettings() {
   settings.value = await api.get('/settings')
+}
+
+async function loadRegKeyStatus() {
+  try {
+    regKeyStatus.value = await api.get('/settings/registration-key')
+  } catch (err) { console.warn('[Settings] Failed to load reg key status:', err) }
+}
+
+async function regenerateRegKey() {
+  regenerating.value = true
+  try {
+    const result = await api.post('/settings/registration-key/regenerate')
+    generatedKey.value = result.registration_key
+    await loadRegKeyStatus()
+    toast.add({ severity: 'success', summary: 'Key Generated', detail: 'Copy it now — it won\'t be shown again.', life: 8000 })
+  } finally {
+    regenerating.value = false
+  }
+}
+
+function copyRegKey() {
+  if (generatedKey.value) {
+    navigator.clipboard.writeText(generatedKey.value)
+    toast.add({ severity: 'info', summary: 'Copied', detail: 'Registration key copied to clipboard.', life: 3000 })
+  }
+}
+
+function relativeDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso + 'Z')
+  return d.toLocaleDateString()
 }
 
 async function saveSettings() {
@@ -196,7 +261,10 @@ function formatSize(bytes) {
   return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB'
 }
 
-onMounted(loadSettings)
+onMounted(() => {
+  loadSettings()
+  loadRegKeyStatus()
+})
 </script>
 
 <style scoped>
@@ -409,5 +477,83 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 .btn-cancel:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Registration key */
+.regkey-section {
+  max-width: 500px;
+}
+
+.regkey-status {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.8rem;
+}
+
+.regkey-active {
+  color: #4caf50;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.regkey-none {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.regkey-date {
+  color: #666;
+  font-size: 0.8rem;
+}
+
+.regkey-display {
+  background: #1a1d27;
+  border: 1px solid #3a3a5a;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.regkey-value {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.regkey-input {
+  flex: 1;
+  background: #0f1117;
+  border: 1px solid #3a3a5a;
+  color: #f0ad4e;
+  padding: 0.6rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 1.1rem;
+  text-align: center;
+  letter-spacing: 0.15em;
+}
+
+.btn-copy {
+  background: #3a3a5a;
+  color: #ccc;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.btn-copy:hover {
+  background: #4a4d5a;
+  color: #fff;
+}
+
+.regkey-warning {
+  color: #888;
+  font-size: 0.78rem;
+  margin: 0;
 }
 </style>

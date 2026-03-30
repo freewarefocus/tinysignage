@@ -237,15 +237,58 @@
       </div>
     </div>
 
+    <!-- Pending devices section -->
+    <div v-if="pendingDevices.length > 0" class="pending-section">
+      <h3 class="pending-title">Pending Approval</h3>
+      <div class="pending-grid">
+        <div v-for="d in pendingDevices" :key="d.id" class="pending-card">
+          <div class="pending-card-header">
+            <span class="card-name">{{ d.name }}</span>
+            <span class="pending-badge">PENDING</span>
+          </div>
+          <div class="pending-card-body">
+            <div class="card-field" v-if="d.ip_address">
+              <i class="pi pi-globe"></i>
+              <span class="mono">{{ d.ip_address }}</span>
+            </div>
+            <div class="card-field">
+              <i class="pi pi-clock"></i>
+              <span>Registered {{ d.created_at ? relativeTime(d.created_at) : 'just now' }}</span>
+            </div>
+          </div>
+          <div class="pending-actions">
+            <button class="btn-approve" @click.stop="approveDevice(d)">
+              <i class="pi pi-check"></i> Approve
+            </button>
+            <button class="btn-reject" @click.stop="confirmRejectDevice(d)">
+              <i class="pi pi-times"></i> Reject
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reject confirmation dialog -->
+    <div v-if="rejectTarget" class="dialog-overlay" @click.self="rejectTarget = null">
+      <div class="dialog">
+        <h3>Reject Device</h3>
+        <p>Reject <strong>{{ rejectTarget.name }}</strong>? This device will be deleted and must re-register.</p>
+        <div class="dialog-actions">
+          <button class="btn-secondary" @click="rejectTarget = null">Cancel</button>
+          <button class="btn-danger" @click="doRejectDevice">Reject</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="loading" class="loading">Loading devices...</div>
 
-    <div v-else-if="sortedDevices.length === 0" class="empty">
+    <div v-else-if="activeDevices.length === 0 && pendingDevices.length === 0" class="empty">
       No devices registered. Click <strong>Add Device</strong> to get started.
     </div>
 
-    <div v-else class="device-grid">
+    <div v-else-if="activeDevices.length > 0" class="device-grid">
       <div
-        v-for="d in sortedDevices"
+        v-for="d in activeDevices"
         :key="d.id"
         class="device-card"
         @click="openDevice(d)"
@@ -311,15 +354,24 @@ const healthMap = computed(() => {
   return map
 })
 
-// Sorted devices: red overall first, then yellow, then green
-const sortedDevices = computed(() => {
+// Split pending vs active devices
+const pendingDevices = computed(() =>
+  devices.value.filter(d => d.status === 'pending')
+)
+
+const activeDevices = computed(() => {
   const order = { red: 0, yellow: 1, green: 2 }
-  return [...devices.value].sort((a, b) => {
-    const aLevel = healthMap.value[a.id]?.overall || 'green'
-    const bLevel = healthMap.value[b.id]?.overall || 'green'
-    return (order[aLevel] ?? 2) - (order[bLevel] ?? 2)
-  })
+  return devices.value
+    .filter(d => d.status !== 'pending')
+    .sort((a, b) => {
+      const aLevel = healthMap.value[a.id]?.overall || 'green'
+      const bLevel = healthMap.value[b.id]?.overall || 'green'
+      return (order[aLevel] ?? 2) - (order[bLevel] ?? 2)
+    })
 })
+
+// Keep sortedDevices as alias for activeDevices (used in template)
+const sortedDevices = activeDevices
 
 // Add Device
 const showAddDevice = ref(false)
@@ -338,6 +390,7 @@ const detailLayoutId = ref('')
 const devicePairing = ref(null)
 const deviceHealth = ref(null)
 const deleteTarget = ref(null)
+const rejectTarget = ref(null)
 
 // Pre-flight
 const showPreflightDialog = ref(false)
@@ -476,6 +529,24 @@ async function doDeleteDevice() {
   deleteTarget.value = null
   await api.delete(`/devices/${id}`)
   closeDetail()
+  await loadDevices()
+}
+
+async function approveDevice(d) {
+  await api.post(`/devices/${d.id}/approve`)
+  await loadDevices()
+  await loadHealthDashboard()
+}
+
+function confirmRejectDevice(d) {
+  rejectTarget.value = d
+}
+
+async function doRejectDevice() {
+  if (!rejectTarget.value) return
+  const id = rejectTarget.value.id
+  rejectTarget.value = null
+  await api.post(`/devices/${id}/reject`)
   await loadDevices()
 }
 
@@ -725,6 +796,7 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 
 .status-dot.status-online { background: #4caf50; box-shadow: 0 0 6px rgba(76, 175, 80, 0.5); }
 .status-dot.status-offline { background: #f44336; }
+.status-dot.status-pending { background: #f0ad4e; box-shadow: 0 0 6px rgba(240, 173, 78, 0.5); }
 .status-dot.status-unknown { background: #666; }
 
 /* Signal dots */
@@ -930,6 +1002,7 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 
 .status-badge.status-online { color: #4caf50; }
 .status-badge.status-offline { color: #f44336; }
+.status-badge.status-pending { color: #f0ad4e; }
 .status-badge.status-unknown { color: #666; }
 
 .detail-section {
@@ -1048,4 +1121,93 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 }
 
 .btn-danger:hover { background: #7a2840; }
+
+/* Pending section */
+.pending-section {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background: rgba(240, 173, 78, 0.05);
+  border: 1px solid rgba(240, 173, 78, 0.2);
+  border-radius: 8px;
+}
+
+.pending-title {
+  color: #f0ad4e;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.8rem;
+}
+
+.pending-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.8rem;
+}
+
+.pending-card {
+  background: #1a1d27;
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  border: 1px solid rgba(240, 173, 78, 0.3);
+}
+
+.pending-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.pending-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #f0ad4e;
+  background: rgba(240, 173, 78, 0.15);
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+}
+
+.pending-card-body {
+  margin-bottom: 0.8rem;
+}
+
+.pending-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-approve {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #2d6a2e;
+  color: #8f8;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background 0.15s;
+}
+
+.btn-approve:hover { background: #3a8a3c; }
+
+.btn-reject {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #5a2030;
+  color: #f88;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background 0.15s;
+}
+
+.btn-reject:hover { background: #7a2840; }
 </style>

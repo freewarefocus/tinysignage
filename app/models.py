@@ -62,6 +62,8 @@ class Settings(Base):
     transition_type: Mapped[str] = mapped_column(String(20), default="fade")
     default_duration: Mapped[int] = mapped_column(Integer, default=10)
     shuffle: Mapped[bool] = mapped_column(Boolean, default=False)
+    registration_key_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    registration_key_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Layout(Base):

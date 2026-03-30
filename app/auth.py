@@ -46,6 +46,18 @@ def generate_pairing_code() -> str:
     return "".join(secrets.choice(_PAIRING_CHARS) for _ in range(6))
 
 
+def generate_registration_key() -> str:
+    """Generate a XXXX-XXXX-XXXX registration key (~62 bits of entropy)."""
+    part = lambda: "".join(secrets.choice(_PAIRING_CHARS) for _ in range(4))
+    return f"{part()}-{part()}-{part()}"
+
+
+def hash_registration_key(key: str) -> str:
+    """SHA-256 hex digest of a registration key (normalized: uppercase, no dashes)."""
+    normalized = key.upper().replace("-", "")
+    return hashlib.sha256(normalized.encode()).hexdigest()
+
+
 def hash_pairing_code(code: str) -> str:
     """SHA-256 hex digest of a pairing code (uppercased for consistency)."""
     return hashlib.sha256(code.upper().encode()).hexdigest()

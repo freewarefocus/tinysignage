@@ -1,5 +1,6 @@
 """First-boot wizard API — captures device name, admin account, and initial configuration."""
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -8,9 +9,9 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import generate_token, hash_password, hash_token
+from app.auth import generate_registration_key, generate_token, hash_password, hash_registration_key, hash_token
 from app.database import get_session
-from app.models import ApiToken, Device, User
+from app.models import ApiToken, Device, Settings, User
 
 router = APIRouter()
 
@@ -122,6 +123,17 @@ document.getElementById('setup-form').addEventListener('submit', async (e) => {
     html += '</div>';
     html += '</div>';
   }
+  if (data.registration_key) {
+    html += '<div class="hero-section" style="margin-top:1rem">';
+    html += '<h2 style="font-size:1.1rem;color:#fff;margin-bottom:0.3rem">Registration Key</h2>';
+    html += '<p style="color:#888;font-size:0.85rem;margin-bottom:0.8rem">Give this key to anyone installing a player. Players register themselves and wait for your approval.</p>';
+    html += '<div style="display:flex;gap:0.5rem;margin-bottom:0.5rem">';
+    html += '<input type="text" id="reg-key" value="' + data.registration_key + '" readonly onclick="this.select()" style="margin-bottom:0;font-size:1.1rem;font-family:monospace;text-align:center;letter-spacing:0.15em">';
+    html += '<button type="button" onclick="navigator.clipboard.writeText(document.getElementById(\\'reg-key\\').value)" style="width:auto;padding:0.6rem 1rem;font-size:0.85rem;white-space:nowrap">Copy</button>';
+    html += '</div>';
+    html += '<p style="color:#666;font-size:0.78rem">This key is shown once. You can regenerate it later in Settings.</p>';
+    html += '</div>';
+  }
   if (data.admin_token) {
     html += '<details style="margin-top:1rem;border-top:1px solid #2a2d3a;padding-top:0.8rem">';
     html += '<summary style="color:#888;font-size:0.85rem;cursor:pointer;margin-bottom:0.5rem">Technical: API Token (optional)</summary>';
@@ -217,6 +229,14 @@ async def complete_setup(body: dict, session: AsyncSession = Depends(get_session
         )
         session.add(device_token)
 
+    # Generate registration key for screen-door registration
+    reg_key_plaintext = generate_registration_key()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    settings = await session.get(Settings, 1)
+    if settings:
+        settings.registration_key_hash = hash_registration_key(reg_key_plaintext)
+        settings.registration_key_created_at = now
+
     await session.commit()
 
     # Mark setup as done
@@ -230,4 +250,5 @@ async def complete_setup(body: dict, session: AsyncSession = Depends(get_session
         "admin_token": admin_plaintext,
         "device_token": device_plaintext,
         "server_url": server_url,
+        "registration_key": reg_key_plaintext,
     }

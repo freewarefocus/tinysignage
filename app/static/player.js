@@ -257,6 +257,34 @@
         document.getElementById('pairing-overlay').classList.add('hidden');
     }
 
+    // --- Registration Key ---
+    async function registerWithKey(key, name) {
+        const resp = await fetch(apiUrl('/api/devices/register'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ registration_key: key, name: name }),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || 'Registration failed');
+        }
+        return await resp.json();
+    }
+
+    // --- Pending Overlay ---
+    function showPendingOverlay(deviceName) {
+        const overlay = document.getElementById('pending-overlay');
+        const nameEl = document.getElementById('pending-device-name');
+        if (nameEl && deviceName) {
+            nameEl.textContent = deviceName;
+        }
+        overlay.classList.remove('hidden');
+    }
+
+    function hidePendingOverlay() {
+        document.getElementById('pending-overlay').classList.add('hidden');
+    }
+
     // --- Startup ---
     async function init() {
         const params = new URLSearchParams(window.location.search);
@@ -294,6 +322,31 @@
             deviceId = storedId;
             deviceToken = storedToken;
             startPlayer();
+            return;
+        }
+
+        // Auto-register via registration key (from meta tag or URL param)
+        const regKeyMeta = document.querySelector('meta[name="registration-key"]');
+        const displayNameMeta = document.querySelector('meta[name="display-name"]');
+        const regKey = params.get('regkey') || (regKeyMeta ? regKeyMeta.content : '');
+        const displayName = params.get('name') || (displayNameMeta ? displayNameMeta.content : '');
+
+        if (regKey) {
+            try {
+                PlayerLog.info('Auto-registering with registration key');
+                const data = await registerWithKey(regKey, displayName || 'New Display');
+                storeCredentials(data.device_id, data.token);
+                cleanUrl();
+                if (data.status === 'pending') {
+                    showPendingOverlay(data.device_name || displayName);
+                    startPlayer();
+                } else {
+                    showPairingSuccess(data.device_name || 'Device');
+                }
+            } catch (err) {
+                PlayerLog.error('Registration key failed: ' + err.message);
+                showPairingOverlay();
+            }
             return;
         }
 
@@ -390,6 +443,14 @@
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
             setOnlineStatus(true);
+
+            // --- Pending approval gate ---
+            if (data.status === 'pending') {
+                showPendingOverlay();
+                return;
+            }
+            // Device was approved — hide pending overlay if it was showing
+            hidePendingOverlay();
 
             // --- Emergency override handling ---
             if (data.override) {

@@ -128,6 +128,8 @@ async def root():
 async def player_page():
     config = yaml.safe_load(_config_path.read_text())
     server_url = config.get("server_url", "")
+    reg_key = config.get("registration_key", "")
+    display_name = config.get("display_name", "")
     # Read PLAYER_VERSION from player.js for cache-busting
     player_version = "0"
     try:
@@ -138,8 +140,12 @@ async def player_page():
     except Exception:
         pass
     html_content = _player_html.read_text(encoding="utf-8")
-    # Inject server-url meta tag after <head> so player.js can read it
+    # Inject meta tags after <head> so player.js can read them
     meta_tag = f'<meta name="server-url" content="{html.escape(server_url, quote=True)}">'
+    if reg_key:
+        meta_tag += f'\n    <meta name="registration-key" content="{html.escape(reg_key, quote=True)}">'
+    if display_name:
+        meta_tag += f'\n    <meta name="display-name" content="{html.escape(display_name, quote=True)}">'
     html_content = html_content.replace("<head>", f"<head>\n    {meta_tag}", 1)
     # Cache-bust CSS and JS with version query parameter
     html_content = html_content.replace("/static/player.css", f"/static/player.css?v={player_version}")

@@ -40,8 +40,14 @@ async def player_heartbeat(
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     device.last_heartbeat = now
     device.last_seen = now
-    device.status = "online"
     device.ip_address = request.client.host if request.client else None
+
+    # Pending devices: update last_seen but don't promote to online
+    if device.status == "pending":
+        await session.commit()
+        return {"status": "pending", "server_time": now.isoformat()}
+
+    device.status = "online"
 
     if "player_version" in body:
         device.player_version = body["player_version"]
@@ -176,7 +182,8 @@ async def report_capabilities(
     device.capabilities = json.dumps(body)
     device.capabilities_updated_at = now
     device.last_seen = now
-    device.status = "online"
+    if device.status != "pending":
+        device.status = "online"
 
     await session.commit()
     return {"status": "ok"}
