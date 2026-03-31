@@ -22,7 +22,7 @@ def _playlist_hash(items: list[PlaylistItem]) -> str:
         parts.append(
             f"{item.order}:{asset.id}:{content}:{asset.duration}:{asset.is_enabled}"
             f":{asset.transition_type}:{asset.transition_duration}"
-            f":{item.transition_type}:{item.transition_duration}:{item.duration}"
+            f":{item.transition_type}:{item.transition_duration}:{item.duration}:{item.object_fit}"
         )
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
@@ -59,6 +59,7 @@ def _item_to_dict(item: PlaylistItem) -> dict:
         "transition_type": item.transition_type,
         "transition_duration": item.transition_duration,
         "duration": item.duration,
+        "object_fit": item.object_fit,
         "asset": asset_dict,
         "created_at": item.created_at.isoformat() if item.created_at else None,
     }
@@ -90,6 +91,7 @@ def _playlist_summary(p: Playlist) -> dict:
         "transition_duration": p.transition_duration,
         "default_duration": p.default_duration,
         "shuffle": p.shuffle,
+        "object_fit": p.object_fit,
         "mode": p.mode,
         "trigger_flow_id": p.trigger_flow_id,
         "created_at": p.created_at.isoformat() if p.created_at else None,
@@ -153,6 +155,7 @@ async def get_playlist(
         "transition_duration": playlist.transition_duration,
         "default_duration": playlist.default_duration,
         "shuffle": playlist.shuffle,
+        "object_fit": playlist.object_fit,
         "mode": playlist.mode,
         "trigger_flow_id": playlist.trigger_flow_id,
         "created_at": playlist.created_at.isoformat() if playlist.created_at else None,
@@ -173,7 +176,7 @@ async def update_playlist(
         raise HTTPException(status_code=404, detail="Playlist not found")
     if "mode" in body and body["mode"] not in ("simple", "advanced"):
         raise HTTPException(status_code=400, detail="mode must be 'simple' or 'advanced'")
-    allowed = {"name", "transition_type", "transition_duration", "default_duration", "shuffle", "mode", "trigger_flow_id"}
+    allowed = {"name", "transition_type", "transition_duration", "default_duration", "shuffle", "object_fit", "mode", "trigger_flow_id"}
     for key, value in body.items():
         if key in allowed:
             setattr(playlist, key, value)
@@ -190,6 +193,7 @@ async def update_playlist(
         "transition_duration": playlist.transition_duration,
         "default_duration": playlist.default_duration,
         "shuffle": playlist.shuffle,
+        "object_fit": playlist.object_fit,
         "mode": playlist.mode,
         "trigger_flow_id": playlist.trigger_flow_id,
     }
@@ -389,7 +393,7 @@ async def update_playlist_item(
     if not item:
         raise HTTPException(status_code=404, detail="Playlist item not found")
 
-    allowed = {"transition_type", "transition_duration", "duration"}
+    allowed = {"transition_type", "transition_duration", "duration", "object_fit"}
     changes = {}
     for key, value in body.items():
         if key in allowed:

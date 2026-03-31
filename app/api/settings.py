@@ -1,16 +1,15 @@
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import record as audit
-from app.auth import generate_registration_key, hash_registration_key, require_admin, require_viewer
+from app.auth import require_admin, require_viewer
 from app.database import get_session
 from app.models import ApiToken, Settings
 
 router = APIRouter()
 
 VALID_TRANSITION_TYPES = {"fade", "slide", "none"}
+VALID_OBJECT_FIT_VALUES = {"contain", "cover", "fill", "none"}
 
 
 @router.get("/settings")
@@ -24,17 +23,24 @@ async def get_settings(
         "transition_type": settings.transition_type,
         "default_duration": settings.default_duration,
         "shuffle": settings.shuffle,
+        "object_fit": settings.object_fit,
     }
 
 
 def _validate_settings(data: dict) -> dict:
     """Validate and coerce settings values. Returns cleaned dict."""
-    allowed = {"transition_duration", "transition_type", "default_duration", "shuffle"}
+    allowed = {"transition_duration", "transition_type", "default_duration", "shuffle", "object_fit"}
     changes = {}
     for key, value in data.items():
         if key not in allowed:
             continue
-        if key == "transition_duration":
+        if key == "object_fit":
+            if not isinstance(value, str) or value not in VALID_OBJECT_FIT_VALUES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"object_fit must be one of: {', '.join(sorted(VALID_OBJECT_FIT_VALUES))}",
+                )
+        elif key == "transition_duration":
             try:
                 value = float(value)
             except (TypeError, ValueError):
@@ -76,42 +82,6 @@ async def update_settings(
                 details={"changes": changes}, token=_admin, request=request)
     await session.commit()
     return {"status": "ok"}
-
-
-@router.get("/settings/registration-key")
-async def get_registration_key_status(
-    _admin: ApiToken = Depends(require_admin),
-    session: AsyncSession = Depends(get_session),
-):
-    """Return registration key status (never the key itself)."""
-    settings = await session.get(Settings, 1)
-    return {
-        "has_key": bool(settings and settings.registration_key_hash),
-        "created_at": settings.registration_key_created_at.isoformat() if settings and settings.registration_key_created_at else None,
-    }
-
-
-@router.post("/settings/registration-key/regenerate")
-async def regenerate_registration_key(
-    request: Request,
-    _admin: ApiToken = Depends(require_admin),
-    session: AsyncSession = Depends(get_session),
-):
-    """Generate a new registration key. Returns plaintext once."""
-    settings = await session.get(Settings, 1)
-    if not settings:
-        raise HTTPException(status_code=500, detail="Settings not initialized")
-
-    key = generate_registration_key()
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    settings.registration_key_hash = hash_registration_key(key)
-    settings.registration_key_created_at = now
-
-    await audit(session, action="regenerate", entity_type="registration_key", entity_id="global",
-                token=_admin, request=request)
-    await session.commit()
-
-    return {"registration_key": key, "created_at": now.isoformat()}
 
 
 @router.get("/status")

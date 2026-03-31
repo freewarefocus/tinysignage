@@ -35,7 +35,6 @@ fi
 # Prompt for player configuration
 read -rp "Server URL [http://localhost:8080]: " SERVER_URL
 SERVER_URL="${SERVER_URL:-http://localhost:8080}"
-read -rp "Registration Key (from your CMS admin): " REG_KEY
 read -rp "Display Name [New Display]: " DISPLAY_NAME
 DISPLAY_NAME="${DISPLAY_NAME:-New Display}"
 
@@ -47,11 +46,10 @@ from pathlib import Path
 p = Path('config.yaml')
 c = yaml.safe_load(p.read_text())
 c['server_url'] = '$SERVER_URL'
-c['registration_key'] = '$REG_KEY'
 c['display_name'] = '$DISPLAY_NAME'
 p.write_text(yaml.dump(c, default_flow_style=False, sort_keys=False))
 "
-    echo "  Wrote server_url, registration_key, display_name to config.yaml"
+    echo "  Wrote server_url, display_name to config.yaml"
 fi
 
 # Generate SECRET_KEY if config.env doesn't exist

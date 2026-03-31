@@ -203,38 +203,24 @@
 
         const form = document.getElementById('registration-form');
         const serverInput = document.getElementById('reg-server-url');
-        const keyInput = document.getElementById('reg-key-input');
         const nameInput = document.getElementById('reg-display-name');
         const errorEl = document.getElementById('registration-error');
 
         // Pre-fill server URL: stored > meta tag > current origin
         const storedUrl = getStoredServerUrl();
         serverInput.value = storedUrl || baseUrl || window.location.origin;
-        keyInput.focus();
+        nameInput.focus();
 
         if (registrationBound) return;
         registrationBound = true;
 
-        // Auto-format registration key: uppercase, insert dashes
-        keyInput.addEventListener('input', () => {
-            const raw = keyInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            const parts = [raw.slice(0, 4), raw.slice(4, 8), raw.slice(8, 12)].filter(Boolean);
-            keyInput.value = parts.join('-');
-        });
-
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const serverUrl = serverInput.value.trim().replace(/\/+$/, '');
-            const key = keyInput.value.trim();
             const name = nameInput.value.trim() || 'New Display';
 
             if (!serverUrl) {
                 errorEl.textContent = 'Server URL is required';
-                errorEl.classList.remove('hidden');
-                return;
-            }
-            if (!key) {
-                errorEl.textContent = 'Registration key is required';
                 errorEl.classList.remove('hidden');
                 return;
             }
@@ -248,7 +234,7 @@
                 const resp = await fetch(registrationApiUrl(serverUrl, '/api/devices/register'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ registration_key: key, name: name }),
+                    body: JSON.stringify({ name: name }),
                 });
                 if (!resp.ok) {
                     const err = await resp.json().catch(() => ({}));
@@ -294,20 +280,6 @@
         document.getElementById('registration-overlay').classList.add('hidden');
     }
 
-    // --- Registration Key ---
-    async function registerWithKey(key, name) {
-        const resp = await fetch(apiUrl('/api/devices/register'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ registration_key: key, name: name }),
-        });
-        if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            throw new Error(err.detail || 'Registration failed');
-        }
-        return await resp.json();
-    }
-
     // --- Pending Overlay ---
     function showPendingOverlay(deviceName) {
         const overlay = document.getElementById('pending-overlay');
@@ -341,29 +313,6 @@
             deviceId = storedId;
             deviceToken = storedToken;
             startPlayer();
-            return;
-        }
-
-        // Auto-register via registration key (from URL param or meta tag — headless fast path)
-        const regKey = params.get('regkey') || '';
-        const displayName = params.get('name') || '';
-
-        if (regKey) {
-            try {
-                PlayerLog.info('Auto-registering with registration key');
-                const data = await registerWithKey(regKey, displayName || 'New Display');
-                storeCredentials(data.device_id, data.token);
-                cleanUrl();
-                if (data.status === 'pending') {
-                    showPendingOverlay(data.device_name || displayName);
-                    startPlayer();
-                } else {
-                    showRegistrationSuccess(data.device_name || 'Device');
-                }
-            } catch (err) {
-                PlayerLog.error('Registration key failed: ' + err.message);
-                showRegistrationOverlay();
-            }
             return;
         }
 

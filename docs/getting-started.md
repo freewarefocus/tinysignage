@@ -68,7 +68,7 @@ The player polls the backend every 30 seconds. Your content appears automaticall
 
 You have a working signage display. Here is where to go depending on what you need:
 
-- **More screens** -- Add and pair devices from the CMS. See [Devices](devices.md).
+- **More screens** -- Add devices from the CMS. See [Devices](devices.md).
 - **Schedule by time of day** -- Show different playlists at different times. See [Scheduling](scheduling.md).
 - **Split-screen zones** -- Divide the screen into regions with independent content. See [Multi-Zone Layouts](multi-zone-layouts.md).
 - **Multiple users** -- Create accounts with different permission levels. See [Users and Permissions](users-and-permissions.md).

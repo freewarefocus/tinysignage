@@ -136,7 +136,7 @@ The application entry point configures:
 - **Token format**: `ts_` prefix + 48 hex chars (24 random bytes)
 - **Token storage**: SHA-256 hash stored in database, plaintext never persisted
 - **Password hashing**: bcrypt
-- **Pairing codes**: 6-character uppercase alphanumeric, SHA-256 hashed, 10-minute TTL
+- **Device registration**: keyless self-registration with admin approval gate
 - **Role hierarchy**: admin (3) > editor (2) > viewer (1) > device (0)
 - **Dependencies**: `require_admin`, `require_editor`, `require_viewer`, `require_device` check minimum role level
 
@@ -166,7 +166,7 @@ Server-side error logs are viewable at `GET /api/logs/errors` (admin). Player lo
 
 Three files:
 
-- `player.html` -- two overlay layers, zones container, splash screen, pairing UI
+- `player.html` -- two overlay layers, zones container, splash screen, registration UI
 - `player.js` -- polling, heartbeat, capability reporting, localStorage cache, playback timer, multi-zone engine, override handling, `PlayerLog` persistent ring buffer (200 entries, uploaded to server on heartbeat), debug overlay (Ctrl+Shift+D)
 - `player.css` -- fullscreen layout, CSS transitions, GPU compositing, zone positioning, debug overlay styles
 

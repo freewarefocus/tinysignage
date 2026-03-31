@@ -32,7 +32,7 @@
       </div>
       <div v-if="canEdit" class="row-controls">
         <div class="control-group">
-          <label>Transition</label>
+          <label>Effect</label>
           <select :value="item.transition_type || ''" @change="onUpdate('transition_type', $event.target.value || null)">
             <option value="">Default</option>
             <option value="fade">Fade</option>
@@ -41,7 +41,7 @@
           </select>
         </div>
         <div class="control-group">
-          <label>Tx dur</label>
+          <label>Fade time</label>
           <input
             type="number"
             :value="item.transition_duration ?? ''"
@@ -52,7 +52,7 @@
           />
         </div>
         <div class="control-group">
-          <label>Display</label>
+          <label>Show for</label>
           <input
             type="number"
             :value="item.duration ?? ''"
@@ -61,6 +61,16 @@
             placeholder="--"
             class="num-input"
           />
+        </div>
+        <div class="control-group">
+          <label>Scaling</label>
+          <select :value="item.object_fit || ''" @change="onUpdate('object_fit', $event.target.value || null)">
+            <option value="">Default</option>
+            <option value="contain">Fit inside</option>
+            <option value="cover">Fill & crop</option>
+            <option value="fill">Stretch</option>
+            <option value="none">Original size</option>
+          </select>
         </div>
       </div>
     </div>

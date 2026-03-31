@@ -123,16 +123,16 @@ When a device has a layout assigned, the player receives a multi-zone payload an
 
 ---
 
-## Device pairing flow
+## Device registration flow
 
 On first boot (no stored device token in localStorage):
 
-1. The player shows a pairing code entry form
-2. The user enters the 6-character code displayed in the CMS
-3. The player submits the code to `POST /api/devices/register`
-4. The server validates the code (SHA-256 hash match, not expired)
-5. The server returns a device token (`ts_` prefix, role `device`)
-6. The player stores the token in localStorage and begins polling
+1. The player shows a registration form with server URL and display name fields
+2. The user enters the server URL and a name for the display
+3. The player submits the name to `POST /api/devices/register`
+4. The server creates a pending device and returns a device token (`ts_` prefix, role `device`)
+5. The player stores the token in localStorage and shows "Waiting for Approval"
+6. An admin approves the device in the CMS, and the player begins showing content
 
 ---
 

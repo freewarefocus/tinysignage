@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import select, text
 
 from app.auth import (
-    ROLE_HIERARCHY, generate_registration_key, generate_token,
+    ROLE_HIERARCHY, generate_token,
     hash_password, hash_token,
 )
 from app.models import Asset, Device, Playlist, PlaylistItem
@@ -67,22 +67,7 @@ def test_token_prefix_is_ts():
 
 
 # ---------------------------------------------------------------------------
-# 5. Registration key is XXXX-XXXX-XXXX format
-# ---------------------------------------------------------------------------
-
-def test_registration_key_format():
-    """generate_registration_key() returns XXXX-XXXX-XXXX uppercase alphanumeric string. [FT-1.5]"""
-    key = generate_registration_key()
-    parts = key.split("-")
-    assert len(parts) == 3, f"Registration key should have 3 parts, got {len(parts)}"
-    for part in parts:
-        assert len(part) == 4, f"Each part should be 4 chars, got {len(part)}"
-        assert part == part.upper(), "Registration key should be uppercase"
-        assert part.isalnum(), "Registration key should be alphanumeric"
-
-
-# ---------------------------------------------------------------------------
-# 6. bcrypt used for passwords
+# 5. bcrypt used for passwords
 # ---------------------------------------------------------------------------
 
 def test_bcrypt_used_for_passwords():

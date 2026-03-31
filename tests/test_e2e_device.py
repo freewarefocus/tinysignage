@@ -8,7 +8,6 @@ plus layout zones and override payloads in device polling.
 
 from datetime import datetime, timedelta, timezone
 
-from app.auth import generate_registration_key, hash_registration_key
 from tests.factories import (
     create_asset,
     create_device,
@@ -24,20 +23,15 @@ from tests.helpers import auth_header, seed_defaults
 
 
 async def test_device_lifecycle(client, session):
-    """Full lifecycle: register with key → approve → poll → heartbeat → verify online."""
+    """Full lifecycle: register → approve → poll → heartbeat → verify online."""
     settings = await create_settings(session)
     await create_playlist(session, is_default=True)
     _, admin_pt = await create_token(session, role="admin")
-
-    # Set up registration key
-    reg_key = generate_registration_key()
-    settings.registration_key_hash = hash_registration_key(reg_key)
     await session.commit()
     headers = auth_header(admin_pt)
 
-    # Step 1: Register with registration key (public)
+    # Step 1: Register device (public)
     resp = await client.post("/api/devices/register", json={
-        "registration_key": reg_key,
         "name": "Lobby TV",
     })
     assert resp.status_code == 200

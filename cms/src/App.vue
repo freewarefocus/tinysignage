@@ -17,6 +17,10 @@
         </router-link>
       </div>
       <nav>
+        <router-link to="/devices" class="nav-item" active-class="active" v-tooltip.right="'Devices'">
+          <i class="pi pi-desktop"></i>
+          <span>Devices</span>
+        </router-link>
         <router-link v-if="canEdit" to="/media" class="nav-item" active-class="active" v-tooltip.right="'Media Library'">
           <i class="pi pi-images"></i>
           <span>Media</span>
@@ -44,10 +48,6 @@
         <router-link v-if="canEdit" to="/layouts" class="nav-item" active-class="active" v-tooltip.right="'Layouts'">
           <i class="pi pi-th-large"></i>
           <span>Layouts</span>
-        </router-link>
-        <router-link to="/devices" class="nav-item" active-class="active" v-tooltip.right="'Devices'">
-          <i class="pi pi-desktop"></i>
-          <span>Devices</span>
         </router-link>
         <router-link v-if="isAdmin" to="/users" class="nav-item" active-class="active" v-tooltip.right="'Users'">
           <i class="pi pi-users"></i>

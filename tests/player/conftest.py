@@ -118,29 +118,25 @@ async def api_get_admin_token(base_url: str) -> str:
     return await api_login(base_url)
 
 
-async def api_get_registration_key(base_url: str, admin_token: str) -> str:
-    """Get the current registration key from settings. Regenerates if needed."""
+async def api_register_device(base_url: str, name: str = "PW Test Device") -> dict:
+    """Register a device (keyless, pending approval). Returns {device_id, token, device_name, status}."""
     async with httpx.AsyncClient(base_url=base_url, timeout=10) as c:
-        headers = {"Authorization": f"Bearer {admin_token}"}
-        resp = await c.get("/api/settings", headers=headers)
-        settings = resp.json()
-        if settings.get("registration_key_created_at"):
-            # Key exists but we can't read the plaintext; regenerate
-            resp2 = await c.post("/api/settings/registration-key", headers=headers)
-            return resp2.json()["registration_key"]
-        resp2 = await c.post("/api/settings/registration-key", headers=headers)
-        return resp2.json()["registration_key"]
+        resp = await c.post("/api/devices/register", json={
+            "name": name,
+        })
+        return resp.json()
+
+
+# Keep old names as aliases for backward compatibility with existing test imports
+async def api_get_registration_key(base_url: str, admin_token: str) -> str:
+    """Deprecated: registration key no longer needed. Returns empty string."""
+    return ""
 
 
 async def api_register_device_with_key(base_url: str, registration_key: str,
                                         name: str = "PW Test Device") -> dict:
-    """Register a device with a registration key. Returns {device_id, token, device_name, status}."""
-    async with httpx.AsyncClient(base_url=base_url, timeout=10) as c:
-        resp = await c.post("/api/devices/register", json={
-            "registration_key": registration_key,
-            "name": name,
-        })
-        return resp.json()
+    """Deprecated: delegates to api_register_device (key is ignored)."""
+    return await api_register_device(base_url, name)
 
 
 async def api_approve_device(base_url: str, admin_token: str, device_id: str) -> dict:

@@ -106,6 +106,6 @@ To re-run the setup wizard (e.g., if you need to reset everything), delete `db/.
 ## See also
 
 - [Configuration](configuration.md) -- CORS and server settings
-- [Devices](devices.md) -- Device tokens and pairing
+- [Devices](devices.md) -- Device tokens and registration
 - [API Reference](api-reference.md) -- Auth, user, and token endpoints
 - [Backup and Restore](backup-and-restore.md) -- Admin-only backup operations

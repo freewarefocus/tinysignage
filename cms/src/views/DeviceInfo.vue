@@ -231,7 +231,7 @@
     <div v-if="loading" class="loading">Loading devices...</div>
 
     <div v-else-if="activeDevices.length === 0 && pendingDevices.length === 0" class="empty">
-      No devices registered. Open <strong>/player</strong> on a display and enter the registration key to add one.
+      No devices registered. Open <strong>/player</strong> on a display, enter this server's URL and a name, then approve the device here.
     </div>
 
     <div v-else-if="activeDevices.length > 0" class="device-grid">

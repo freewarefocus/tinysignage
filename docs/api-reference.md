@@ -215,7 +215,7 @@ Body: `{"device_ids": ["device-1", "device-2"]}`.
 
 ## Devices
 
-Manage devices, pairing, and polling.
+Manage devices and polling.
 
 ### List devices
 
@@ -231,7 +231,7 @@ POST /api/devices
 Auth: admin
 ```
 
-Creates a new device with an auto-generated pairing code (6-char, expires in 10 minutes).
+Creates a new device.
 
 Body: `{"name": "Lobby TV"}`.
 
@@ -267,20 +267,11 @@ POST /api/devices/register
 Auth: public
 ```
 
-Exchange a pairing code for a device token. Called by the player during the pairing flow.
+Register a new device (pending admin approval). Called by the player during the registration flow.
 
-Body: `{"code": "ABC123"}`.
+Body: `{"name": "Lobby TV"}`.
 
-Response: `{"token": "ts_...", "device_id": "uuid"}`.
-
-### Generate pairing code
-
-```
-POST /api/devices/{id}/pairing-code
-Auth: admin
-```
-
-Generates a new 6-character pairing code (expires in 10 minutes).
+Response: `{"device_id": "uuid", "device_name": "Lobby TV", "token": "ts_...", "status": "pending"}`.
 
 ### Get device playlist (polling endpoint)
 

@@ -9,7 +9,7 @@ const routes = [
   },
   {
     path: '/',
-    redirect: '/media',
+    redirect: '/devices',
   },
   {
     path: '/media',
@@ -110,7 +110,7 @@ router.beforeEach((to) => {
   if (to.meta.requiresAdmin) {
     const user = JSON.parse(localStorage.getItem('tinysignage_user') || '{}')
     if (user.role !== 'admin') {
-      return { name: 'media' }
+      return { name: 'devices' }
     }
   }
 

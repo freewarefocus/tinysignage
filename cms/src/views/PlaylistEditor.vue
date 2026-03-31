@@ -111,6 +111,16 @@
             </div>
           </div>
           <div class="setting-field">
+            <label>Scaling</label>
+            <select v-model="plSettings.object_fit" @change="saveSettings" class="setting-select">
+              <option :value="null">Global default</option>
+              <option value="contain">Fit inside</option>
+              <option value="cover">Fill & crop</option>
+              <option value="fill">Stretch</option>
+              <option value="none">Original size</option>
+            </select>
+          </div>
+          <div class="setting-field">
             <label>Shuffle</label>
             <select v-model="plSettings.shuffle" @change="saveSettings" class="setting-select">
               <option :value="null">Global default</option>
@@ -439,6 +449,7 @@ const plSettings = ref({
   transition_type: null,
   transition_duration: null,
   default_duration: null,
+  object_fit: null,
   shuffle: null,
 })
 
@@ -536,6 +547,7 @@ async function loadPlaylist() {
       transition_type: full.transition_type ?? null,
       transition_duration: full.transition_duration ?? null,
       default_duration: full.default_duration ?? null,
+      object_fit: full.object_fit ?? null,
       shuffle: full.shuffle ?? null,
     }
     // Load trigger flow data for advanced playlists
@@ -753,6 +765,7 @@ async function saveSettings() {
     transition_type: plSettings.value.transition_type,
     transition_duration: plSettings.value.transition_duration,
     default_duration: plSettings.value.default_duration,
+    object_fit: plSettings.value.object_fit,
     shuffle: plSettings.value.shuffle,
   })
 }

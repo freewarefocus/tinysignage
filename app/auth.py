@@ -2,7 +2,6 @@
 
 import hashlib
 import secrets
-import string
 from datetime import datetime, timezone
 
 import bcrypt
@@ -14,8 +13,6 @@ from app.database import get_session
 from app.models import ApiToken
 
 TOKEN_PREFIX = "ts_"
-
-_KEY_CHARS = string.ascii_uppercase + string.digits
 
 # Role hierarchy: admin > editor > viewer
 ROLE_HIERARCHY = {"admin": 3, "editor": 2, "viewer": 1, "device": 0}
@@ -39,18 +36,6 @@ def hash_password(plaintext: str) -> str:
 def verify_password(plaintext: str, hashed: str) -> bool:
     """Verify a password against a bcrypt hash."""
     return bcrypt.checkpw(plaintext.encode(), hashed.encode())
-
-
-def generate_registration_key() -> str:
-    """Generate a XXXX-XXXX-XXXX registration key (~62 bits of entropy)."""
-    part = lambda: "".join(secrets.choice(_KEY_CHARS) for _ in range(4))
-    return f"{part()}-{part()}-{part()}"
-
-
-def hash_registration_key(key: str) -> str:
-    """SHA-256 hex digest of a registration key (normalized: uppercase, no dashes)."""
-    normalized = key.upper().replace("-", "")
-    return hashlib.sha256(normalized.encode()).hexdigest()
 
 
 async def _lookup_token(token_str: str, session: AsyncSession) -> ApiToken:

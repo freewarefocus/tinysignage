@@ -18,24 +18,21 @@ The server tracks each device's status, health signals, and assigned content.
 
 ## Adding a device
 
-In the CMS, go to **Devices** and click **Add Device**. Enter a name for the device (e.g., "Lobby TV", "Menu Board").
-
-A 6-character pairing code is generated. This code expires in 10 minutes.
-
-## Pairing flow
-
 1. Open `http://your-server:8080/player` on the device's browser
-2. The player shows a pairing code entry form (since it has no stored token)
-3. Enter the 6-character code from the CMS
-4. The player exchanges the code for a device token via `POST /api/devices/register`
-5. The token is stored in the browser's localStorage
-6. The player immediately begins polling and displaying content
+2. The player shows a registration form (since it has no stored token)
+3. Enter the server URL and a display name (e.g., "Lobby TV", "Menu Board")
+4. The player submits the registration via `POST /api/devices/register`
+5. The device appears as **pending** in the CMS Devices page
+6. An admin approves the device in the CMS
+7. The player begins polling and displaying content
 
-After pairing, the device appears as "online" in the CMS within 60 seconds.
+## Registration flow
 
-### Re-pairing
+The registration flow is simple: the player registers itself and waits for admin approval. No shared keys or codes are needed -- the admin approval step is the security gate.
 
-If a device loses its token (browser data cleared), generate a new pairing code from the CMS device page and pair again.
+### Re-registering
+
+If a device loses its token (browser data cleared), clear localStorage and re-register. The old device entry can be deleted from the CMS.
 
 ---
 

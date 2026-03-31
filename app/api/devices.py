@@ -15,7 +15,6 @@ from app.api.schedules import evaluate_schedule_for_device
 from app.audit import record as audit
 from app.auth import (
     generate_token,
-    hash_registration_key,
     hash_token,
     require_admin,
     require_device,
@@ -54,25 +53,13 @@ async def register_device(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ):
-    """Public endpoint: register a new device using the shared registration key."""
-    return await _register_with_key(body, request, session)
+    """Public endpoint: register a new device (pending admin approval)."""
+    return await _register_device(body, request, session)
 
 
-async def _register_with_key(body: dict, request: Request, session: AsyncSession):
-    """Register a new device using the shared registration key (pending approval)."""
-    key = body.get("registration_key", "").strip()
+async def _register_device(body: dict, request: Request, session: AsyncSession):
+    """Register a new device (pending admin approval)."""
     name = body.get("name", "New Display").strip() or "New Display"
-
-    if not key:
-        raise HTTPException(status_code=400, detail="Registration key required")
-
-    # Validate key against stored hash
-    settings = await session.get(Settings, 1)
-    if not settings or not settings.registration_key_hash:
-        raise HTTPException(status_code=400, detail="Registration key not configured on this server")
-
-    if hash_registration_key(key) != settings.registration_key_hash:
-        raise HTTPException(status_code=400, detail="Invalid registration key")
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -99,12 +86,12 @@ async def _register_with_key(body: dict, request: Request, session: AsyncSession
         name=f"Device: {name}",
         role="device",
         device_id=device.id,
-        created_by="registration_key",
+        created_by="self_registration",
     )
     session.add(token)
 
     await audit(session, action="register", entity_type="device", entity_id=device.id,
-                details={"name": name, "method": "registration_key"}, request=request)
+                details={"name": name, "method": "self_registration"}, request=request)
     await session.commit()
 
     return {

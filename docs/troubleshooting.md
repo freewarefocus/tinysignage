@@ -69,8 +69,8 @@ Wait 10-15 seconds for the application to fully initialize. Check the applicatio
 **Player shows a black screen:**
 The backend may still be starting. The player retries every 30 seconds -- give it a minute. Check that the backend is running and accessible at the URL shown in the browser's address bar.
 
-**Player shows pairing code form but no code was generated:**
-The player has no stored device token. Go to the CMS, create or select a device, and generate a pairing code. Enter the 6-character code in the player's pairing form.
+**Player shows registration form:**
+The player has no stored device token. Enter the server URL and a display name, then submit. The device will appear as "pending" in the CMS Devices page. An admin must approve it before it can show content.
 
 **Player stuck on "Connecting..." or shows red status dot:**
 The player cannot reach the backend. Verify:

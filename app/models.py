@@ -62,8 +62,7 @@ class Settings(Base):
     transition_type: Mapped[str] = mapped_column(String(20), default="fade")
     default_duration: Mapped[int] = mapped_column(Integer, default=10)
     shuffle: Mapped[bool] = mapped_column(Boolean, default=False)
-    registration_key_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    registration_key_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    object_fit: Mapped[str] = mapped_column(String(20), default="contain", server_default="contain")
 
 
 class Layout(Base):
@@ -172,6 +171,7 @@ class Playlist(Base):
     transition_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     default_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
     shuffle: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    object_fit: Mapped[str | None] = mapped_column(String(20), nullable=True)
     mode: Mapped[str] = mapped_column(
         String(10), nullable=False, default="simple", server_default="simple"
     )
@@ -481,6 +481,7 @@ class PlaylistItem(Base):
     transition_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     transition_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    object_fit: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )

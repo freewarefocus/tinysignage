@@ -20,7 +20,7 @@ Upload images and videos through a web CMS, arrange them into playlists, and a f
 
 ### Multi-screen and operations
 
-- **Multi-device management** -- pair devices, monitor health, group them, bulk-assign playlists
+- **Multi-device management** -- register devices, monitor health, group them, bulk-assign playlists
 - **Scheduling** -- time windows, day-of-week, RRULE recurrence, priority system
 - **Multi-zone layouts** -- split screens into positioned zones with independent playlists
 - **Interactive triggers** -- keyboard, touch zones, GPIO buttons, webhooks, timeouts -- link playlists with trigger-driven transitions for kiosks, wayfinding, and emergency alerts
@@ -70,6 +70,21 @@ A single FastAPI process serves the API, CMS, player, and media files. SQLite is
 
 ---
 
+## Display, transitions, and scaling
+
+TinySignage uses a 3-tier cascade for display settings: **global defaults** (Settings page) can be overridden per **playlist** (playlist settings panel), which can be overridden per **item** (inline controls on each playlist row). Leaving a value as "Default" at any level inherits from the tier above.
+
+| Setting | Options | Controls |
+|---------|---------|----------|
+| **Effect** (transition) | Fade, Slide, Cut | How items transition in |
+| **Fade time** (transition duration) | 0 -- 30 seconds | How long the transition takes |
+| **Show for** (display duration) | 1 -- 3600 seconds | How long an image/HTML item stays on screen (videos play to end) |
+| **Scaling** (object-fit) | Fit inside, Fill & crop, Stretch, Original size | How images and videos fill the display area |
+
+The cascade for scaling (`object_fit`): per-item value wins, then playlist-level default, then global default. The global default is `contain` (fit inside, may show black bars).
+
+---
+
 ## Logs and debugging
 
 TinySignage never fails silently. Every error surfaces through two channels: user-facing notifications and a persistent debug log.
@@ -115,7 +130,7 @@ Also works on: any x86 mini PC, retired office PC, Mac, Linux server, or Docker 
 | [Install on macOS](docs/install-macos.md) | Local application on macOS |
 | [Managing Media](docs/managing-media.md) | Uploads, tags, HTML snippets, widgets |
 | [Playlists](docs/playlists.md) | Creation, editing, per-playlist settings |
-| [Devices](docs/devices.md) | Pairing, health monitoring, groups |
+| [Devices](docs/devices.md) | Registration, health monitoring, groups |
 | [Scheduling](docs/scheduling.md) | Time windows, recurrence, priority |
 | [Multi-Zone Layouts](docs/multi-zone-layouts.md) | Split-screen zone positioning |
 | [Interactive Triggers](docs/interactive-triggers.md) | Keyboard, touch, GPIO, webhook triggers |
