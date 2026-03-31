@@ -33,7 +33,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, toRaw } from 'vue'
 
 const emit = defineEmits(['uploaded'])
 const dragover = ref(false)
@@ -87,7 +87,7 @@ async function uploadFiles(files) {
 
     // Keep failed entries visible longer so the user sees the error
     setTimeout(() => {
-      uploads.value = uploads.value.filter((u) => u !== entry)
+      uploads.value = uploads.value.filter((u) => toRaw(u) !== entry)
     }, entry.error ? 5000 : 1500)
   }
   emit('uploaded')
