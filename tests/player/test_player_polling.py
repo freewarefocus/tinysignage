@@ -3,8 +3,9 @@
 import pytest
 
 from tests.player.conftest import (
-    api_setup, api_create_device_with_pairing, api_get_admin_token,
-    api_register_device, api_create_asset, api_add_item_to_playlist,
+    api_setup, api_get_admin_token, api_get_registration_key,
+    api_register_device_with_key, api_approve_device,
+    api_create_asset, api_add_item_to_playlist,
     api_list_playlists, api_list_devices, api_update_playlist,
 )
 
@@ -12,24 +13,13 @@ pytestmark = pytest.mark.slow
 
 
 async def _seed_registered_device(test_server):
-    """Setup server, create a device, register it, return (device_id, device_token, admin_token)."""
+    """Setup server, create a device via registration key, return (device_id, device_token, admin_token)."""
     admin_token = await api_get_admin_token(test_server)
-    device = await api_create_device_with_pairing(test_server, admin_token)
-    pairing_code = device.get("pairing_code")
-    if not pairing_code:
-        # Fallback: use the default device from setup
-        devices = await api_list_devices(test_server, admin_token)
-        device = devices[0] if devices else device
-        # Need to regenerate a pairing code
-        import httpx
-        async with httpx.AsyncClient(base_url=test_server, timeout=10) as c:
-            headers = {"Authorization": f"Bearer {admin_token}"}
-            resp = await c.post(f"/api/devices/{device['id']}/pairing-code", headers=headers)
-            code_data = resp.json()
-            pairing_code = code_data["code"]
-
-    reg = await api_register_device(test_server, pairing_code)
-    return reg["device_id"], reg["token"], admin_token
+    reg_key = await api_get_registration_key(test_server, admin_token)
+    reg = await api_register_device_with_key(test_server, reg_key)
+    device_id, device_token = reg["device_id"], reg["token"]
+    await api_approve_device(test_server, admin_token, device_id)
+    return device_id, device_token, admin_token
 
 
 async def _setup_player_with_credentials(page, test_server, device_id, device_token):

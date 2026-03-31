@@ -4,41 +4,6 @@
       <h2>Devices</h2>
       <div class="header-right">
         <span class="refresh-hint" v-if="lastRefresh">Updated {{ relativeTime(lastRefresh) }}</span>
-        <button class="btn-primary" @click="showAddDevice = true">
-          <i class="pi pi-plus"></i> Add Device
-        </button>
-      </div>
-    </div>
-
-    <!-- Add Device dialog -->
-    <div v-if="showAddDevice" class="dialog-overlay" @click.self="closeAddDevice">
-      <div class="dialog">
-        <h3>Add Device</h3>
-        <div v-if="!newDevice">
-          <input
-            v-model="newDeviceName"
-            placeholder="Device name (e.g. Lobby Screen)"
-            @keydown.enter="createDevice"
-            @keydown.escape="closeAddDevice"
-            ref="addInput"
-          />
-          <div class="dialog-actions">
-            <button class="btn-primary" @click="createDevice" :disabled="creating">Create</button>
-            <button class="btn-secondary" @click="closeAddDevice">Cancel</button>
-          </div>
-        </div>
-        <div v-else class="pairing-result">
-          <p>Device created. Use this pairing code on the player:</p>
-          <div class="pairing-code">{{ newDevice.pairing_code }}</div>
-          <div class="pairing-url">
-            <label>Or open this URL on the player:</label>
-            <code>{{ fullPairingUrl(newDevice.pairing_url) }}</code>
-          </div>
-          <p class="pairing-expires">Code expires in {{ formatCountdown(pairingCountdown) }}</p>
-          <div class="dialog-actions">
-            <button class="btn-primary" @click="closeAddDevice">Done</button>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -199,23 +164,6 @@
           </div>
         </div>
 
-        <!-- Pairing code -->
-        <div class="detail-section">
-          <label>Pairing Code</label>
-          <div v-if="devicePairing">
-            <div class="pairing-code small">{{ devicePairing.code }}</div>
-            <code class="pairing-url-inline">{{ fullPairingUrl(devicePairing.pairing_url) }}</code>
-            <p class="pairing-expires">Expires in {{ formatCountdown(pairingCountdown) }}</p>
-          </div>
-          <div v-else-if="selectedDevice.has_pairing_code" class="pairing-active">
-            <span>Active pairing code exists.</span>
-            <button class="btn-secondary btn-sm" @click="regeneratePairingCode">Regenerate</button>
-          </div>
-          <div v-else>
-            <button class="btn-secondary btn-sm" @click="regeneratePairingCode">Generate Pairing Code</button>
-          </div>
-        </div>
-
         <!-- Delete -->
         <div class="detail-section detail-danger">
           <button class="btn-danger" @click="confirmDeleteDevice">
@@ -283,7 +231,7 @@
     <div v-if="loading" class="loading">Loading devices...</div>
 
     <div v-else-if="activeDevices.length === 0 && pendingDevices.length === 0" class="empty">
-      No devices registered. Click <strong>Add Device</strong> to get started.
+      No devices registered. Open <strong>/player</strong> on a display and enter the registration key to add one.
     </div>
 
     <div v-else-if="activeDevices.length > 0" class="device-grid">
@@ -333,7 +281,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { api } from '../api/client.js'
 import { relativeTime, parseUTC } from '../utils/date.js'
 
@@ -373,13 +321,6 @@ const activeDevices = computed(() => {
 // Keep sortedDevices as alias for activeDevices (used in template)
 const sortedDevices = activeDevices
 
-// Add Device
-const showAddDevice = ref(false)
-const newDeviceName = ref('')
-const newDevice = ref(null)
-const creating = ref(false)
-const addInput = ref(null)
-
 // Detail panel
 const selectedDevice = ref(null)
 const editingName = ref(false)
@@ -387,7 +328,6 @@ const nameInput = ref('')
 const nameEditInput = ref(null)
 const detailPlaylistId = ref('')
 const detailLayoutId = ref('')
-const devicePairing = ref(null)
 const deviceHealth = ref(null)
 const deleteTarget = ref(null)
 const rejectTarget = ref(null)
@@ -396,45 +336,6 @@ const rejectTarget = ref(null)
 const showPreflightDialog = ref(false)
 const preflightResult = ref(null)
 let pendingPlaylistAssign = null
-
-// Pairing countdown
-const pairingCountdown = ref(0)
-let countdownInterval = null
-
-function startCountdown(seconds) {
-  if (countdownInterval) clearInterval(countdownInterval)
-  pairingCountdown.value = seconds
-  countdownInterval = setInterval(() => {
-    pairingCountdown.value--
-    if (pairingCountdown.value <= 0) {
-      clearInterval(countdownInterval)
-      countdownInterval = null
-    }
-  }, 1000)
-}
-
-function formatCountdown(totalSeconds) {
-  if (totalSeconds <= 0) return 'expired'
-  const m = Math.floor(totalSeconds / 60)
-  const s = totalSeconds % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-watch(showAddDevice, async (val) => {
-  if (val) {
-    newDeviceName.value = ''
-    newDevice.value = null
-    creating.value = false
-    await nextTick()
-    addInput.value?.focus()
-  }
-})
-
-function fullPairingUrl(url) {
-  if (!url) return ''
-  if (url.startsWith('http')) return url
-  return window.location.origin + url
-}
 
 function playlistName(playlistId) {
   if (!playlistId) return 'No playlist'
@@ -474,31 +375,10 @@ async function loadLayouts() {
   layouts.value = await api.get('/layouts')
 }
 
-async function createDevice() {
-  if (creating.value) return
-  creating.value = true
-  try {
-    const name = newDeviceName.value.trim() || 'New Player'
-    const result = await api.post('/devices', { name })
-    newDevice.value = result
-    startCountdown(600)
-    await loadDevices()
-  } finally {
-    creating.value = false
-  }
-}
-
-function closeAddDevice() {
-  showAddDevice.value = false
-  newDevice.value = null
-  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null }
-}
-
 async function openDevice(d) {
   selectedDevice.value = d
   detailPlaylistId.value = d.playlist_id || ''
   detailLayoutId.value = d.layout_id || ''
-  devicePairing.value = null
   deviceHealth.value = null
   editingName.value = false
   // Use cached health data
@@ -513,9 +393,7 @@ async function openDevice(d) {
 
 function closeDetail() {
   selectedDevice.value = null
-  devicePairing.value = null
   deviceHealth.value = null
-  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null }
 }
 
 function confirmDeleteDevice() {
@@ -620,15 +498,6 @@ async function assignLayout() {
   await loadDevices()
 }
 
-async function regeneratePairingCode() {
-  const result = await api.post(`/devices/${selectedDevice.value.id}/pairing-code`)
-  devicePairing.value = result
-  startCountdown(result.expires_in)
-  // Refresh device to update has_pairing_code
-  const updated = await api.get(`/devices/${selectedDevice.value.id}`)
-  selectedDevice.value = updated
-}
-
 onMounted(async () => {
   await Promise.all([loadDevices(), loadPlaylists(), loadLayouts(), loadHealthDashboard()])
   // Auto-refresh every 30 seconds
@@ -640,7 +509,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval)
-  if (countdownInterval) clearInterval(countdownInterval)
 })
 </script>
 
@@ -875,64 +743,6 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
-}
-
-/* Pairing */
-.pairing-result { text-align: center; }
-
-.pairing-code {
-  font-size: 2.5rem;
-  font-weight: 700;
-  font-family: monospace;
-  color: #7c83ff;
-  letter-spacing: 0.3rem;
-  margin: 1rem 0;
-  text-align: center;
-}
-
-.pairing-code.small {
-  font-size: 1.8rem;
-  margin: 0.5rem 0;
-}
-
-.pairing-url {
-  margin-bottom: 1rem;
-}
-
-.pairing-url label {
-  display: block;
-  font-size: 0.8rem;
-  color: #888;
-  margin-bottom: 0.3rem;
-}
-
-.pairing-url code,
-.pairing-url-inline {
-  display: block;
-  background: #0f1117;
-  padding: 0.5rem 0.75rem;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  color: #aaa;
-  word-break: break-all;
-}
-
-.pairing-url-inline {
-  margin-top: 0.3rem;
-  margin-bottom: 0.3rem;
-}
-
-.pairing-expires {
-  color: #888;
-  font-size: 0.8rem;
-}
-
-.pairing-active {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  color: #aaa;
-  font-size: 0.85rem;
 }
 
 /* Detail panel */

@@ -5,8 +5,9 @@ import json
 import pytest
 
 from tests.player.conftest import (
-    api_get_admin_token, api_create_device_with_pairing,
-    api_register_device, api_list_playlists, api_list_devices,
+    api_get_admin_token, api_get_registration_key,
+    api_register_device_with_key, api_approve_device,
+    api_list_playlists, api_list_devices,
     api_create_asset, api_add_item_to_playlist,
     api_create_trigger_flow, api_add_trigger_branch,
     api_update_playlist,
@@ -22,18 +23,12 @@ async def _seed_trigger_env(test_server):
     """
     admin_token = await api_get_admin_token(test_server)
 
-    # Create device and register
-    device = await api_create_device_with_pairing(test_server, admin_token,
-                                                   name="Trigger Test Device")
-    pairing_code = device.get("pairing_code")
-    if not pairing_code:
-        import httpx
-        async with httpx.AsyncClient(base_url=test_server, timeout=10) as c:
-            headers = {"Authorization": f"Bearer {admin_token}"}
-            resp = await c.post(f"/api/devices/{device['id']}/pairing-code", headers=headers)
-            pairing_code = resp.json()["code"]
-    reg = await api_register_device(test_server, pairing_code)
+    # Create device and register via registration key
+    reg_key = await api_get_registration_key(test_server, admin_token)
+    reg = await api_register_device_with_key(test_server, reg_key,
+                                              name="Trigger Test Device")
     device_id, device_token = reg["device_id"], reg["token"]
+    await api_approve_device(test_server, admin_token, device_id)
 
     # Create source and target playlists
     import httpx
@@ -343,16 +338,11 @@ async def test_player_ignores_triggers_in_simple_mode(page, test_server):
     """Playlist mode='simple' — no trigger_flow in payload."""
     admin_token = await api_get_admin_token(test_server)
 
-    # Create device
-    device = await api_create_device_with_pairing(test_server, admin_token, name="Simple Mode Dev")
-    pairing_code = device.get("pairing_code")
-    if not pairing_code:
-        import httpx
-        async with httpx.AsyncClient(base_url=test_server, timeout=10) as c:
-            headers = {"Authorization": f"Bearer {admin_token}"}
-            resp = await c.post(f"/api/devices/{device['id']}/pairing-code", headers=headers)
-            pairing_code = resp.json()["code"]
-    reg = await api_register_device(test_server, pairing_code)
+    # Create device via registration key
+    reg_key = await api_get_registration_key(test_server, admin_token)
+    reg = await api_register_device_with_key(test_server, reg_key,
+                                              name="Simple Mode Dev")
+    await api_approve_device(test_server, admin_token, reg["device_id"])
 
     # Create a simple-mode playlist with trigger_flow
     import httpx

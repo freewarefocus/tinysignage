@@ -37,16 +37,16 @@ async def test_player_js_loads(page, test_server):
     assert not unexpected, f"Console errors: {unexpected}"
 
 
-async def test_player_shows_pairing_ui_when_unregistered(page, test_server):
-    """No device token in localStorage — pairing overlay shown."""
+async def test_player_shows_registration_ui_when_unregistered(page, test_server):
+    """No device token in localStorage — registration overlay shown."""
     await page.goto(f"{test_server}/player")
-    # Wait for init() to run and decide to show pairing
+    # Wait for init() to run and decide to show registration form
     await page.wait_for_timeout(1000)
-    overlay = await page.query_selector("#pairing-overlay")
+    overlay = await page.query_selector("#registration-overlay")
     assert overlay is not None
-    # Pairing overlay should NOT have the hidden class
+    # Registration overlay should NOT have the hidden class
     classes = await overlay.get_attribute("class") or ""
-    assert "hidden" not in classes, "Pairing overlay should be visible when unregistered"
+    assert "hidden" not in classes, "Registration overlay should be visible when unregistered"
 
 
 async def test_player_version_cachebust(page, test_server):

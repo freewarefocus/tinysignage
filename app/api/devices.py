@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -14,9 +14,7 @@ from app.api.playlists import _item_to_dict, _playlist_hash
 from app.api.schedules import evaluate_schedule_for_device
 from app.audit import record as audit
 from app.auth import (
-    generate_pairing_code,
     generate_token,
-    hash_pairing_code,
     hash_registration_key,
     hash_token,
     require_admin,
@@ -26,7 +24,6 @@ from app.auth import (
 from app.database import get_session
 from app.models import ApiToken, Asset, AssetTag, Device, DeviceGroupMembership, Layout, LayoutZone, Override, Playlist, PlaylistItem, Schedule, Settings, TriggerBranch, TriggerFlow
 
-PAIRING_CODE_TTL = timedelta(minutes=10)
 _config_path = Path("config.yaml")
 
 router = APIRouter()
@@ -57,60 +54,8 @@ async def register_device(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ):
-    """Public endpoint: register via pairing code or registration key."""
-    # Dispatch on body shape
-    if "registration_key" in body:
-        return await _register_with_key(body, request, session)
-    return await _register_with_pairing_code(body, request, session)
-
-
-async def _register_with_pairing_code(body: dict, request: Request, session: AsyncSession):
-    """Exchange a pairing code for a device token (pre-approved path)."""
-    code = body.get("code", "").strip().upper()
-    if not code:
-        raise HTTPException(status_code=400, detail="Pairing code required")
-
-    code_hash = hash_pairing_code(code)
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-
-    # Find device with matching code
-    result = await session.execute(
-        select(Device).where(Device.registration_code.isnot(None))
-    )
-    matched_device = None
-    for device in result.scalars().all():
-        if device.registration_code == code_hash:
-            if device.registration_expires and device.registration_expires > now:
-                matched_device = device
-            break
-
-    if not matched_device:
-        raise HTTPException(status_code=400, detail="Invalid or expired pairing code")
-
-    # Generate device token
-    plaintext = generate_token()
-    token = ApiToken(
-        token_hash=hash_token(plaintext),
-        name=f"Device: {matched_device.name}",
-        role="device",
-        device_id=matched_device.id,
-        created_by="pairing",
-    )
-    session.add(token)
-
-    # Clear pairing code (single-use)
-    matched_device.registration_code = None
-    matched_device.registration_expires = None
-
-    await audit(session, action="register", entity_type="device", entity_id=matched_device.id,
-                details={"name": matched_device.name, "method": "pairing_code"}, request=request)
-    await session.commit()
-
-    return {
-        "device_id": matched_device.id,
-        "device_name": matched_device.name,
-        "token": plaintext,
-    }
+    """Public endpoint: register a new device using the shared registration key."""
+    return await _register_with_key(body, request, session)
 
 
 async def _register_with_key(body: dict, request: Request, session: AsyncSession):
@@ -261,75 +206,6 @@ async def delete_device(
     return {"ok": True}
 
 
-@router.post("/devices", status_code=201)
-async def create_device(
-    body: dict,
-    request: Request,
-    _admin: ApiToken = Depends(require_admin),
-    session: AsyncSession = Depends(get_session),
-):
-    name = body.get("name", "New Player")
-
-    # Assign default playlist if none specified
-    playlist_id = body.get("playlist_id")
-    if not playlist_id:
-        result = await session.execute(
-            select(Playlist).where(Playlist.is_default == True)
-        )
-        default = result.scalars().first()
-        if default:
-            playlist_id = default.id
-
-    # Auto-generate pairing code for the new device
-    pairing_code = generate_pairing_code()
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-
-    device = Device(
-        name=name,
-        playlist_id=playlist_id,
-        registration_code=hash_pairing_code(pairing_code),
-        registration_expires=now + PAIRING_CODE_TTL,
-    )
-    session.add(device)
-    await session.flush()
-    await audit(session, action="create", entity_type="device", entity_id=device.id,
-                details={"name": name}, token=_admin, request=request)
-    await session.commit()
-    await session.refresh(device)
-
-    resp = _device_to_dict(device)
-    resp["pairing_code"] = pairing_code
-    server_url = _get_server_url(request)
-    resp["pairing_url"] = f"{server_url}/player?pair={pairing_code}"
-    return resp
-
-
-@router.post("/devices/{device_id}/pairing-code")
-async def generate_device_pairing_code(
-    device_id: str,
-    request: Request,
-    _admin: ApiToken = Depends(require_admin),
-    session: AsyncSession = Depends(get_session),
-):
-    """Admin-only: generate a new pairing code for a device."""
-    device = await session.get(Device, device_id)
-    if not device:
-        raise HTTPException(status_code=404, detail="Device not found")
-
-    pairing_code = generate_pairing_code()
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    device.registration_code = hash_pairing_code(pairing_code)
-    device.registration_expires = now + PAIRING_CODE_TTL
-    await session.commit()
-
-    server_url = _get_server_url(request)
-    return {
-        "code": pairing_code,
-        "expires_in": int(PAIRING_CODE_TTL.total_seconds()),
-        "pairing_url": f"{server_url}/player?pair={pairing_code}",
-    }
-
-
 @router.post("/devices/{device_id}/approve")
 async def approve_device(
     device_id: str,
@@ -459,6 +335,7 @@ async def get_device_playlist(
                         "transition_type": _resolve_ov("transition_type", "fade"),
                         "default_duration": _resolve_ov("default_duration", 10),
                         "shuffle": _resolve_ov("shuffle", False),
+                        "object_fit": _resolve_ov("object_fit", "contain"),
                     },
                     "override": {
                         "id": active_override.id,
@@ -534,6 +411,7 @@ async def get_device_playlist(
             "transition_type": _resolve("transition_type", "fade"),
             "default_duration": _resolve("default_duration", 10),
             "shuffle": _resolve("shuffle", False),
+            "object_fit": _resolve("object_fit", "contain"),
         },
     }
 
@@ -653,6 +531,7 @@ async def _build_trigger_flow_payload(
                 "transition_type": _tr("transition_type", "fade"),
                 "default_duration": _tr("default_duration", 10),
                 "shuffle": _tr("shuffle", False),
+                "object_fit": _tr("object_fit", "contain"),
             },
         }
 
@@ -729,6 +608,7 @@ async def _build_zones_payload(layout_id: str, session: AsyncSession) -> list[di
                 "transition_type": _zr("transition_type", "fade"),
                 "default_duration": _zr("default_duration", 10),
                 "shuffle": _zr("shuffle", False),
+                "object_fit": _zr("object_fit", "contain"),
             }
 
         zones_out.append(zone_dict)
@@ -770,22 +650,18 @@ async def _get_default_settings(session: AsyncSession) -> dict:
             "transition_type": settings.transition_type if settings.transition_type is not None else "fade",
             "default_duration": settings.default_duration if settings.default_duration is not None else 10,
             "shuffle": settings.shuffle if settings.shuffle is not None else False,
+            "object_fit": settings.object_fit if settings.object_fit is not None else "contain",
         }
     return {
         "transition_duration": 1.0,
         "transition_type": "fade",
         "default_duration": 10,
         "shuffle": False,
+        "object_fit": "contain",
     }
 
 
 def _device_to_dict(device: Device) -> dict:
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    has_pairing_code = bool(
-        device.registration_code
-        and device.registration_expires
-        and device.registration_expires > now
-    )
     return {
         "id": device.id,
         "name": device.name,
@@ -800,7 +676,6 @@ def _device_to_dict(device: Device) -> dict:
         "storage_total_mb": device.storage_total_mb,
         "storage_free_mb": device.storage_free_mb,
         "capabilities_updated_at": device.capabilities_updated_at.isoformat() if device.capabilities_updated_at else None,
-        "has_pairing_code": has_pairing_code,
         "created_at": device.created_at.isoformat() if device.created_at else None,
     }
 

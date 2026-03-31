@@ -166,8 +166,8 @@ html, body, #player { width: 100%; height: 100%; overflow: hidden; background: #
     transition: background 0.3s;
 }
 
-/* --- Pairing Overlay --- */
-#pairing-overlay {
+/* --- Registration Overlay --- */
+#registration-overlay {
     position: fixed;
     inset: 0;
     display: flex;
@@ -177,54 +177,70 @@ html, body, #player { width: 100%; height: 100%; overflow: hidden; background: #
     background: #0f1117;
 }
 
-#pairing-overlay.hidden {
+#registration-overlay.hidden {
     display: none;
 }
 
-.pairing-card {
+.registration-card {
     background: #1a1d27;
     padding: 2.5rem;
     border-radius: 12px;
     width: 100%;
     max-width: 420px;
-    text-align: center;
 }
 
-.pairing-card h1 {
+.registration-card h1 {
     font-family: system-ui, sans-serif;
     font-size: 1.5rem;
     color: #fff;
     margin-bottom: 0.5rem;
+    text-align: center;
 }
 
-.pairing-card p {
+.registration-card > p {
     font-family: system-ui, sans-serif;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: #888;
     margin-bottom: 1.5rem;
+    text-align: center;
 }
 
-.pairing-card input {
+.registration-card label {
+    display: block;
+    font-family: system-ui, sans-serif;
+    font-size: 0.8rem;
+    color: #aaa;
+    margin-bottom: 0.3rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.registration-card input {
     width: 100%;
     background: #0f1117;
     border: 1px solid #3a3a5a;
     color: #eee;
-    padding: 0.8rem;
+    padding: 0.7rem 0.8rem;
     border-radius: 4px;
     margin-bottom: 1rem;
-    font-size: 1.8rem;
-    font-family: monospace;
-    text-align: center;
-    text-transform: uppercase;
-    letter-spacing: 0.3em;
+    font-size: 0.95rem;
+    font-family: system-ui, sans-serif;
 }
 
-.pairing-card input:focus {
+.registration-card input#reg-key-input {
+    font-family: monospace;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    text-align: center;
+}
+
+.registration-card input:focus {
     outline: none;
     border-color: #7c83ff;
 }
 
-.pairing-card button {
+.registration-card button {
     background: #7c83ff;
     color: #fff;
     border: none;
@@ -234,25 +250,27 @@ html, body, #player { width: 100%; height: 100%; overflow: hidden; background: #
     font-size: 1rem;
     font-family: system-ui, sans-serif;
     width: 100%;
+    margin-top: 0.5rem;
 }
 
-.pairing-card button:hover {
+.registration-card button:hover {
     background: #6b72e8;
 }
 
-.pairing-card button:disabled {
+.registration-card button:disabled {
     background: #3a3a5a;
     cursor: not-allowed;
 }
 
-#pairing-error {
+#registration-error {
     margin-top: 1rem;
     color: #f44336;
     font-family: system-ui, sans-serif;
     font-size: 0.9rem;
+    text-align: center;
 }
 
-#pairing-error.hidden {
+#registration-error.hidden {
     display: none;
 }
 

@@ -17,7 +17,7 @@
     const HEARTBEAT_INTERVAL = 60000; // 60s between heartbeats
     const MAX_VIDEO_DURATION = 300;   // 5 min cap for videos with duration=0
     const PRELOAD_AHEAD = 1;          // Number of assets to preload ahead
-    const PLAYER_VERSION = '0.7.0';
+    const PLAYER_VERSION = '0.8.0';
     const CAPABILITY_REPORT_INTERVAL = 3600000; // 60 min
 
     // --- Persistent Player Log (ring buffer in localStorage) ---
@@ -98,9 +98,10 @@
         },
     };
 
-    // Base URL for split deployment — read from <meta name="server-url">
+    // Base URL for split deployment — read from <meta name="server-url"> or localStorage
     const serverMeta = document.querySelector('meta[name="server-url"]');
-    const baseUrl = (serverMeta ? serverMeta.content : '').replace(/\/+$/, '');
+    const metaUrl = (serverMeta ? serverMeta.content : '').replace(/\/+$/, '');
+    const baseUrl = metaUrl || (localStorage.getItem('tinysignage_server_url') || '').replace(/\/+$/, '');
 
     function apiUrl(path) {
         return baseUrl + path;
@@ -122,7 +123,7 @@
     let heartbeatTimer = null;
     let activeOverride = null;
     let overrideExpiryTimer = null;
-    let pairingBound = false;
+    let registrationBound = false;
 
     // --- Transition playlist state ---
     let transitionPlaylist = null;    // Bumper content between schedule changes
@@ -183,67 +184,103 @@
         history.replaceState(null, '', url);
     }
 
-    // --- Pairing ---
-    async function pairWithCode(code) {
-        const resp = await fetch(apiUrl('/api/devices/register'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: code }),
-        });
-        if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            throw new Error(err.detail || 'Pairing failed');
-        }
-        return await resp.json();
+    // --- Registration ---
+    function getStoredServerUrl() {
+        return (localStorage.getItem('tinysignage_server_url') || '').replace(/\/+$/, '');
     }
 
-    function showPairingOverlay() {
-        const overlay = document.getElementById('pairing-overlay');
+    function storeServerUrl(url) {
+        localStorage.setItem('tinysignage_server_url', url.replace(/\/+$/, ''));
+    }
+
+    function registrationApiUrl(serverUrl, path) {
+        return serverUrl.replace(/\/+$/, '') + path;
+    }
+
+    function showRegistrationOverlay() {
+        const overlay = document.getElementById('registration-overlay');
         overlay.classList.remove('hidden');
 
-        const form = document.getElementById('pairing-form');
-        const input = document.getElementById('pairing-code-input');
-        const errorEl = document.getElementById('pairing-error');
+        const form = document.getElementById('registration-form');
+        const serverInput = document.getElementById('reg-server-url');
+        const keyInput = document.getElementById('reg-key-input');
+        const nameInput = document.getElementById('reg-display-name');
+        const errorEl = document.getElementById('registration-error');
 
-        input.focus();
+        // Pre-fill server URL: stored > meta tag > current origin
+        const storedUrl = getStoredServerUrl();
+        serverInput.value = storedUrl || baseUrl || window.location.origin;
+        keyInput.focus();
 
-        if (pairingBound) return;
-        pairingBound = true;
+        if (registrationBound) return;
+        registrationBound = true;
 
-        input.addEventListener('input', () => {
-            input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        // Auto-format registration key: uppercase, insert dashes
+        keyInput.addEventListener('input', () => {
+            const raw = keyInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            const parts = [raw.slice(0, 4), raw.slice(4, 8), raw.slice(8, 12)].filter(Boolean);
+            keyInput.value = parts.join('-');
         });
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const code = input.value.trim();
-            if (!code) return;
+            const serverUrl = serverInput.value.trim().replace(/\/+$/, '');
+            const key = keyInput.value.trim();
+            const name = nameInput.value.trim() || 'New Display';
+
+            if (!serverUrl) {
+                errorEl.textContent = 'Server URL is required';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            if (!key) {
+                errorEl.textContent = 'Registration key is required';
+                errorEl.classList.remove('hidden');
+                return;
+            }
 
             errorEl.classList.add('hidden');
             const btn = form.querySelector('button');
             btn.disabled = true;
-            btn.textContent = 'Pairing...';
+            btn.textContent = 'Registering...';
 
             try {
-                const data = await pairWithCode(code);
+                const resp = await fetch(registrationApiUrl(serverUrl, '/api/devices/register'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ registration_key: key, name: name }),
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Registration failed');
+                }
+                const data = await resp.json();
+                storeServerUrl(serverUrl);
                 storeCredentials(data.device_id, data.token);
                 cleanUrl();
-                showPairingSuccess(data.device_name || 'Device');
+                if (data.status === 'pending') {
+                    hideRegistrationOverlay();
+                    showPendingOverlay(data.device_name || name);
+                    startPlayer();
+                } else {
+                    showRegistrationSuccess(data.device_name || name);
+                }
             } catch (err) {
+                PlayerLog.error('Registration failed: ' + err.message);
                 errorEl.textContent = err.message;
                 errorEl.classList.remove('hidden');
                 btn.disabled = false;
-                btn.textContent = 'Pair Display';
+                btn.textContent = 'Register Display';
             }
         });
     }
 
-    function showPairingSuccess(deviceName) {
-        const overlay = document.getElementById('pairing-overlay');
-        const inner = overlay.querySelector('.pairing-card') || overlay;
+    function showRegistrationSuccess(deviceName) {
+        const overlay = document.getElementById('registration-overlay');
+        const inner = overlay.querySelector('.registration-card') || overlay;
         inner.innerHTML = '<div style="text-align:center;padding:2rem;">' +
             '<div style="font-size:2rem;margin-bottom:0.5rem;">&#10003;</div>' +
-            '<div style="font-size:1.2rem;color:#fff;">Paired as ' +
+            '<div style="font-size:1.2rem;color:#fff;">Registered as ' +
             deviceName.replace(/</g, '&lt;').replace(/>/g, '&gt;') +
             '!</div></div>';
         overlay.classList.remove('hidden');
@@ -253,8 +290,8 @@
         }, 2000);
     }
 
-    function hidePairingOverlay() {
-        document.getElementById('pairing-overlay').classList.add('hidden');
+    function hideRegistrationOverlay() {
+        document.getElementById('registration-overlay').classList.add('hidden');
     }
 
     // --- Registration Key ---
@@ -298,24 +335,6 @@
             return;
         }
 
-        const pairCode = params.get('pair');
-        if (pairCode) {
-            try {
-                const data = await pairWithCode(pairCode);
-                storeCredentials(data.device_id, data.token);
-                cleanUrl();
-                showPairingSuccess(data.device_name || 'Device');
-            } catch (err) {
-                showPairingOverlay();
-                const errorEl = document.getElementById('pairing-error');
-                errorEl.textContent = err.message;
-                errorEl.classList.remove('hidden');
-                const input = document.getElementById('pairing-code-input');
-                input.value = pairCode.toUpperCase();
-            }
-            return;
-        }
-
         const storedId = localStorage.getItem('tinysignage_device_id');
         const storedToken = localStorage.getItem('tinysignage_device_token');
         if (storedId && storedToken) {
@@ -325,11 +344,9 @@
             return;
         }
 
-        // Auto-register via registration key (from meta tag or URL param)
-        const regKeyMeta = document.querySelector('meta[name="registration-key"]');
-        const displayNameMeta = document.querySelector('meta[name="display-name"]');
-        const regKey = params.get('regkey') || (regKeyMeta ? regKeyMeta.content : '');
-        const displayName = params.get('name') || (displayNameMeta ? displayNameMeta.content : '');
+        // Auto-register via registration key (from URL param or meta tag — headless fast path)
+        const regKey = params.get('regkey') || '';
+        const displayName = params.get('name') || '';
 
         if (regKey) {
             try {
@@ -341,20 +358,20 @@
                     showPendingOverlay(data.device_name || displayName);
                     startPlayer();
                 } else {
-                    showPairingSuccess(data.device_name || 'Device');
+                    showRegistrationSuccess(data.device_name || 'Device');
                 }
             } catch (err) {
                 PlayerLog.error('Registration key failed: ' + err.message);
-                showPairingOverlay();
+                showRegistrationOverlay();
             }
             return;
         }
 
-        showPairingOverlay();
+        showRegistrationOverlay();
     }
 
     function startPlayer() {
-        hidePairingOverlay();
+        hideRegistrationOverlay();
         loadCachedPlaylist();
         poll();
         schedulePoll();
@@ -437,7 +454,7 @@
                 cancelPlayback();
                 teardownZones();
                 teardownTriggerEngine();
-                showPairingOverlay();
+                showRegistrationOverlay();
                 return;
             }
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -757,6 +774,9 @@
         }
 
         if (element) {
+            if (element.tagName === 'IMG' || element.tagName === 'VIDEO') {
+                element.style.objectFit = getEffectiveObjectFit(item, ctrl.settings);
+            }
             nextLayer.appendChild(element);
         }
     }
@@ -923,6 +943,14 @@
         }
     }
 
+    // --- Per-item → per-playlist → global object-fit cascade ---
+    function getEffectiveObjectFit(item, zoneSettings) {
+        if (item.object_fit) return item.object_fit;
+        const s = zoneSettings || settings;
+        if (s.object_fit) return s.object_fit;
+        return 'contain';
+    }
+
     // --- Per-item → per-asset → global transition cascade ---
     function getEffectiveTransition(item) {
         const asset = item.asset || item;
@@ -999,6 +1027,9 @@
         }
 
         if (element) {
+            if (element.tagName === 'IMG' || element.tagName === 'VIDEO') {
+                element.style.objectFit = getEffectiveObjectFit(item);
+            }
             nextLayer.appendChild(element);
         }
     }
@@ -1428,10 +1459,10 @@
         if (keyBranches.length === 0) return;
 
         triggerKeydownHandler = function (e) {
-            // Skip if override is active or pairing form is visible
+            // Skip if override is active or registration form is visible
             if (activeOverride) return;
-            const pairingOverlay = document.getElementById('pairing-overlay');
-            if (pairingOverlay && !pairingOverlay.classList.contains('hidden')) return;
+            const regOverlay = document.getElementById('registration-overlay');
+            if (regOverlay && !regOverlay.classList.contains('hidden')) return;
 
             for (const branch of keyBranches) {
                 const config = branch.trigger_config || {};

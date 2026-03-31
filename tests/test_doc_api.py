@@ -41,7 +41,7 @@ DOCUMENTED_GET_ENDPOINTS = [
 DOCUMENTED_POST_ENDPOINTS = [
     "/api/assets",
     "/api/playlists",
-    "/api/devices",
+    "/api/devices/register",
     "/api/groups",
     "/api/layouts",
     "/api/schedules",

@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import select, text
 
 from app.auth import (
-    ROLE_HIERARCHY, generate_pairing_code, generate_token,
+    ROLE_HIERARCHY, generate_registration_key, generate_token,
     hash_password, hash_token,
 )
 from app.models import Asset, Device, Playlist, PlaylistItem
@@ -67,15 +67,18 @@ def test_token_prefix_is_ts():
 
 
 # ---------------------------------------------------------------------------
-# 5. Pairing code is 6 characters
+# 5. Registration key is XXXX-XXXX-XXXX format
 # ---------------------------------------------------------------------------
 
-def test_pairing_code_is_6_chars():
-    """generate_pairing_code() returns 6-char uppercase alphanumeric string. [FT-1.5]"""
-    code = generate_pairing_code()
-    assert len(code) == 6, f"Pairing code length should be 6, got {len(code)}"
-    assert code == code.upper(), "Pairing code should be uppercase"
-    assert code.isalnum(), "Pairing code should be alphanumeric"
+def test_registration_key_format():
+    """generate_registration_key() returns XXXX-XXXX-XXXX uppercase alphanumeric string. [FT-1.5]"""
+    key = generate_registration_key()
+    parts = key.split("-")
+    assert len(parts) == 3, f"Registration key should have 3 parts, got {len(parts)}"
+    for part in parts:
+        assert len(part) == 4, f"Each part should be 4 chars, got {len(part)}"
+        assert part == part.upper(), "Registration key should be uppercase"
+        assert part.isalnum(), "Registration key should be alphanumeric"
 
 
 # ---------------------------------------------------------------------------

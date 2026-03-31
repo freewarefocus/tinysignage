@@ -3,9 +3,9 @@
 import pytest
 
 from tests.player.conftest import (
-    api_get_admin_token, api_create_device_with_pairing,
-    api_register_device, api_list_playlists,
-    api_create_asset, api_add_item_to_playlist,
+    api_get_admin_token, api_get_registration_key,
+    api_register_device_with_key, api_approve_device,
+    api_list_playlists, api_create_asset, api_add_item_to_playlist,
 )
 
 pytestmark = pytest.mark.slow
@@ -17,18 +17,13 @@ async def _seed_device_with_content(test_server):
     Returns (device_id, device_token, admin_token).
     """
     admin_token = await api_get_admin_token(test_server)
-    device = await api_create_device_with_pairing(test_server, admin_token,
-                                                   name="Offline Test Device")
-    pairing_code = device.get("pairing_code")
-    if not pairing_code:
-        import httpx
-        async with httpx.AsyncClient(base_url=test_server, timeout=10) as c:
-            headers = {"Authorization": f"Bearer {admin_token}"}
-            resp = await c.post(f"/api/devices/{device['id']}/pairing-code", headers=headers)
-            pairing_code = resp.json()["code"]
-
-    reg = await api_register_device(test_server, pairing_code)
+    reg_key = await api_get_registration_key(test_server, admin_token)
+    reg = await api_register_device_with_key(test_server, reg_key,
+                                              name="Offline Test Device")
     device_id, device_token = reg["device_id"], reg["token"]
+
+    # Approve the pending device
+    await api_approve_device(test_server, admin_token, device_id)
 
     # Get default playlist and add an asset
     playlists = await api_list_playlists(test_server, admin_token)
@@ -177,9 +172,9 @@ async def test_player_persists_device_credentials(page, test_server):
     assert stored_id_after == device_id, "Device ID not persisted across reload"
     assert stored_token_after == device_token, "Device token not persisted across reload"
 
-    # Pairing overlay should NOT be shown (credentials exist)
+    # Registration overlay should NOT be shown (credentials exist)
     overlay_classes = await page.evaluate(
-        "() => document.getElementById('pairing-overlay').className"
+        "() => document.getElementById('registration-overlay').className"
     )
     assert "hidden" in overlay_classes, \
-        "Pairing overlay should be hidden when credentials exist"
+        "Registration overlay should be hidden when credentials exist"

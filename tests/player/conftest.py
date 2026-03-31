@@ -118,20 +118,36 @@ async def api_get_admin_token(base_url: str) -> str:
     return await api_login(base_url)
 
 
-async def api_create_device_with_pairing(base_url: str, admin_token: str,
-                                          name: str = "PW Test Device") -> dict:
-    """Create a device and generate a pairing code. Returns device dict."""
+async def api_get_registration_key(base_url: str, admin_token: str) -> str:
+    """Get the current registration key from settings. Regenerates if needed."""
     async with httpx.AsyncClient(base_url=base_url, timeout=10) as c:
         headers = {"Authorization": f"Bearer {admin_token}"}
-        resp = await c.post("/api/devices", json={"name": name}, headers=headers)
-        device = resp.json()
-        return device
+        resp = await c.get("/api/settings", headers=headers)
+        settings = resp.json()
+        if settings.get("registration_key_created_at"):
+            # Key exists but we can't read the plaintext; regenerate
+            resp2 = await c.post("/api/settings/registration-key", headers=headers)
+            return resp2.json()["registration_key"]
+        resp2 = await c.post("/api/settings/registration-key", headers=headers)
+        return resp2.json()["registration_key"]
 
 
-async def api_register_device(base_url: str, pairing_code: str) -> dict:
-    """Register a device with a pairing code. Returns {device_id, token, device_name}."""
+async def api_register_device_with_key(base_url: str, registration_key: str,
+                                        name: str = "PW Test Device") -> dict:
+    """Register a device with a registration key. Returns {device_id, token, device_name, status}."""
     async with httpx.AsyncClient(base_url=base_url, timeout=10) as c:
-        resp = await c.post("/api/devices/register", json={"code": pairing_code})
+        resp = await c.post("/api/devices/register", json={
+            "registration_key": registration_key,
+            "name": name,
+        })
+        return resp.json()
+
+
+async def api_approve_device(base_url: str, admin_token: str, device_id: str) -> dict:
+    """Approve a pending device."""
+    async with httpx.AsyncClient(base_url=base_url, timeout=10) as c:
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        resp = await c.post(f"/api/devices/{device_id}/approve", headers=headers)
         return resp.json()
 
 

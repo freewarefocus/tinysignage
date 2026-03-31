@@ -3,9 +3,9 @@
 import pytest
 
 from tests.player.conftest import (
-    api_get_admin_token, api_create_device_with_pairing,
-    api_register_device, api_list_playlists,
-    api_create_asset, api_add_item_to_playlist,
+    api_get_admin_token, api_get_registration_key,
+    api_register_device_with_key, api_approve_device,
+    api_list_playlists, api_create_asset, api_add_item_to_playlist,
 )
 
 pytestmark = pytest.mark.slow
@@ -19,17 +19,12 @@ async def _seed_zone_env(test_server, zone_count=2):
     import httpx
     admin_token = await api_get_admin_token(test_server)
 
-    # Create and register device
-    device = await api_create_device_with_pairing(test_server, admin_token,
-                                                   name="Zone Test Device")
-    pairing_code = device.get("pairing_code")
-    if not pairing_code:
-        async with httpx.AsyncClient(base_url=test_server, timeout=10) as c:
-            headers = {"Authorization": f"Bearer {admin_token}"}
-            resp = await c.post(f"/api/devices/{device['id']}/pairing-code", headers=headers)
-            pairing_code = resp.json()["code"]
-    reg = await api_register_device(test_server, pairing_code)
+    # Create and register device via registration key
+    reg_key = await api_get_registration_key(test_server, admin_token)
+    reg = await api_register_device_with_key(test_server, reg_key,
+                                              name="Zone Test Device")
     device_id, device_token = reg["device_id"], reg["token"]
+    await api_approve_device(test_server, admin_token, device_id)
 
     async with httpx.AsyncClient(base_url=test_server, timeout=10) as c:
         headers = {"Authorization": f"Bearer {admin_token}"}

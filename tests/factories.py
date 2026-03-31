@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone, timedelta
-from app.auth import generate_token, hash_token, hash_password, hash_pairing_code
+from app.auth import generate_token, hash_token, hash_password
 from app.models import (
     Asset, ApiToken, Device, DeviceGroup, DeviceGroupMembership,
     Layout, LayoutZone, Override, Playlist, PlaylistItem,

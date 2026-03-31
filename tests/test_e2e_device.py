@@ -1,6 +1,6 @@
 """E2E tests for device lifecycle.
 
-Tests: create → pair → poll → heartbeat → watchdog offline detection,
+Tests: register → approve → poll → heartbeat → watchdog offline detection,
 plus layout zones and override payloads in device polling.
 
 [FT-4.7]-[FT-4.12], [FT-20.7]-[FT-20.9]
@@ -8,6 +8,7 @@ plus layout zones and override payloads in device polling.
 
 from datetime import datetime, timedelta, timezone
 
+from app.auth import generate_registration_key, hash_registration_key
 from tests.factories import (
     create_asset,
     create_device,
@@ -23,25 +24,33 @@ from tests.helpers import auth_header, seed_defaults
 
 
 async def test_device_lifecycle(client, session):
-    """Full lifecycle: create → pair → poll → heartbeat → verify online."""
-    await seed_defaults(session)
+    """Full lifecycle: register with key → approve → poll → heartbeat → verify online."""
+    settings = await create_settings(session)
+    await create_playlist(session, is_default=True)
     _, admin_pt = await create_token(session, role="admin")
+
+    # Set up registration key
+    reg_key = generate_registration_key()
+    settings.registration_key_hash = hash_registration_key(reg_key)
     await session.commit()
     headers = auth_header(admin_pt)
 
-    # Step 1: Create device
-    resp = await client.post("/api/devices", json={"name": "Lobby TV"}, headers=headers)
-    assert resp.status_code == 201
-    device_data = resp.json()
-    device_id = device_data["id"]
-    pairing_code = device_data["pairing_code"]
-
-    # Step 2: Register with pairing code (public)
-    resp = await client.post("/api/devices/register", json={"code": pairing_code})
+    # Step 1: Register with registration key (public)
+    resp = await client.post("/api/devices/register", json={
+        "registration_key": reg_key,
+        "name": "Lobby TV",
+    })
     assert resp.status_code == 200
     reg_data = resp.json()
-    assert reg_data["device_id"] == device_id
+    device_id = reg_data["device_id"]
     device_token = reg_data["token"]
+    assert reg_data["status"] == "pending"
+
+    # Step 2: Approve the pending device
+    resp = await client.post(
+        f"/api/devices/{device_id}/approve", headers=headers,
+    )
+    assert resp.status_code == 200
 
     # Step 3: Poll for playlist
     resp = await client.get(
