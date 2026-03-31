@@ -67,7 +67,7 @@
             <label>Transition Type</label>
             <select v-model="plSettings.transition_type" @change="saveSettings" class="setting-select">
               <option :value="null">Global default</option>
-              <option value="fade">Crossfade</option>
+              <option value="fade">Fade</option>
               <option value="slide">Slide</option>
               <option value="cut">Cut</option>
             </select>

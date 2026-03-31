@@ -44,7 +44,7 @@ All positioning uses percentages, so layouts scale to any screen resolution.
 
 ## Per-zone playlists
 
-Each zone has its own playlist assignment. Zones operate independently -- each has its own playback timer, its own dual-layer crossfade engine, and advances through its playlist at its own pace.
+Each zone has its own playlist assignment. Zones operate independently -- each has its own playback timer, its own dual-layer fade engine, and advances through its playlist at its own pace.
 
 This means you can have a main zone cycling through images every 10 seconds while a ticker zone cycles through announcements every 30 seconds.
 
@@ -64,7 +64,7 @@ When the player receives a multi-zone payload:
 
 1. Each zone is rendered as an absolutely-positioned container using percentage-based CSS
 2. Zones are stacked according to z-index
-3. Each zone runs its own instance of the dual-layer crossfade engine
+3. Each zone runs its own instance of the dual-layer fade engine
 4. Each zone has its own independent playback timer
 5. Zones do not interfere with each other -- one zone loading a video does not pause another zone's transitions
 

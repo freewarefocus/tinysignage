@@ -2,7 +2,7 @@
 
 Self-contained digital signage player. One Python process, one browser tab, zero cloud dependencies.
 
-Upload images and videos through a web CMS, arrange them into playlists, and a fullscreen browser player loops through them with smooth crossfade transitions. Everything runs on a single machine -- a Raspberry Pi under a TV, an old PC behind a monitor, or a Docker container on whatever you have.
+Upload images and videos through a web CMS, arrange them into playlists, and a fullscreen browser player loops through them with smooth fade transitions. Everything runs on a single machine -- a Raspberry Pi under a TV, an old PC behind a monitor, or a Docker container on whatever you have.
 
 <!-- TODO: Add screenshot or demo GIF before v1.0 ships -->
 <!-- ![TinySignage CMS and Player](docs/images/tinysignage-overview.png) -->
@@ -13,7 +13,7 @@ Upload images and videos through a web CMS, arrange them into playlists, and a f
 
 - **Drag-and-drop media management** -- upload images, videos, web URLs, and HTML snippets
 - **Playlist editor** -- drag to reorder, per-item duration, shuffle, preview
-- **Smooth playback** -- dual-layer CSS crossfade transitions, GPU-composited
+- **Smooth playback** -- dual-layer CSS fade transitions, GPU-composited
 - **Offline resilient** -- player caches everything locally and keeps playing if the network drops
 - **First-boot setup wizard** -- browser-based, no config files to hand-edit
 - **Runs anywhere** -- Raspberry Pi, Linux, macOS, Windows, Docker

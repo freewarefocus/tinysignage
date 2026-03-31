@@ -76,7 +76,7 @@ Because the player polls on a fixed interval, there is no WebSocket to reconnect
 
 ## Transitions
 
-### Dual-layer crossfade
+### Dual-layer fade
 
 The player uses two absolutely-positioned layers (`layer-a` and `layer-b`) that alternate. When advancing to the next item:
 
@@ -84,7 +84,7 @@ The player uses two absolutely-positioned layers (`layer-a` and `layer-b`) that 
 2. The hidden layer fades in via CSS opacity transition (GPU-composited)
 3. The previously visible layer fades out
 
-This produces smooth crossfade transitions without flicker or blank frames.
+This produces smooth fade transitions without flicker or blank frames.
 
 ### Transition settings priority
 
@@ -97,7 +97,7 @@ This produces smooth crossfade transitions without flicker or blank frames.
 
 | Type | Behavior |
 |------|----------|
-| `fade` | Crossfade between layers |
+| `fade` | Fade between layers |
 | `slide` | Slide transition |
 | `cut` | Instant switch, no animation |
 
@@ -117,7 +117,7 @@ When a device has a layout assigned, the player receives a multi-zone payload an
 
 - Each zone is an absolutely-positioned `<div>` using percentage-based CSS (`left`, `top`, `width`, `height`)
 - Zones are stacked by `z-index`
-- Each zone has its own dual-layer crossfade engine
+- Each zone has its own dual-layer fade engine
 - Each zone has its own playback timer and advances independently
 - One zone loading or transitioning does not affect other zones
 
@@ -168,7 +168,7 @@ A small colored dot in the corner of the player screen indicates connection stat
 
 When a playlist has an assigned TriggerFlow, the player activates the TriggerEngine. This engine registers listeners for each trigger type and swaps the active playlist when a trigger fires.
 
-The trigger engine manipulates the same `playlist`, `settings`, and `playlistHash` variables used by the existing playback loop. Crossfade transitions, multi-zone rendering, and preloading all continue working unchanged.
+The trigger engine manipulates the same `playlist`, `settings`, and `playlistHash` variables used by the existing playback loop. Fade transitions, multi-zone rendering, and preloading all continue working unchanged.
 
 ### Trigger evaluation
 
