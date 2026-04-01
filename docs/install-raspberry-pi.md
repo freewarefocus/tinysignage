@@ -9,9 +9,13 @@ Dedicated kiosk display -- boots straight into fullscreen playback, managed via 
 ## Requirements
 
 - Raspberry Pi 4 or 5 (2GB+ RAM)
-- Raspberry Pi OS (Bookworm or later)
+- **Raspberry Pi OS Lite (Bookworm or later)** — recommended for dedicated signage
 - Network connection (Ethernet or WiFi)
 - HDMI display
+
+> **Why Lite?** Pi OS Lite has no desktop environment, which means faster boot times, lower memory usage, and fewer unnecessary services — ideal for a single-purpose signage display. The installer sets up a minimal kiosk compositor (`cage`) that runs Chromium fullscreen without a full desktop.
+>
+> Pi OS with Desktop also works — the installer detects which variant you're running and adjusts automatically.
 
 ## Install
 
@@ -45,7 +49,7 @@ sudo systemctl enable signage-app signage-player
 
 ## What gets installed
 
-System packages via apt: `python3`, `python3-venv`, `chromium-browser`, `ffmpeg`, `avahi-daemon`, `curl`.
+System packages via apt: `python3`, `python3-venv`, `chromium-browser`, `ffmpeg`, `avahi-daemon`, `curl`. On Pi OS Lite, the installer also adds `cage` (a lightweight Wayland kiosk compositor) to run Chromium fullscreen without a desktop environment.
 
 A dedicated `tinysignage` service user is created — no application code runs as root. Systemd units include security hardening: `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, and a 512MB memory ceiling.
 
@@ -83,6 +87,52 @@ ffmpeg -version
 ```
 
 If missing: `sudo apt install ffmpeg`
+
+---
+
+## Production Hardening (24/7 Displays)
+
+If the Pi will run unattended (shop window, lobby, menu board), these steps reduce the chance of needing a physical visit.
+
+### Hardware watchdog (enabled by installer)
+
+The installer enables the Pi's built-in hardware watchdog (`bcm2835_wdt`). If the OS completely freezes — kernel panic, OOM lockup — the watchdog chip reboots the Pi automatically within ~14 seconds. The systemd service also has a `WatchdogSec=120` setting that restarts the player if Chromium becomes unresponsive.
+
+No action needed — the installer configures both automatically.
+
+### Read-only root filesystem (OverlayFS)
+
+SD card corruption is the #1 cause of Pi signage failures. Making the root filesystem read-only prevents writes from wearing out the card or leaving corrupted files after a power loss.
+
+Enable it via `raspi-config`:
+
+```bash
+sudo raspi-config
+# Performance Options → Overlay File System → Enable
+```
+
+**Important:** TinySignage stores its database and uploaded media in `/home/tinysignage/TinySignage/data/`. This directory must remain writable. After enabling OverlayFS, either:
+- Keep the data directory on a separate writable partition, or
+- Bind-mount the data directory to a tmpfs or USB drive
+
+If you just need basic protection and don't want to deal with partition layouts, skip OverlayFS and use a high-endurance SD card (see below).
+
+### SD card selection
+
+Standard consumer SD cards are not designed for continuous writes. Use an endurance-rated card:
+
+- **SanDisk High Endurance** (recommended) — rated for 20,000+ hours of continuous recording
+- **Samsung PRO Endurance** — similar rating, widely available
+
+For the most reliable setup, boot from an **NVMe SSD** via USB or the Pi 5's M.2 HAT. This eliminates SD card failure entirely.
+
+### Power supply
+
+Use a **regulated 5V/3A power supply** (the official Raspberry Pi PSU or equivalent). Phone chargers and cheap USB supplies cause undervoltage that corrupts the SD card and crashes the GPU. The Pi's lightning bolt icon (⚡) on screen means the supply is inadequate.
+
+### Cooling
+
+A Pi running 24/7 with Chromium and GPU compositing will thermal throttle without cooling. At minimum, use a **passive heatsink case** (e.g., Flirc, Argon NEO). Active cooling (fan) is not required for signage workloads but doesn't hurt.
 
 ---
 

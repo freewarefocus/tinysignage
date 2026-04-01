@@ -1,4 +1,5 @@
 """Cross-platform kiosk browser launcher for TinySignage."""
+import os
 import subprocess
 import platform
 import shutil
@@ -44,10 +45,9 @@ def get_kiosk_flags(is_pi: bool = False) -> list[str]:
 
     if is_pi:
         flags.extend([
-            "--disable-gpu-compositing",
-            "--enable-features=VaapiVideoDecoder",
-            "--gpu-memory-buffer-video-frames",
+            "--ozone-platform=wayland",
             "--disable-background-timer-throttling",
+            "--disk-cache-dir=/dev/null",
         ])
 
     return flags
@@ -78,7 +78,13 @@ def launch(config_path: str = "config.yaml"):
     args.append(url)
 
     print(f"Launching: {' '.join(args)}")
-    subprocess.Popen(args)
+
+    if platform.system() == "Linux":
+        # Replace this process with the browser — lets systemd (and cage)
+        # track the browser directly for restart/lifecycle management
+        os.execvp(args[0], args)
+    else:
+        subprocess.Popen(args)
 
 
 if __name__ == "__main__":
