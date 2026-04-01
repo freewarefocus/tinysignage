@@ -111,7 +111,7 @@ document.getElementById('setup-form').addEventListener('submit', async (e) => {
   const data = await resp.json();
   let html = '<div class="done"><h1>Setup Complete!</h1>';
   if (data.device_token && data.device_id) {
-    const playerBase = data.server_url || '';
+    const playerBase = data.server_url || window.location.origin;
     const playerUrl = playerBase + '/player?device=' + data.device_id + '&token=' + data.device_token;
     html += '<div class="hero-section">';
     html += '<h2 style="font-size:1.1rem;color:#fff;margin-bottom:0.3rem">Your Player URL</h2>';
@@ -168,7 +168,14 @@ async def complete_setup(body: dict, session: AsyncSession = Depends(get_session
         return {"status": "already_done"}
 
     device_name = body.get("device_name", "My Signage Player")
-    server_url = body.get("server_url", "")
+    server_url = body.get("server_url", "").strip()
+    # Fall back to config.yaml value (set by installer) if form field is empty
+    if not server_url:
+        try:
+            config = yaml.safe_load(_config_path.read_text())
+            server_url = config.get("server_url", "")
+        except Exception:
+            pass
     admin_username = body.get("admin_username", "admin").strip()
     admin_password = body.get("admin_password", "")
 
