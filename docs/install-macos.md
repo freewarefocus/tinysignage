@@ -174,6 +174,13 @@ In Safari, use **Ctrl+Cmd+F**. In Chrome, use **Cmd+Ctrl+F** or **F11** (if your
 open -a "Google Chrome" --args --kiosk http://localhost:8080/player
 ```
 
+**Need to reconfigure the player?**
+Add `?reset` to the player URL to clear stored credentials and return to the registration screen:
+
+```
+http://localhost:8080/player?reset
+```
+
 ---
 
 ## See also
