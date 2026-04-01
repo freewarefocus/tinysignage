@@ -40,12 +40,9 @@ if [ ! -f config.yaml ]; then
 fi
 
 # Player configuration — display name and hostname are inherited from install.sh
+# server_url is localhost because the player runs on the Pi itself
 DISPLAY_NAME="${DISPLAY_NAME:-New Display}"
-if [ -n "$SIGNAGE_HOSTNAME" ]; then
-    SERVER_URL="http://${SIGNAGE_HOSTNAME}.local:8080"
-else
-    SERVER_URL="http://localhost:8080"
-fi
+SERVER_URL="http://localhost:8080"
 
 # Write player settings to config.yaml
 if [ -n "$SERVER_URL" ]; then

@@ -15,8 +15,9 @@ echo "================================================"
 echo ""
 
 # --- Display name prompt (also becomes the hostname) ---
-echo "Give this player a name. It becomes the network address"
-echo "you use to reach it (e.g. \"Lobby TV\" → lobby-tv.local)."
+echo "Give this display a name (e.g. \"Lobby TV\", \"Menu Board\")."
+echo "This also sets the hostname so you can reach the CMS"
+echo "from other devices (e.g. lobby-tv.local:8080/cms)."
 echo ""
 read -rp "Display Name [TinySignage]: " DISPLAY_NAME
 DISPLAY_NAME="${DISPLAY_NAME:-TinySignage}"
