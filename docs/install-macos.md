@@ -140,6 +140,16 @@ pip install -r requirements.txt
 
 Then restart the application (or `launchctl` will restart it automatically if using the Launch Agent with `KeepAlive`).
 
+## Resetting the player
+
+If you entered the wrong server URL during registration, reset the player to return to the registration screen:
+
+```bash
+python3 launcher.py --reset
+```
+
+---
+
 ## Troubleshooting
 
 **`python3` not found after Homebrew install:**

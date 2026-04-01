@@ -134,6 +134,18 @@ On first boot (no stored device token in localStorage):
 5. The player stores the token in localStorage and shows "Waiting for Approval"
 6. An admin approves the device in the CMS, and the player begins showing content
 
+### Resetting registration
+
+If a player was registered with the wrong server URL, reset it from the command line:
+
+```bash
+python launcher.py --reset
+```
+
+This deletes the dedicated browser profile that `launcher.py` creates (via `--user-data-dir`), which clears the stored device token. On next launch, the player shows the registration screen again. See the install guides for platform-specific commands ([Raspberry Pi](install-raspberry-pi.md#resetting-the-player), [Windows](install-windows.md#resetting-the-player), [macOS](install-macos.md#resetting-the-player)).
+
+Reset requires local command-line access to the device -- there is no remote reset, by design.
+
 ---
 
 ## Split deployment

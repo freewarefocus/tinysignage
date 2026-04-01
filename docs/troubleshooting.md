@@ -72,6 +72,19 @@ The backend may still be starting. The player retries every 30 seconds -- give i
 **Player shows registration form:**
 The player has no stored device token. Enter the server URL and a display name, then submit. The device will appear as "pending" in the CMS Devices page. An admin must approve it before it can show content.
 
+**Player registered with wrong server URL:**
+If you entered the wrong server address during registration, reset the player from the command line:
+
+- **Windows / macOS:** `python launcher.py --reset`
+- **Raspberry Pi:**
+  ```bash
+  sudo systemctl stop signage-player-lite
+  python3 /opt/tinysignage/launcher.py --reset
+  sudo systemctl restart signage-player-lite
+  ```
+
+This deletes the browser profile and returns the player to the registration screen on next launch. You need local (command-line) access to the device -- there is no remote reset.
+
 **Player stuck on "Connecting..." or shows red status dot:**
 The player cannot reach the backend. Verify:
 1. The backend is running (`curl http://localhost:8080/health` should return `{"status": "ok"}`)

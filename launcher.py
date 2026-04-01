@@ -1,10 +1,15 @@
 """Cross-platform kiosk browser launcher for TinySignage."""
+import argparse
 import os
 import subprocess
 import platform
 import shutil
+import sys
 from pathlib import Path
 import yaml
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+BROWSER_PROFILE_DIR = SCRIPT_DIR / "data" / "browser-profile"
 
 
 def find_browser() -> str | None:
@@ -75,6 +80,7 @@ def launch(config_path: str = "config.yaml"):
     args = [browser]
     if kiosk:
         args.extend(get_kiosk_flags(is_pi))
+    args.append(f"--user-data-dir={BROWSER_PROFILE_DIR}")
     args.append(url)
 
     print(f"Launching: {' '.join(args)}")
@@ -87,5 +93,27 @@ def launch(config_path: str = "config.yaml"):
         subprocess.Popen(args)
 
 
+def reset_browser_profile():
+    """Delete the browser profile to force re-registration."""
+    if BROWSER_PROFILE_DIR.exists():
+        try:
+            shutil.rmtree(BROWSER_PROFILE_DIR)
+        except PermissionError:
+            print(f"ERROR: Could not delete {BROWSER_PROFILE_DIR}")
+            print("Close the browser first, then try again.")
+            sys.exit(1)
+        print(f"Player registration cleared: {BROWSER_PROFILE_DIR}")
+        print("The player will show the registration screen on next launch.")
+    else:
+        print("No browser profile found. Nothing to reset.")
+
+
 if __name__ == "__main__":
-    launch()
+    parser = argparse.ArgumentParser(description="TinySignage kiosk browser launcher")
+    parser.add_argument("--reset", action="store_true",
+                        help="Delete browser profile and exit (forces re-registration)")
+    args = parser.parse_args()
+    if args.reset:
+        reset_browser_profile()
+    else:
+        launch()

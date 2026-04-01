@@ -74,6 +74,18 @@ sudo systemctl restart signage-app
 
 The player reconnects automatically within 30 seconds.
 
+## Resetting the player
+
+If you entered the wrong server URL during registration, reset the player to return to the registration screen:
+
+```bash
+sudo systemctl stop signage-player-lite
+python3 /opt/tinysignage/launcher.py --reset
+sudo systemctl restart signage-player-lite
+```
+
+---
+
 ## Troubleshooting
 
 **Player shows a black screen after boot:**

@@ -100,6 +100,18 @@ pip install -r requirements.txt
 
 Then restart the application.
 
+## Resetting the player
+
+If you entered the wrong server URL during registration, reset the player to return to the registration screen:
+
+```powershell
+python launcher.py --reset
+```
+
+Make sure the browser is closed first -- Windows locks open files and the reset will fail if Chrome is still running.
+
+---
+
 ## Troubleshooting
 
 **`python` is not recognized:**

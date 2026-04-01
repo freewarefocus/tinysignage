@@ -32,7 +32,13 @@ The registration flow is simple: the player registers itself and waits for admin
 
 ### Re-registering
 
-If a device loses its token (browser data cleared), clear localStorage and re-register. The old device entry can be deleted from the CMS.
+If a device loses its token (browser data cleared) or was registered with the wrong server URL, reset it from the command line:
+
+```bash
+python launcher.py --reset
+```
+
+This deletes the browser profile and returns the player to the registration screen on next launch. See the [Raspberry Pi](install-raspberry-pi.md#resetting-the-player), [Windows](install-windows.md#resetting-the-player), or [macOS](install-macos.md#resetting-the-player) install guides for platform-specific steps. The old device entry can be deleted from the CMS.
 
 ---
 
