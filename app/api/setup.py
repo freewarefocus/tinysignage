@@ -59,9 +59,9 @@ details summary::marker { color: #666; }
   <p>Configure your signage player to get started.</p>
   <form id="setup-form">
     <label for="device_name">Device Name</label>
-    <input type="text" id="device_name" value="My Signage Player" required>
+    <input type="text" id="device_name" value="{{DEVICE_NAME}}" required>
     <label for="server_url">Server URL (for remote CMS)</label>
-    <input type="text" id="server_url" placeholder="http://localhost:8080">
+    <input type="text" id="server_url" value="{{SERVER_URL}}" placeholder="http://localhost:8080">
 
     <div class="section-label">Admin Account</div>
     <label for="admin_username">Username</label>
@@ -145,7 +145,21 @@ document.getElementById('setup-form').addEventListener('submit', async (e) => {
 async def setup_page():
     if is_setup_done():
         return HTMLResponse("<script>window.location.href='/cms'</script>")
-    return HTMLResponse(SETUP_HTML)
+    # Pre-fill from config.yaml (set during install)
+    default_name = "My Signage Player"
+    default_url = ""
+    try:
+        config = yaml.safe_load(_config_path.read_text())
+        if config.get("display_name"):
+            default_name = config["display_name"]
+        if config.get("server_url"):
+            default_url = config["server_url"]
+    except Exception:
+        pass
+    import html as html_mod
+    page = SETUP_HTML.replace("{{DEVICE_NAME}}", html_mod.escape(default_name))
+    page = page.replace("{{SERVER_URL}}", html_mod.escape(default_url))
+    return HTMLResponse(page)
 
 
 @router.post("/setup")

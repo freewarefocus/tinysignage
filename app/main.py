@@ -155,11 +155,17 @@ async def admin_page():
 @app.get("/cms/{path:path}")
 async def cms_catchall(path: str = ""):
     """Catch-all for Vue router history mode — always serve index.html."""
+    from app.api.setup import is_setup_done
+    if not is_setup_done():
+        return RedirectResponse(url="/setup", status_code=302)
     return FileResponse(_cms_dir / "index.html")
 
 
 @app.get("/cms")
 async def cms_root():
+    from app.api.setup import is_setup_done
+    if not is_setup_done():
+        return RedirectResponse(url="/setup", status_code=302)
     return FileResponse(_cms_dir / "index.html")
 
 
