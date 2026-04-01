@@ -31,16 +31,18 @@
     <div v-if="canEdit" class="action-area">
       <div class="upload-row">
         <UploadZone @uploaded="loadAssets" />
-        <button class="btn-html-add" @click="openHtmlEditor()" title="Create custom slides — clocks, weather, scrolling text &amp; more">
-          <i class="pi pi-code"></i> Add Custom Slide
-        </button>
+        <div class="action-side">
+          <button class="btn-html-add" @click="openHtmlEditor()" title="Create custom slides — clocks, weather, scrolling text &amp; more">
+            <i class="pi pi-code"></i> Add Custom Slide
+          </button>
+          <label class="auto-add-toggle" v-tooltip.bottom="'When on, uploads, custom slides, and duplicates are automatically added to your default playlist.'">
+            <input type="checkbox" v-model="autoAdd" @change="saveAutoAdd" />
+            Add to default playlist
+            <i class="pi pi-info-circle auto-add-info"></i>
+          </label>
+        </div>
       </div>
       <p class="form-hint upload-hint">Large video files may take longer to load on the player.</p>
-      <label class="auto-add-toggle">
-        <input type="checkbox" v-model="autoAdd" @change="saveAutoAdd" />
-        Auto-add new media to default playlist
-      </label>
-      <p class="form-hint auto-add-hint">When on, uploads, custom slides, and duplicates are automatically added to your default playlist.</p>
     </div>
 
     <div v-if="assets.length === 0" class="empty">
@@ -667,12 +669,19 @@ h2 {
 
 .upload-row {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 0.75rem;
 }
 
 .upload-row > :first-child {
   flex: 1;
+}
+
+.action-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  justify-content: center;
 }
 
 .upload-hint {
@@ -685,18 +694,19 @@ h2 {
   align-items: center;
   gap: 0.4rem;
   color: #ccc;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   cursor: pointer;
-  margin-top: 0.5rem;
+  white-space: nowrap;
 }
 
 .auto-add-toggle input[type="checkbox"] {
   accent-color: #7c83ff;
 }
 
-.auto-add-hint {
-  margin-top: 0.15rem;
-  margin-bottom: 0;
+.auto-add-info {
+  font-size: 0.75rem;
+  color: #888;
+  margin-left: 0.1rem;
 }
 
 .btn-html-add {

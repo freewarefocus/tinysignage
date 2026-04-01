@@ -98,7 +98,7 @@ async function uploadFiles(files) {
 .upload-zone {
   border: 2px dashed #3a3a5a;
   border-radius: 8px;
-  padding: 2rem;
+  padding: 1rem;
   text-align: center;
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
@@ -112,9 +112,9 @@ async function uploadFiles(files) {
 }
 
 .upload-content i {
-  font-size: 2rem;
+  font-size: 1.5rem;
   color: #666;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.3rem;
 }
 
 .upload-content p {
