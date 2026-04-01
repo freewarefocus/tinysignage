@@ -5,6 +5,7 @@ html, body, #player { width: 100%; height: 100%; overflow: hidden; background: #
     position: absolute;
     inset: 0;
     opacity: 0;
+    overflow: hidden;
     transition: opacity var(--transition-duration, 1s) ease-in-out;
     transform: translateZ(0);  /* Force GPU compositing — prevents flicker */
     z-index: 1;
@@ -74,6 +75,7 @@ html, body, #player { width: 100%; height: 100%; overflow: hidden; background: #
     position: absolute;
     inset: 0;
     opacity: 0;
+    overflow: hidden;
     transition: opacity var(--transition-duration, 1s) ease-in-out;
     transform: translateZ(0);
     z-index: 1;
@@ -392,6 +394,20 @@ html, body, #player { width: 100%; height: 100%; overflow: hidden; background: #
 
 .status-offline {
     background: #f44336;
+}
+
+/* --- Motion Effects (Ken Burns) --- */
+@keyframes fx-zoom-in    { from { transform: scale(1); }    to { transform: scale(1.15); } }
+@keyframes fx-zoom-out   { from { transform: scale(1.15); } to { transform: scale(1); } }
+@keyframes fx-pan-left   { from { transform: scale(1.15) translateX(5%); }  to { transform: scale(1.15) translateX(-5%); } }
+@keyframes fx-pan-right  { from { transform: scale(1.15) translateX(-5%); } to { transform: scale(1.15) translateX(5%); } }
+@keyframes fx-pan-up     { from { transform: scale(1.15) translateY(4%); }  to { transform: scale(1.15) translateY(-4%); } }
+@keyframes fx-pan-down   { from { transform: scale(1.15) translateY(-4%); } to { transform: scale(1.15) translateY(4%); } }
+
+.layer img.has-effect, .zone-layer img.has-effect {
+    will-change: transform;
+    animation-timing-function: ease-in-out;
+    animation-fill-mode: both;
 }
 
 /* --- Debug Log Overlay (Ctrl+Shift+D) --- */

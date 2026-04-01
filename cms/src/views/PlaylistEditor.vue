@@ -121,6 +121,20 @@
             </select>
           </div>
           <div class="setting-field">
+            <label>Display Effect</label>
+            <select v-model="plSettings.effect" @change="saveSettings" class="setting-select">
+              <option :value="null">Global default</option>
+              <option value="none">None</option>
+              <option value="zoom-in">Zoom In</option>
+              <option value="zoom-out">Zoom Out</option>
+              <option value="pan-left">Pan Left</option>
+              <option value="pan-right">Pan Right</option>
+              <option value="pan-up">Pan Up</option>
+              <option value="pan-down">Pan Down</option>
+              <option value="random">Random</option>
+            </select>
+          </div>
+          <div class="setting-field">
             <label>Shuffle</label>
             <select v-model="plSettings.shuffle" @change="saveSettings" class="setting-select">
               <option :value="null">Global default</option>
@@ -393,6 +407,7 @@
         :default-duration="plSettings.default_duration ?? 10"
         :shuffle="plSettings.shuffle ?? false"
         :object-fit="plSettings.object_fit"
+        :effect="plSettings.effect"
       />
 
       <div v-if="canEdit" class="add-section">
@@ -456,6 +471,7 @@ const plSettings = ref({
   transition_duration: null,
   default_duration: null,
   object_fit: null,
+  effect: null,
   shuffle: null,
 })
 
@@ -554,6 +570,7 @@ async function loadPlaylist() {
       transition_duration: full.transition_duration ?? null,
       default_duration: full.default_duration ?? null,
       object_fit: full.object_fit ?? null,
+      effect: full.effect ?? null,
       shuffle: full.shuffle ?? null,
     }
     // Load trigger flow data for advanced playlists
@@ -772,6 +789,7 @@ async function saveSettings() {
     transition_duration: plSettings.value.transition_duration,
     default_duration: plSettings.value.default_duration,
     object_fit: plSettings.value.object_fit,
+    effect: plSettings.value.effect,
     shuffle: plSettings.value.shuffle,
   })
 }
@@ -812,6 +830,7 @@ async function resetItem(itemId) {
     transition_duration: null,
     duration: null,
     object_fit: null,
+    effect: null,
   })
   await loadPlaylist()
 }

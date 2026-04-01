@@ -64,6 +64,7 @@ class Settings(Base):
     shuffle: Mapped[bool] = mapped_column(Boolean, default=False)
     object_fit: Mapped[str] = mapped_column(String(20), default="contain", server_default="contain")
     auto_add_to_playlist: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    effect: Mapped[str] = mapped_column(String(20), default="none", server_default="none")
 
 
 class Layout(Base):
@@ -173,6 +174,7 @@ class Playlist(Base):
     default_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
     shuffle: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     object_fit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    effect: Mapped[str | None] = mapped_column(String(20), nullable=True)
     mode: Mapped[str] = mapped_column(
         String(10), nullable=False, default="simple", server_default="simple"
     )
@@ -485,6 +487,7 @@ class PlaylistItem(Base):
     transition_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
     duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
     object_fit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    effect: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )

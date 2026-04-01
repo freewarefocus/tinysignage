@@ -32,7 +32,7 @@
       </div>
       <div v-if="canEdit" class="row-controls">
         <div class="control-group">
-          <label>Effect</label>
+          <label>Transition</label>
           <select :value="item.transition_type || ''" @change="onUpdate('transition_type', $event.target.value || null)">
             <option value="">Default</option>
             <option value="fade">Fade</option>
@@ -72,6 +72,20 @@
             <option value="none">Original size</option>
           </select>
         </div>
+        <div class="control-group">
+          <label>Motion</label>
+          <select :value="item.effect || ''" @change="onUpdate('effect', $event.target.value || null)">
+            <option value="">Default</option>
+            <option value="none">None</option>
+            <option value="zoom-in">Zoom In</option>
+            <option value="zoom-out">Zoom Out</option>
+            <option value="pan-left">Pan Left</option>
+            <option value="pan-right">Pan Right</option>
+            <option value="pan-up">Pan Up</option>
+            <option value="pan-down">Pan Down</option>
+            <option value="random">Random</option>
+          </select>
+        </div>
       </div>
     </div>
     <div class="row-actions">
@@ -98,7 +112,8 @@ const hasOverride = computed(() =>
   props.item.transition_type != null ||
   props.item.transition_duration != null ||
   props.item.duration != null ||
-  props.item.object_fit != null
+  props.item.object_fit != null ||
+  props.item.effect != null
 )
 
 function resetDefaults() {

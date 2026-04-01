@@ -727,6 +727,7 @@
                 element.style.objectFit = getEffectiveObjectFit(item, ctrl.settings);
             }
             nextLayer.appendChild(element);
+            applyZoneEffect(nextLayer, item, ctrl);
         }
     }
 
@@ -912,6 +913,57 @@
         return { type, duration };
     }
 
+    // --- Motion Effects (Ken Burns) ---
+    const EFFECT_PRESETS = ['zoom-in', 'zoom-out', 'pan-left', 'pan-right', 'pan-up', 'pan-down'];
+
+    function getEffectiveEffect(item, zoneSettings) {
+        if (item.effect) return item.effect;
+        const s = zoneSettings || settings;
+        if (s.effect) return s.effect;
+        return 'none';
+    }
+
+    function resolveEffect(name) {
+        if (name === 'random') {
+            return EFFECT_PRESETS[Math.floor(Math.random() * EFFECT_PRESETS.length)];
+        }
+        return name;
+    }
+
+    function applyEffect(layer, item, zoneSettings) {
+        const asset = item.asset || item;
+        if (asset.asset_type !== 'image') return;
+
+        const effectName = getEffectiveEffect(item, zoneSettings);
+        if (!effectName || effectName === 'none') return;
+
+        const resolved = resolveEffect(effectName);
+        const img = layer.querySelector('img');
+        if (!img) return;
+
+        const duration = getAssetDuration(item);
+        img.classList.add('has-effect');
+        img.style.animationName = 'fx-' + resolved;
+        img.style.animationDuration = duration + 's';
+    }
+
+    function applyZoneEffect(layer, item, ctrl) {
+        const asset = item.asset || item;
+        if (asset.asset_type !== 'image') return;
+
+        const effectName = getEffectiveEffect(item, ctrl.settings);
+        if (!effectName || effectName === 'none') return;
+
+        const resolved = resolveEffect(effectName);
+        const img = layer.querySelector('img');
+        if (!img) return;
+
+        const duration = zoneGetDuration(ctrl, item);
+        img.classList.add('has-effect');
+        img.style.animationName = 'fx-' + resolved;
+        img.style.animationDuration = duration + 's';
+    }
+
     // --- Asset Loading ---
     function loadAsset(item) {
         const asset = item.asset || item;
@@ -980,6 +1032,7 @@
                 element.style.objectFit = getEffectiveObjectFit(item);
             }
             nextLayer.appendChild(element);
+            applyEffect(nextLayer, item);
         }
     }
 

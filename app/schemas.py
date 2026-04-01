@@ -111,6 +111,7 @@ class SettingsOut(BaseModel):
     transition_type: str
     default_duration: int
     shuffle: bool
+    effect: str = "none"
 
     model_config = {"from_attributes": True}
 
@@ -120,3 +121,4 @@ class SettingsUpdate(BaseModel):
     transition_type: str | None = None
     default_duration: int | None = None
     shuffle: bool | None = None
+    effect: str | None = None

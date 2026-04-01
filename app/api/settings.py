@@ -10,6 +10,7 @@ router = APIRouter()
 
 VALID_TRANSITION_TYPES = {"fade", "slide", "none"}
 VALID_OBJECT_FIT_VALUES = {"contain", "cover", "fill", "none"}
+VALID_EFFECTS = {"none", "zoom-in", "zoom-out", "pan-left", "pan-right", "pan-up", "pan-down", "random"}
 
 
 @router.get("/settings")
@@ -24,18 +25,25 @@ async def get_settings(
         "default_duration": settings.default_duration,
         "shuffle": settings.shuffle,
         "object_fit": settings.object_fit,
+        "effect": settings.effect,
         "auto_add_to_playlist": settings.auto_add_to_playlist,
     }
 
 
 def _validate_settings(data: dict) -> dict:
     """Validate and coerce settings values. Returns cleaned dict."""
-    allowed = {"transition_duration", "transition_type", "default_duration", "shuffle", "object_fit", "auto_add_to_playlist"}
+    allowed = {"transition_duration", "transition_type", "default_duration", "shuffle", "object_fit", "effect", "auto_add_to_playlist"}
     changes = {}
     for key, value in data.items():
         if key not in allowed:
             continue
-        if key == "object_fit":
+        if key == "effect":
+            if not isinstance(value, str) or value not in VALID_EFFECTS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"effect must be one of: {', '.join(sorted(VALID_EFFECTS))}",
+                )
+        elif key == "object_fit":
             if not isinstance(value, str) or value not in VALID_OBJECT_FIT_VALUES:
                 raise HTTPException(
                     status_code=400,

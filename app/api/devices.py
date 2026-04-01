@@ -323,6 +323,7 @@ async def get_device_playlist(
                         "default_duration": _resolve_ov("default_duration", 10),
                         "shuffle": _resolve_ov("shuffle", False),
                         "object_fit": _resolve_ov("object_fit", "contain"),
+                        "effect": _resolve_ov("effect", "none"),
                     },
                     "override": {
                         "id": active_override.id,
@@ -399,6 +400,7 @@ async def get_device_playlist(
             "default_duration": _resolve("default_duration", 10),
             "shuffle": _resolve("shuffle", False),
             "object_fit": _resolve("object_fit", "contain"),
+            "effect": _resolve("effect", "none"),
         },
     }
 
@@ -519,6 +521,7 @@ async def _build_trigger_flow_payload(
                 "default_duration": _tr("default_duration", 10),
                 "shuffle": _tr("shuffle", False),
                 "object_fit": _tr("object_fit", "contain"),
+                "effect": _tr("effect", "none"),
             },
         }
 
@@ -596,6 +599,7 @@ async def _build_zones_payload(layout_id: str, session: AsyncSession) -> list[di
                 "default_duration": _zr("default_duration", 10),
                 "shuffle": _zr("shuffle", False),
                 "object_fit": _zr("object_fit", "contain"),
+                "effect": _zr("effect", "none"),
             }
 
         zones_out.append(zone_dict)
@@ -643,6 +647,7 @@ async def _get_default_settings(session: AsyncSession) -> dict:
             "default_duration": settings.default_duration if settings.default_duration is not None else 10,
             "shuffle": settings.shuffle if settings.shuffle is not None else False,
             "object_fit": settings.object_fit if settings.object_fit is not None else "contain",
+            "effect": settings.effect if settings.effect is not None else "none",
         }
     return {
         "transition_duration": 1.0,
@@ -650,6 +655,7 @@ async def _get_default_settings(session: AsyncSession) -> dict:
         "default_duration": 10,
         "shuffle": False,
         "object_fit": "contain",
+        "effect": "none",
     }
 
 

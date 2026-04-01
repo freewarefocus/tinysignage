@@ -41,6 +41,7 @@ const props = defineProps({
   defaultDuration: { type: Number, default: 10 },
   shuffle: { type: Boolean, default: false },
   objectFit: { type: String, default: null },
+  effect: { type: String, default: null },
 })
 
 const playing = ref(true)
@@ -120,6 +121,37 @@ function getEffectiveObjectFit(item) {
   return 'contain'
 }
 
+const EFFECT_PRESETS = ['zoom-in', 'zoom-out', 'pan-left', 'pan-right', 'pan-up', 'pan-down']
+
+function getEffectiveEffect(item) {
+  if (item?.effect) return item.effect
+  if (props.effect) return props.effect
+  return 'none'
+}
+
+function resolveEffect(name) {
+  if (name === 'random') {
+    return EFFECT_PRESETS[Math.floor(Math.random() * EFFECT_PRESETS.length)]
+  }
+  return name
+}
+
+function getEffectStyle(item) {
+  const asset = getAsset(item)
+  if (!asset || asset.asset_type !== 'image') return {}
+  const effectName = getEffectiveEffect(item)
+  if (!effectName || effectName === 'none') return {}
+  const resolved = resolveEffect(effectName)
+  const duration = getDuration(item)
+  return {
+    animationName: 'fx-' + resolved,
+    animationDuration: duration + 's',
+    animationTimingFunction: 'ease-in-out',
+    animationFillMode: 'both',
+    willChange: 'transform',
+  }
+}
+
 function layerProps(item) {
   const asset = getAsset(item)
   if (!asset) return {}
@@ -133,7 +165,7 @@ function layerProps(item) {
     case 'url':
       return { src: asset.uri, sandbox: 'allow-scripts allow-same-origin', class: 'mp-media mp-iframe' }
     default:
-      return { src, class: 'mp-media', alt: asset.name || '', style: fitStyle }
+      return { src, class: 'mp-media', alt: asset.name || '', style: { ...fitStyle, ...getEffectStyle(item) } }
   }
 }
 
@@ -310,6 +342,14 @@ onUnmounted(() => {
   height: 100%;
   display: block;
 }
+
+/* Motion effect keyframes */
+@keyframes fx-zoom-in    { from { transform: scale(1); }    to { transform: scale(1.15); } }
+@keyframes fx-zoom-out   { from { transform: scale(1.15); } to { transform: scale(1); } }
+@keyframes fx-pan-left   { from { transform: scale(1.15) translateX(5%); }  to { transform: scale(1.15) translateX(-5%); } }
+@keyframes fx-pan-right  { from { transform: scale(1.15) translateX(-5%); } to { transform: scale(1.15) translateX(5%); } }
+@keyframes fx-pan-up     { from { transform: scale(1.15) translateY(4%); }  to { transform: scale(1.15) translateY(-4%); } }
+@keyframes fx-pan-down   { from { transform: scale(1.15) translateY(-4%); } to { transform: scale(1.15) translateY(4%); } }
 
 .mp-iframe {
   border: none;

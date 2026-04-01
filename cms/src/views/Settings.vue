@@ -28,6 +28,20 @@
           <option value="none">Original size</option>
         </select>
       </div>
+      <div class="form-group">
+        <label>Display Effect</label>
+        <select v-model="settings.effect">
+          <option value="none">None</option>
+          <option value="zoom-in">Zoom In</option>
+          <option value="zoom-out">Zoom Out</option>
+          <option value="pan-left">Pan Left</option>
+          <option value="pan-right">Pan Right</option>
+          <option value="pan-up">Pan Up</option>
+          <option value="pan-down">Pan Down</option>
+          <option value="random">Random</option>
+        </select>
+        <span class="hint-text">Adds slow motion to images. Does not affect video.</span>
+      </div>
       <div class="form-group checkbox">
         <label>
           <input type="checkbox" v-model="settings.shuffle" />
@@ -244,6 +258,13 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 .form-group select:focus {
   outline: none;
   border-color: #7c83ff;
+}
+
+.hint-text {
+  display: block;
+  font-size: 0.75rem;
+  color: #777;
+  margin-top: 0.3rem;
 }
 
 .checkbox label {
