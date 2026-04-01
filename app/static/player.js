@@ -17,7 +17,7 @@
     const HEARTBEAT_INTERVAL = 60000; // 60s between heartbeats
     const MAX_VIDEO_DURATION = 300;   // 5 min cap for videos with duration=0
     const PRELOAD_AHEAD = 1;          // Number of assets to preload ahead
-    const PLAYER_VERSION = '0.8.0';
+    const PLAYER_VERSION = '0.9.0';
     const CAPABILITY_REPORT_INTERVAL = 3600000; // 60 min
 
     // --- Persistent Player Log (ring buffer in localStorage) ---
