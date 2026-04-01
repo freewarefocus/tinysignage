@@ -20,6 +20,7 @@ Dedicated kiosk display -- boots straight into fullscreen playback, managed via 
 ## Install
 
 ```bash
+sudo apt install -y git
 git clone https://github.com/freewarefocus/tinysignage.git
 cd tinysignage
 bash install/install.sh
@@ -49,7 +50,7 @@ sudo systemctl enable signage-app signage-player
 
 ## What gets installed
 
-System packages via apt: `python3`, `python3-venv`, `chromium-browser`, `ffmpeg`, `avahi-daemon`, `curl`. On Pi OS Lite, the installer also adds `cage` (a lightweight Wayland kiosk compositor) to run Chromium fullscreen without a desktop environment.
+System packages via apt: `python3`, `python3-venv`, `chromium`, `ffmpeg`, `avahi-daemon`, `curl`. On Pi OS Lite, the installer also adds `cage` (a lightweight Wayland kiosk compositor) to run Chromium fullscreen without a desktop environment.
 
 A dedicated `tinysignage` service user is created — no application code runs as root. Systemd units include security hardening: `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, and a 512MB memory ceiling.
 
