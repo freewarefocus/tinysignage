@@ -26,11 +26,13 @@ cd tinysignage
 bash install/install.sh
 ```
 
+The installer automatically moves the project to `/opt/tinysignage` so the service user can access it.
+
 This runs two shell scripts — both readable in `install/` before you execute them:
 
 | Script | What it does |
 |--------|-------------|
-| `install/01-system.sh` | Installs apt packages, creates a dedicated `tinysignage` service user, enables mDNS (`tinysignage.local`), installs systemd units, sets GPU memory on Pi |
+| `install/01-system.sh` | Moves project to `/opt/tinysignage`, installs apt packages, creates a dedicated `tinysignage` service user, enables mDNS (`tinysignage.local`), installs systemd units, sets GPU memory on Pi |
 | `install/02-app.sh` | Creates a Python venv, installs pip dependencies, creates directories, generates a random `SECRET_KEY`, initializes the database |
 
 ## Start the services
@@ -57,8 +59,8 @@ A dedicated `tinysignage` service user is created — no application code runs a
 ## Updating
 
 ```bash
-cd /path/to/tinysignage
-git pull
+cd /opt/tinysignage
+sudo -u tinysignage git pull
 sudo systemctl restart signage-app
 ```
 

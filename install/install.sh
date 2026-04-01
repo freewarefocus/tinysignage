@@ -5,6 +5,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="$(dirname "$SCRIPT_DIR")"
+TARGET_DIR="/opt/tinysignage"
 export INSTALL_DIR
 
 echo "================================================"
@@ -20,6 +21,11 @@ if [ "$EUID" -ne 0 ]; then
 else
     bash "$SCRIPT_DIR/01-system.sh"
 fi
+
+# 01-system.sh may have moved the directory to /opt/tinysignage
+INSTALL_DIR="$TARGET_DIR"
+SCRIPT_DIR="$TARGET_DIR/install"
+export INSTALL_DIR
 
 echo ""
 

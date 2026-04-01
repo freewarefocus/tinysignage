@@ -12,7 +12,20 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 INSTALL_DIR="${INSTALL_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+TARGET_DIR="/opt/tinysignage"
 SERVICE_USER="tinysignage"
+
+# --- Move to /opt if cloned inside a user's home directory ---
+if [ "$INSTALL_DIR" != "$TARGET_DIR" ]; then
+    echo "Moving install from $INSTALL_DIR to $TARGET_DIR..."
+    if [ -d "$TARGET_DIR" ]; then
+        echo "  $TARGET_DIR already exists — removing old copy"
+        rm -rf "$TARGET_DIR"
+    fi
+    mv "$INSTALL_DIR" "$TARGET_DIR"
+    INSTALL_DIR="$TARGET_DIR"
+    echo "  Done. Install directory is now $INSTALL_DIR"
+fi
 
 # --- Detect Pi OS Lite (no desktop environment) ---
 IS_LITE=false
@@ -105,4 +118,5 @@ if [ -f /etc/systemd/system.conf ]; then
 fi
 
 echo ""
-echo "System setup complete. Run install/02-app.sh next."
+echo "System setup complete."
+echo "  If running manually: sudo -u tinysignage bash install/02-app.sh"
