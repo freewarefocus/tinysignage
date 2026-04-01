@@ -298,17 +298,6 @@
     async function init() {
         const params = new URLSearchParams(window.location.search);
 
-        // ?reset clears credentials and returns to the registration screen
-        if (params.has('reset')) {
-            localStorage.removeItem('tinysignage_device_id');
-            localStorage.removeItem('tinysignage_device_token');
-            localStorage.removeItem('tinysignage_playlist');
-            PlayerLog.info('Player reset via ?reset parameter');
-            cleanUrl();
-            showRegistrationOverlay();
-            return;
-        }
-
         const urlToken = params.get('token');
         const urlDevice = params.get('device');
         if (urlToken && urlDevice) {
@@ -1761,25 +1750,6 @@
         return null;
     }
 
-    // --- Player reset (Ctrl+Shift+R) ---
-    // Returns to the registration screen so you can re-enter server URL and display name.
-    // Works in kiosk mode where you can't edit the address bar.
-    function initResetShortcut() {
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.shiftKey && e.key === 'R') {
-                e.preventDefault();
-                localStorage.removeItem('tinysignage_device_id');
-                localStorage.removeItem('tinysignage_device_token');
-                localStorage.removeItem('tinysignage_playlist');
-                PlayerLog.info('Player reset via Ctrl+Shift+R');
-                cancelPlayback();
-                teardownZones();
-                teardownTriggerEngine();
-                showRegistrationOverlay();
-            }
-        });
-    }
-
     // --- Debug overlay (Ctrl+Shift+D) ---
     function initDebugOverlay() {
         document.addEventListener('keydown', (e) => {
@@ -1834,7 +1804,6 @@
     }
 
     initDebugOverlay();
-    initResetShortcut();
 
     // --- Go ---
     init();

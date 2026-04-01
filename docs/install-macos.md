@@ -174,9 +174,6 @@ In Safari, use **Ctrl+Cmd+F**. In Chrome, use **Cmd+Ctrl+F** or **F11** (if your
 open -a "Google Chrome" --args --kiosk http://localhost:8080/player
 ```
 
-**Need to reconfigure the player?**
-Press **Ctrl+Shift+R** on the player screen to return to the registration screen where you can re-enter the server URL and display name. You can also navigate to `http://localhost:8080/player?reset`.
-
 ---
 
 ## See also
