@@ -79,13 +79,3 @@ asyncio.run(setup())
 
 echo ""
 echo "=== App setup complete ==="
-echo ""
-echo "Start manually:"
-echo "  source venv/bin/activate"
-echo "  uvicorn app.main:app --host 0.0.0.0 --port 8080"
-echo ""
-echo "Or via systemd:"
-echo "  sudo systemctl start signage-app"
-echo "  sudo systemctl start signage-player"
-echo ""
-echo "Open: http://localhost:8080/cms"

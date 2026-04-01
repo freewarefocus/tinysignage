@@ -59,6 +59,11 @@ fi
 
 echo ""
 echo "================================================"
-echo "  Installation complete!"
-echo "  Open http://${SIGNAGE_HOSTNAME}.local:8080/cms"
+echo "  Installation complete! Reboot to start:"
+echo ""
+echo "    sudo reboot"
+echo ""
+echo "  After reboot:"
+echo "    CMS:    http://${SIGNAGE_HOSTNAME}.local:8080/cms"
+echo "    Player: launches automatically on the display"
 echo "================================================"
