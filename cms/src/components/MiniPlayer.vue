@@ -40,6 +40,7 @@ const props = defineProps({
   transitionDuration: { type: Number, default: 1 },
   defaultDuration: { type: Number, default: 10 },
   shuffle: { type: Boolean, default: false },
+  objectFit: { type: String, default: null },
 })
 
 const playing = ref(true)
@@ -113,19 +114,26 @@ function layerComponent(item) {
   }
 }
 
+function getEffectiveObjectFit(item) {
+  if (item?.object_fit) return item.object_fit
+  if (props.objectFit) return props.objectFit
+  return 'contain'
+}
+
 function layerProps(item) {
   const asset = getAsset(item)
   if (!asset) return {}
   const src = assetSrc(item)
+  const fitStyle = { objectFit: getEffectiveObjectFit(item) }
   switch (asset.asset_type) {
     case 'video':
-      return { src, autoplay: true, muted: true, loop: true, class: 'mp-media' }
+      return { src, autoplay: true, muted: true, loop: true, class: 'mp-media', style: fitStyle }
     case 'html':
       return { src, sandbox: 'allow-scripts allow-same-origin', class: 'mp-media mp-iframe' }
     case 'url':
       return { src: asset.uri, sandbox: 'allow-scripts allow-same-origin', class: 'mp-media mp-iframe' }
     default:
-      return { src, class: 'mp-media', alt: asset.name || '' }
+      return { src, class: 'mp-media', alt: asset.name || '', style: fitStyle }
   }
 }
 
@@ -300,7 +308,6 @@ onUnmounted(() => {
 .mp-media {
   width: 100%;
   height: 100%;
-  object-fit: contain;
   display: block;
 }
 

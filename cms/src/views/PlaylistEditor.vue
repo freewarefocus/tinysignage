@@ -392,6 +392,7 @@
         :transition-duration="plSettings.transition_duration ?? 1"
         :default-duration="plSettings.default_duration ?? 10"
         :shuffle="plSettings.shuffle ?? false"
+        :object-fit="plSettings.object_fit"
       />
 
       <div v-if="canEdit" class="add-section">
