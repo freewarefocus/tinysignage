@@ -59,11 +59,27 @@ if [ "$IS_LITE" = true ]; then
     usermod -aG input,render "$SERVICE_USER"
 fi
 
-# --- mDNS ---
-echo "[3/5] Configuring mDNS (tinysignage.local)..."
+# --- Hostname & mDNS ---
+echo "[3/5] Configuring hostname and mDNS..."
+if [ -n "$SIGNAGE_HOSTNAME" ]; then
+    CURRENT_HOSTNAME=$(hostname)
+    if [ "$SIGNAGE_HOSTNAME" != "$CURRENT_HOSTNAME" ]; then
+        hostnamectl set-hostname "$SIGNAGE_HOSTNAME"
+        # Update /etc/hosts so sudo doesn't complain about unresolvable hostname
+        if grep -q "127.0.1.1.*$CURRENT_HOSTNAME" /etc/hosts; then
+            sed -i "s/127.0.1.1.*$CURRENT_HOSTNAME.*/127.0.1.1\t$SIGNAGE_HOSTNAME/" /etc/hosts
+        else
+            echo -e "127.0.1.1\t$SIGNAGE_HOSTNAME" >> /etc/hosts
+        fi
+        echo "  Hostname set to: $SIGNAGE_HOSTNAME"
+    else
+        echo "  Hostname already set to: $SIGNAGE_HOSTNAME"
+    fi
+fi
 if [ -d /etc/avahi ]; then
     systemctl enable avahi-daemon
     systemctl start avahi-daemon
+    echo "  mDNS enabled — reachable at ${SIGNAGE_HOSTNAME:-$(hostname)}.local"
 fi
 
 # --- Systemd units ---

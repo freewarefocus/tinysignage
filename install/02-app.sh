@@ -32,11 +32,13 @@ if [ ! -f config.yaml ]; then
     cp config.yaml.example config.yaml 2>/dev/null || true
 fi
 
-# Prompt for player configuration
-read -rp "Server URL [http://localhost:8080]: " SERVER_URL
-SERVER_URL="${SERVER_URL:-http://localhost:8080}"
-read -rp "Display Name [New Display]: " DISPLAY_NAME
+# Player configuration — display name and hostname are inherited from install.sh
 DISPLAY_NAME="${DISPLAY_NAME:-New Display}"
+if [ -n "$SIGNAGE_HOSTNAME" ]; then
+    SERVER_URL="http://${SIGNAGE_HOSTNAME}.local:8080"
+else
+    SERVER_URL="http://localhost:8080"
+fi
 
 # Write player settings to config.yaml
 if [ -n "$SERVER_URL" ]; then

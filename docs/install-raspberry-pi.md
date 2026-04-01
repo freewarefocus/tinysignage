@@ -19,6 +19,14 @@ Dedicated kiosk display -- boots straight into fullscreen playback, managed via 
 
 ## Install
 
+Update the system first — a fresh Pi OS image can be months behind on security patches and package versions:
+
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+Then install TinySignage:
+
 ```bash
 sudo apt install -y git
 git clone https://github.com/freewarefocus/tinysignage.git
@@ -26,13 +34,15 @@ cd tinysignage
 bash install/install.sh
 ```
 
-The installer automatically moves the project to `/opt/tinysignage` so the service user can access it.
+The installer will ask you for a **display name** (e.g. "Lobby TV"). This name is used both as the player's friendly name in the CMS and as the `.local` network address (sanitized to `lobby-tv.local`). For multiple displays, just give each Pi a different name.
+
+The installer then automatically moves the project to `/opt/tinysignage` so the service user can access it.
 
 This runs two shell scripts — both readable in `install/` before you execute them:
 
 | Script | What it does |
 |--------|-------------|
-| `install/01-system.sh` | Moves project to `/opt/tinysignage`, installs apt packages, creates a dedicated `tinysignage` service user, enables mDNS (`tinysignage.local`), installs systemd units, sets GPU memory on Pi |
+| `install/01-system.sh` | Moves project to `/opt/tinysignage`, installs apt packages, creates a dedicated `tinysignage` service user, sets hostname, enables mDNS (`.local`), installs systemd units, sets GPU memory on Pi |
 | `install/02-app.sh` | Creates a Python venv, installs pip dependencies, creates directories, generates a random `SECRET_KEY`, initializes the database |
 
 ## Start the services
@@ -41,7 +51,7 @@ This runs two shell scripts — both readable in `install/` before you execute t
 sudo systemctl start signage-app signage-player
 ```
 
-- **CMS**: `http://tinysignage.local:8080/cms` (from any device on the network)
+- **CMS**: `http://<hostname>.local:8080/cms` (from any device on the network)
 - **Player**: Launches in kiosk mode on the Pi's display automatically
 
 To start on boot:
