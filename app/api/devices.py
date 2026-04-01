@@ -624,7 +624,12 @@ def _zones_hash(zones_data: list[dict] | None) -> str:
     parts = []
     for z in zones_data:
         item_ids = "|".join(i["id"] for i in z.get("items", []))
-        parts.append(f"{z['id']}:{z['playlist_id']}:{item_ids}")
+        parts.append(
+            f"{z['id']}:{z['playlist_id']}:{item_ids}"
+            f":{z.get('z_index',0)}"
+            f":{z.get('x_percent',0)}:{z.get('y_percent',0)}"
+            f":{z.get('width_percent',100)}:{z.get('height_percent',100)}"
+        )
     return hashlib.sha256(";".join(parts).encode()).hexdigest()[:12]
 
 
