@@ -43,7 +43,7 @@ This runs two shell scripts — both readable in `install/` before you execute t
 | Script | What it does |
 |--------|-------------|
 | `install/01-system.sh` | Moves project to `/opt/tinysignage`, installs apt packages, creates a dedicated `tinysignage` service user, sets hostname, enables mDNS (`.local`), installs systemd units, sets GPU memory on Pi |
-| `install/02-app.sh` | Creates a Python venv, installs pip dependencies, creates directories, generates a random `SECRET_KEY`, initializes the database |
+| `install/02-app.sh` | Creates a Python venv, installs pip dependencies, builds the CMS frontend, creates directories, generates a random `SECRET_KEY`, initializes the database |
 
 ## Reboot
 
@@ -60,7 +60,7 @@ After reboot, both services start automatically:
 
 ## What gets installed
 
-System packages via apt: `python3`, `python3-venv`, `chromium`, `ffmpeg`, `avahi-daemon`, `curl`. On Pi OS Lite, the installer also adds `cage` (a lightweight Wayland kiosk compositor) to run Chromium fullscreen without a desktop environment.
+System packages via apt: `python3`, `python3-venv`, `nodejs`, `npm`, `chromium`, `ffmpeg`, `avahi-daemon`, `curl`. On Pi OS Lite, the installer also adds `cage` (a lightweight Wayland kiosk compositor) to run Chromium fullscreen without a desktop environment. Node.js is used at install time to build the CMS frontend.
 
 A dedicated `tinysignage` service user is created — no application code runs as root. Systemd units include security hardening: `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, and a 512MB memory ceiling.
 

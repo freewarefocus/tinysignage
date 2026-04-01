@@ -38,7 +38,7 @@ fi
 # --- System packages ---
 echo "[1/5] Installing system packages..."
 apt-get update -qq
-PACKAGES="git python3 python3-venv python3-pip chromium ffmpeg avahi-daemon curl"
+PACKAGES="git python3 python3-venv python3-pip nodejs npm chromium ffmpeg avahi-daemon curl"
 if [ "$IS_LITE" = true ]; then
     echo "  Detected Pi OS Lite — will install kiosk compositor (cage)"
     # xwayland is required due to cage 0.1.4 bug (Bookworm) — it crashes

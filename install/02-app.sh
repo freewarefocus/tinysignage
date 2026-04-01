@@ -19,15 +19,22 @@ $PYTHON -m venv venv
 source venv/bin/activate
 
 # --- Dependencies ---
-echo "[2/4] Installing Python dependencies..."
+echo "[2/5] Installing Python dependencies..."
 pip install --quiet -r requirements.txt
 
+# --- Build CMS ---
+echo "[3/5] Building CMS..."
+cd "$INSTALL_DIR/cms"
+npm install --silent
+npm run build
+cd "$INSTALL_DIR"
+
 # --- Directories ---
-echo "[3/4] Creating directories..."
+echo "[4/5] Creating directories..."
 mkdir -p media media/thumbs db logs
 
 # --- Config ---
-echo "[4/4] Configuring..."
+echo "[5/5] Configuring..."
 if [ ! -f config.yaml ]; then
     cp config.yaml.example config.yaml 2>/dev/null || true
 fi
