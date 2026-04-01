@@ -298,6 +298,17 @@
     async function init() {
         const params = new URLSearchParams(window.location.search);
 
+        // ?reset clears credentials and returns to the registration screen
+        if (params.has('reset')) {
+            localStorage.removeItem('tinysignage_device_id');
+            localStorage.removeItem('tinysignage_device_token');
+            localStorage.removeItem('tinysignage_playlist');
+            PlayerLog.info('Player reset via ?reset parameter');
+            cleanUrl();
+            showRegistrationOverlay();
+            return;
+        }
+
         const urlToken = params.get('token');
         const urlDevice = params.get('device');
         if (urlToken && urlDevice) {
