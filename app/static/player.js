@@ -1307,12 +1307,16 @@
             },
         };
 
-        // Browser storage quota (not promoted to device columns)
+        // Browser storage quota → promoted to device storage columns
         if (navigator.storage && navigator.storage.estimate) {
             try {
                 const est = await navigator.storage.estimate();
-                payload.hardware.browser_storage_quota_mb = Math.round((est.quota || 0) / (1024 * 1024));
-                payload.hardware.browser_storage_usage_mb = Math.round((est.usage || 0) / (1024 * 1024));
+                const quotaMb = Math.round((est.quota || 0) / (1024 * 1024));
+                const usageMb = Math.round((est.usage || 0) / (1024 * 1024));
+                payload.hardware.storage_total_mb = quotaMb;
+                payload.hardware.storage_free_mb = quotaMb - usageMb;
+                payload.hardware.browser_storage_quota_mb = quotaMb;
+                payload.hardware.browser_storage_usage_mb = usageMb;
             } catch (e) { PlayerLog.warn('Storage quota check failed: ' + e.message); }
         }
 

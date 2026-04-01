@@ -260,6 +260,10 @@
             <i class="pi pi-list"></i>
             <span>{{ playlistName(d.playlist_id) }}</span>
           </div>
+          <div class="card-field" v-if="layoutName(d.layout_id)">
+            <i class="pi pi-objects-column"></i>
+            <span>{{ layoutName(d.layout_id) }}</span>
+          </div>
           <div class="card-field">
             <i class="pi pi-clock"></i>
             <span>{{ d.last_seen ? relativeTime(d.last_seen) : 'Never seen' }}</span>
@@ -341,6 +345,12 @@ function playlistName(playlistId) {
   if (!playlistId) return 'No playlist'
   const pl = playlists.value.find(p => p.id === playlistId)
   return pl ? pl.name : 'Unknown'
+}
+
+function layoutName(layoutId) {
+  if (!layoutId) return null
+  const l = layouts.value.find(l => l.id === layoutId)
+  return l ? l.name : 'Unknown'
 }
 
 function signalColor(signalName) {

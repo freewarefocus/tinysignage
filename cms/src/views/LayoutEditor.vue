@@ -67,7 +67,7 @@
             </div>
             <div class="prop-field">
               <label>Type</label>
-              <select v-model="selectedZone.zone_type" @change="updateZone(selectedZone)">
+              <select v-model="selectedZone.zone_type" @change="applyTypePreset(selectedZone); updateZone(selectedZone)">
                 <option value="main">Main</option>
                 <option value="sidebar">Sidebar</option>
                 <option value="ticker">Ticker</option>
@@ -296,6 +296,18 @@ async function addZone() {
   })
   activeLayout.value.zones.push(zone)
   selectedZone.value = zone
+}
+
+const typePresets = {
+  main:    { x_percent: 0,  y_percent: 0,  width_percent: 100, height_percent: 100 },
+  sidebar: { x_percent: 75, y_percent: 0,  width_percent: 25,  height_percent: 100 },
+  ticker:  { x_percent: 0,  y_percent: 90, width_percent: 100, height_percent: 10 },
+  pip:     { x_percent: 70, y_percent: 5,  width_percent: 25,  height_percent: 25 },
+}
+
+function applyTypePreset(zone) {
+  const preset = typePresets[zone.zone_type]
+  if (preset) Object.assign(zone, preset)
 }
 
 async function updateZone(zone) {

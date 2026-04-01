@@ -37,6 +37,10 @@
           <i class="pi pi-calendar"></i>
           <span>Schedules</span>
         </router-link>
+        <router-link v-if="canEdit" to="/layouts" class="nav-item" active-class="active" v-tooltip.right="'Layouts'">
+          <i class="pi pi-th-large"></i>
+          <span>Layouts</span>
+        </router-link>
         <router-link v-if="isAdmin" to="/settings" class="nav-item" active-class="active" v-tooltip.right="'Settings'">
           <i class="pi pi-cog"></i>
           <span>Settings</span>
@@ -44,10 +48,6 @@
         <router-link to="/storage" class="nav-item" active-class="active" v-tooltip.right="'Storage'">
           <i class="pi pi-database"></i>
           <span>Storage</span>
-        </router-link>
-        <router-link v-if="canEdit" to="/layouts" class="nav-item" active-class="active" v-tooltip.right="'Layouts'">
-          <i class="pi pi-th-large"></i>
-          <span>Layouts</span>
         </router-link>
         <router-link v-if="isAdmin" to="/users" class="nav-item" active-class="active" v-tooltip.right="'Users'">
           <i class="pi pi-users"></i>
