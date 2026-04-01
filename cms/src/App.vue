@@ -67,9 +67,9 @@
         </router-link>
       </nav>
       <div class="sidebar-footer">
-        <a href="/player" target="_blank" class="nav-item" v-tooltip.right="'Open Player'">
+        <a href="/player" target="_blank" class="nav-item" v-tooltip.right="'Open Local Player'">
           <i class="pi pi-external-link"></i>
-          <span>Open Player</span>
+          <span>Open Local Player</span>
         </a>
         <div class="theme-toggle-row">
           <button class="theme-toggle-btn" @click="toggleTheme" v-tooltip.right="isDark ? 'Switch to light mode' : 'Switch to dark mode'">
