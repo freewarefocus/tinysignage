@@ -186,6 +186,15 @@ html[data-theme="light"] .add-name {
   color: #444;
 }
 
+html[data-theme="light"] .add-hover-overlay {
+  background: rgba(99, 105, 209, 0.12);
+}
+
+html[data-theme="light"] .add-hover-overlay i {
+  color: #5a60c8;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.15));
+}
+
 /* Drag handle */
 html[data-theme="light"] .drag-handle {
   color: #bbb;

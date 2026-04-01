@@ -405,6 +405,7 @@
             :key="asset.id"
             class="add-card"
             @click="addToPlaylist(asset)"
+            v-tooltip="'Click to add to playlist'"
           >
             <div class="add-thumb">
               <img
@@ -413,6 +414,9 @@
                 alt=""
               />
               <i v-else :class="typeIcon(asset)" class="add-icon"></i>
+              <div class="add-hover-overlay">
+                <i class="pi pi-plus-circle"></i>
+              </div>
             </div>
             <div class="add-name">{{ asset.name }}</div>
           </div>
@@ -1121,6 +1125,29 @@ h3 { margin-bottom: 0.8rem; color: #ddd; font-size: 1rem; }
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+}
+
+.add-hover-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(124, 131, 255, 0.15);
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+
+.add-hover-overlay i {
+  font-size: 1.75rem;
+  color: #7c83ff;
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.5));
+}
+
+.add-card:hover .add-hover-overlay {
+  opacity: 1;
 }
 
 .add-thumb img {
