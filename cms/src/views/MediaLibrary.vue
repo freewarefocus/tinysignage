@@ -36,6 +36,11 @@
         </button>
       </div>
       <p class="form-hint upload-hint">Large video files may take longer to load on the player.</p>
+      <label class="auto-add-toggle">
+        <input type="checkbox" v-model="autoAdd" @change="saveAutoAdd" />
+        Auto-add new media to default playlist
+      </label>
+      <p class="form-hint auto-add-hint">When on, uploads, custom slides, and duplicates are automatically added to your default playlist.</p>
     </div>
 
     <div v-if="assets.length === 0" class="empty">
@@ -209,6 +214,9 @@ const editTagName = ref('')
 const editTagColor = ref('#7c83ff')
 
 const deleteTarget = ref(null)
+
+// Auto-add to playlist toggle
+const autoAdd = ref(true)
 
 // Widget state
 const widgets = ref([])
@@ -397,7 +405,25 @@ function insertWidget(w) {
   }
 }
 
-onMounted(() => { loadAll(); loadWidgets() })
+async function loadAutoAdd() {
+  try {
+    const settings = await api.get('/settings')
+    autoAdd.value = settings.auto_add_to_playlist
+  } catch (err) {
+    console.warn('[MediaLibrary] Failed to load auto-add setting:', err)
+  }
+}
+
+async function saveAutoAdd() {
+  try {
+    await api.patch('/settings', { auto_add_to_playlist: autoAdd.value })
+  } catch (err) {
+    console.warn('[MediaLibrary] Failed to save auto-add setting:', err)
+    autoAdd.value = !autoAdd.value // revert on failure
+  }
+}
+
+onMounted(() => { loadAll(); loadWidgets(); loadAutoAdd() })
 </script>
 
 <style scoped>
@@ -651,6 +677,25 @@ h2 {
 
 .upload-hint {
   margin-top: 0.25rem;
+  margin-bottom: 0;
+}
+
+.auto-add-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #ccc;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+.auto-add-toggle input[type="checkbox"] {
+  accent-color: #7c83ff;
+}
+
+.auto-add-hint {
+  margin-top: 0.15rem;
   margin-bottom: 0;
 }
 

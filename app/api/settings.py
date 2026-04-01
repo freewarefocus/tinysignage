@@ -24,12 +24,13 @@ async def get_settings(
         "default_duration": settings.default_duration,
         "shuffle": settings.shuffle,
         "object_fit": settings.object_fit,
+        "auto_add_to_playlist": settings.auto_add_to_playlist,
     }
 
 
 def _validate_settings(data: dict) -> dict:
     """Validate and coerce settings values. Returns cleaned dict."""
-    allowed = {"transition_duration", "transition_type", "default_duration", "shuffle", "object_fit"}
+    allowed = {"transition_duration", "transition_type", "default_duration", "shuffle", "object_fit", "auto_add_to_playlist"}
     changes = {}
     for key, value in data.items():
         if key not in allowed:
@@ -63,6 +64,9 @@ def _validate_settings(data: dict) -> dict:
         elif key == "shuffle":
             if not isinstance(value, bool):
                 raise HTTPException(status_code=400, detail="shuffle must be a boolean")
+        elif key == "auto_add_to_playlist":
+            if not isinstance(value, bool):
+                raise HTTPException(status_code=400, detail="auto_add_to_playlist must be a boolean")
         changes[key] = value
     return changes
 

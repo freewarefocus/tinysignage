@@ -13,7 +13,7 @@ from app.audit import record as audit
 from app.auth import require_editor, require_viewer
 from app.database import get_session
 from app.media import compute_content_hash, generate_thumbnail
-from app.models import ApiToken, Asset, AssetTag, Playlist, PlaylistItem, Tag
+from app.models import ApiToken, Asset, AssetTag, Playlist, PlaylistItem, Settings, Tag
 
 MAX_HTML_SIZE = 65536  # 64 KB
 
@@ -176,18 +176,20 @@ async def create_asset(
     session.add(asset)
     await session.flush()
 
-    # Also add to default playlist
-    result = await session.execute(
-        select(Playlist).where(Playlist.is_default == True)
-    )
-    default_playlist = result.scalars().first()
-    if default_playlist:
-        item = PlaylistItem(
-            playlist_id=default_playlist.id,
-            asset_id=asset.id,
-            order=next_order,
+    # Also add to default playlist (if auto-add is enabled)
+    settings = await session.get(Settings, 1)
+    if settings and settings.auto_add_to_playlist:
+        result = await session.execute(
+            select(Playlist).where(Playlist.is_default == True)
         )
-        session.add(item)
+        default_playlist = result.scalars().first()
+        if default_playlist:
+            item = PlaylistItem(
+                playlist_id=default_playlist.id,
+                asset_id=asset.id,
+                order=next_order,
+            )
+            session.add(item)
 
     await audit(session, action="create", entity_type="asset", entity_id=asset.id,
                 details={"name": asset.name, "type": asset.asset_type},
@@ -428,18 +430,20 @@ async def duplicate_asset(
     session.add(new_asset)
     await session.flush()
 
-    # Add to default playlist
-    result = await session.execute(
-        select(Playlist).where(Playlist.is_default == True)
-    )
-    default_playlist = result.scalars().first()
-    if default_playlist:
-        item = PlaylistItem(
-            playlist_id=default_playlist.id,
-            asset_id=new_asset.id,
-            order=next_order,
+    # Add to default playlist (if auto-add is enabled)
+    settings = await session.get(Settings, 1)
+    if settings and settings.auto_add_to_playlist:
+        result = await session.execute(
+            select(Playlist).where(Playlist.is_default == True)
         )
-        session.add(item)
+        default_playlist = result.scalars().first()
+        if default_playlist:
+            item = PlaylistItem(
+                playlist_id=default_playlist.id,
+                asset_id=new_asset.id,
+                order=next_order,
+            )
+            session.add(item)
 
     await audit(session, action="duplicate", entity_type="asset", entity_id=new_asset.id,
                 details={"name": new_asset.name, "source_id": asset_id},

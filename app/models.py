@@ -63,6 +63,7 @@ class Settings(Base):
     default_duration: Mapped[int] = mapped_column(Integer, default=10)
     shuffle: Mapped[bool] = mapped_column(Boolean, default=False)
     object_fit: Mapped[str] = mapped_column(String(20), default="contain", server_default="contain")
+    auto_add_to_playlist: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
 
 
 class Layout(Base):
