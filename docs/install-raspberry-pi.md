@@ -99,6 +99,13 @@ ffmpeg -version
 
 If missing: `sudo apt install ffmpeg`
 
+**Need to reconfigure the player?**
+Add `?reset` to the player URL to clear stored credentials and return to the registration screen:
+
+```
+http://<ip-address>:8080/player?reset
+```
+
 ---
 
 ## Production Hardening (24/7 Displays)
