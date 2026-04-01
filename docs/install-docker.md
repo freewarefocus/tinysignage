@@ -110,11 +110,7 @@ Check your internet connection. The first build downloads Node and Python depend
 Wait 10-15 seconds for the application to fully initialize. Check logs with `docker compose logs signage`.
 
 **Need to reconfigure the player?**
-Add `?reset` to the player URL to clear stored credentials and return to the registration screen:
-
-```
-http://localhost:8080/player?reset
-```
+Press **Ctrl+Shift+R** on the player screen to return to the registration screen where you can re-enter the server URL and display name. You can also navigate to `http://localhost:8080/player?reset`.
 
 ---
 

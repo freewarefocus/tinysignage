@@ -123,11 +123,7 @@ chrome --kiosk http://localhost:8080/player
 Windows Firewall may ask to allow Python/uvicorn through the firewall. Allow it on "Private networks" if you want to access the CMS from other devices on your network.
 
 **Need to reconfigure the player?**
-Add `?reset` to the player URL to clear stored credentials and return to the registration screen:
-
-```
-http://localhost:8080/player?reset
-```
+Press **Ctrl+Shift+R** on the player screen to return to the registration screen where you can re-enter the server URL and display name. You can also navigate to `http://localhost:8080/player?reset`.
 
 ---
 

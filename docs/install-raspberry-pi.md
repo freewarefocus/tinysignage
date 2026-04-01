@@ -100,11 +100,7 @@ ffmpeg -version
 If missing: `sudo apt install ffmpeg`
 
 **Need to reconfigure the player?**
-Add `?reset` to the player URL to clear stored credentials and return to the registration screen:
-
-```
-http://<ip-address>:8080/player?reset
-```
+Press **Ctrl+Shift+R** on the player screen to return to the registration screen where you can re-enter the server URL and display name. In kiosk mode, plug in a USB keyboard. You can also add `?reset` to the player URL if you have access to the address bar.
 
 ---
 
