@@ -758,8 +758,17 @@ html[data-theme="light"] .detail-tag {
 
 /* ---- EmergencyOverrides.vue ---- */
 
+html[data-theme="light"] .btn-create-template {
+  background: #eef0ff;
+  border-color: #ddd;
+  color: #333;
+}
+html[data-theme="light"] .btn-create-template:hover {
+  background: #dde0f5;
+  color: #1a1a2e;
+}
 html[data-theme="light"] .dialog-desc {
-  color: #c62828;
+  color: #888;
 }
 html[data-theme="light"] .form-group textarea {
   background: #f8f9fb;
@@ -767,7 +776,7 @@ html[data-theme="light"] .form-group textarea {
   color: #333;
 }
 html[data-theme="light"] .form-group textarea:focus {
-  border-color: #c62828;
+  border-color: #5a61d6;
 }
 html[data-theme="light"] .radio-label {
   color: #333;
@@ -778,41 +787,70 @@ html[data-theme="light"] .duration-btn {
   color: #777;
 }
 html[data-theme="light"] .duration-btn:hover {
-  border-color: #c62828;
+  border-color: #5a61d6;
   color: #1a1a2e;
 }
 html[data-theme="light"] .duration-btn.active {
-  background: #dc3545;
-  border-color: #dc3545;
+  background: #5a61d6;
+  border-color: #5a61d6;
   color: #fff;
 }
-html[data-theme="light"] .active-heading {
-  color: #d32f2f;
+html[data-theme="light"] .btn-save-template {
+  background: #5a61d6;
 }
-html[data-theme="light"] .override-card {
+html[data-theme="light"] .btn-save-template:hover {
+  background: #5054d1;
+}
+html[data-theme="light"] .template-card {
   background: #ffffff;
+  border-color: #e0e0e0;
 }
 html[data-theme="light"] .active-card {
   border-color: #dc3545;
+  background: linear-gradient(135deg, #ffffff 0%, rgba(220, 53, 69, 0.04) 100%);
 }
-html[data-theme="light"] .detail-tag.type-message {
+html[data-theme="light"] .type-tag.message {
   color: #f57f17;
 }
-html[data-theme="light"] .detail-tag.type-playlist {
+html[data-theme="light"] .type-tag.playlist {
   color: #5a61d6;
+}
+html[data-theme="light"] .countdown-tag {
+  color: #d32f2f;
 }
 html[data-theme="light"] .card-preview {
   color: #777;
   background: #f8f9fb;
 }
-html[data-theme="light"] .btn-cancel {
-  background: rgba(211,47,47,0.1);
+html[data-theme="light"] .btn-activate {
+  background: rgba(211,47,47,0.08);
   color: #d32f2f;
-  border-color: #c62828;
+  border-color: #d32f2f;
 }
-html[data-theme="light"] .btn-cancel:hover {
+html[data-theme="light"] .btn-activate:hover {
   background: #d32f2f;
   color: #fff;
+}
+html[data-theme="light"] .btn-deactivate {
+  background: rgba(211,47,47,0.08);
+  color: #d32f2f;
+  border-color: #d32f2f;
+}
+html[data-theme="light"] .btn-deactivate:hover {
+  background: #d32f2f;
+  color: #fff;
+}
+html[data-theme="light"] .duration-info {
+  color: #c62828;
+}
+html[data-theme="light"] .empty-state {
+  color: #888;
+}
+html[data-theme="light"] .empty-state i {
+  color: #aaa;
+}
+html[data-theme="light"] .empty-hint {
+  color: #888;
 }
 
 /* ---- LayoutEditor.vue ---- */

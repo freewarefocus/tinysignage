@@ -148,11 +148,11 @@ async def create_schedule(session, name="Test Schedule", playlist_id=None,
 
 async def create_override(session, name="Test Override",
                            content_type="message", content="Emergency!",
-                           target_type="all", **overrides) -> Override:
-    """Create an Override."""
+                           target_type="all", is_active=True, **overrides) -> Override:
+    """Create an Override (defaults is_active=True for test convenience)."""
     override = Override(
         name=name, content_type=content_type, content=content,
-        target_type=target_type, **overrides,
+        target_type=target_type, is_active=is_active, **overrides,
     )
     session.add(override)
     await session.flush()

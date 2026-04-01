@@ -1,6 +1,6 @@
-"""Emergency override API — admin-only CRUD for emergency overrides."""
+"""Emergency override API — admin-only CRUD for emergency override templates."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import or_, select
@@ -41,7 +41,9 @@ def _override_to_dict(override: Override) -> dict:
         ),
         "is_active": effective_active,
         "created_at": override.created_at.isoformat() if override.created_at else None,
+        "activated_at": override.activated_at.isoformat() if override.activated_at else None,
         "expires_at": override.expires_at.isoformat() if override.expires_at else None,
+        "duration_minutes": override.duration_minutes,
     }
 
 
@@ -104,23 +106,13 @@ async def create_override(
         if not playlist:
             raise HTTPException(status_code=400, detail="Playlist not found")
 
-    # Parse expires_at
-    expires_at = None
-    expires_val = body.get("expires_at")
-    if expires_val:
+    # Parse duration_minutes (stored on template, used at activation time)
+    duration_minutes = body.get("duration_minutes")
+    if duration_minutes is not None:
         try:
-            expires_at = datetime.fromisoformat(expires_val).replace(tzinfo=None)
+            duration_minutes = int(duration_minutes)
         except (ValueError, TypeError):
-            raise HTTPException(status_code=400, detail="Invalid expires_at format")
-    else:
-        # Duration in minutes as alternative
-        duration_minutes = body.get("duration_minutes")
-        if duration_minutes:
-            try:
-                from datetime import timedelta
-                expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=int(duration_minutes))
-            except (ValueError, TypeError):
-                raise HTTPException(status_code=400, detail="Invalid duration_minutes")
+            raise HTTPException(status_code=400, detail="Invalid duration_minutes")
 
     override = Override(
         name=name,
@@ -129,8 +121,10 @@ async def create_override(
         target_type=target_type,
         target_id=target_id,
         created_by=token.user_id,
-        expires_at=expires_at,
-        is_active=True,
+        duration_minutes=duration_minutes,
+        is_active=False,
+        expires_at=None,
+        activated_at=None,
     )
     session.add(override)
     await session.flush()
@@ -145,7 +139,7 @@ async def create_override(
             "content_type": content_type,
             "target_type": target_type,
             "target_id": target_id,
-            "expires_at": expires_at.isoformat() if expires_at else None,
+            "duration_minutes": duration_minutes,
         },
         token=token,
         request=request,
@@ -196,33 +190,90 @@ async def update_override(
     if not override:
         raise HTTPException(status_code=404, detail="Override not found")
 
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     changes = {}
-    if "is_active" in body:
-        override.is_active = bool(body["is_active"])
-        changes["is_active"] = override.is_active
-    if "name" in body:
-        override.name = body["name"]
-        changes["name"] = override.name
-    if "expires_at" in body:
-        if body["expires_at"]:
-            try:
-                override.expires_at = datetime.fromisoformat(body["expires_at"]).replace(tzinfo=None)
-            except (ValueError, TypeError):
-                raise HTTPException(status_code=400, detail="Invalid expires_at format")
-        else:
-            override.expires_at = None
-        changes["expires_at"] = override.expires_at.isoformat() if override.expires_at else None
 
-    action = "cancel" if changes.get("is_active") is False else "update"
-    await audit(
-        session,
-        action=action,
-        entity_type="override",
-        entity_id=override_id,
-        details={"name": override.name, "changes": changes},
-        token=token,
-        request=request,
-    )
+    # Activation / deactivation
+    if "is_active" in body:
+        new_active = bool(body["is_active"])
+
+        if new_active and not override.is_active:
+            # Activate
+            override.is_active = True
+            override.activated_at = now
+            if override.duration_minutes:
+                override.expires_at = now + timedelta(minutes=override.duration_minutes)
+            else:
+                override.expires_at = None
+            changes["is_active"] = True
+            changes["activated_at"] = override.activated_at.isoformat()
+            changes["expires_at"] = override.expires_at.isoformat() if override.expires_at else None
+
+            await audit(
+                session,
+                action="activate",
+                entity_type="override",
+                entity_id=override_id,
+                details={"name": override.name, "changes": changes},
+                token=token,
+                request=request,
+            )
+            await session.commit()
+            await session.refresh(override)
+            result = await session.execute(
+                select(Override)
+                .where(Override.id == override_id)
+                .options(selectinload(Override.creator))
+            )
+            override = result.scalars().first()
+            return _override_to_dict(override)
+
+        elif not new_active and override.is_active:
+            # Deactivate
+            override.is_active = False
+            override.expires_at = None
+            changes["is_active"] = False
+
+            await audit(
+                session,
+                action="deactivate",
+                entity_type="override",
+                entity_id=override_id,
+                details={"name": override.name, "changes": changes},
+                token=token,
+                request=request,
+            )
+            await session.commit()
+            await session.refresh(override)
+            result = await session.execute(
+                select(Override)
+                .where(Override.id == override_id)
+                .options(selectinload(Override.creator))
+            )
+            override = result.scalars().first()
+            return _override_to_dict(override)
+
+    # Edit fields — only allowed when inactive
+    editable_fields = {"name", "content_type", "content", "target_type", "target_id", "duration_minutes"}
+    edit_keys = editable_fields & body.keys()
+    if edit_keys:
+        if override.is_active:
+            raise HTTPException(status_code=400, detail="Cannot edit an active override. Deactivate it first.")
+
+        for key in edit_keys:
+            setattr(override, key, body[key])
+            changes[key] = body[key]
+
+        await audit(
+            session,
+            action="update",
+            entity_type="override",
+            entity_id=override_id,
+            details={"name": override.name, "changes": changes},
+            token=token,
+            request=request,
+        )
+
     await session.commit()
     await session.refresh(override)
 
@@ -245,6 +296,9 @@ async def delete_override(
     override = await session.get(Override, override_id)
     if not override:
         raise HTTPException(status_code=404, detail="Override not found")
+
+    if override.is_active:
+        raise HTTPException(status_code=400, detail="Cannot delete an active override. Deactivate it first.")
 
     await audit(
         session,
@@ -298,7 +352,7 @@ async def evaluate_override_for_device(
     if not overrides:
         return None
 
-    # Most specific target wins; ties broken by most recent
+    # Most specific target wins; ties broken by most recently activated
     target_priority = {"device": 2, "group": 1, "all": 0}
-    best = max(overrides, key=lambda o: (target_priority.get(o.target_type, 0), o.created_at))
+    best = max(overrides, key=lambda o: (target_priority.get(o.target_type, 0), o.activated_at or o.created_at))
     return best
