@@ -31,8 +31,8 @@
     <div v-if="canEdit" class="action-area">
       <div class="upload-row">
         <UploadZone @uploaded="loadAssets" />
-        <button class="btn-html-add" @click="openHtmlEditor()">
-          <i class="pi pi-code"></i> Add HTML Slide
+        <button class="btn-html-add" @click="openHtmlEditor()" title="Create custom slides — clocks, weather, scrolling text &amp; more">
+          <i class="pi pi-code"></i> Add Custom Slide
         </button>
       </div>
       <p class="form-hint upload-hint">Large video files may take longer to load on the player.</p>
@@ -122,13 +122,13 @@
     <div v-if="showHtmlEditor" class="dialog-overlay" @click.self="closeHtmlEditor">
       <div class="dialog html-editor-dialog">
         <div class="dialog-header">
-          <h3>{{ htmlEditTarget ? 'Edit HTML Slide' : 'New HTML Slide' }}</h3>
+          <h3>{{ htmlEditTarget ? 'Edit Custom Slide' : 'New Custom Slide' }}</h3>
           <button class="close-btn" @click="closeHtmlEditor"><i class="pi pi-times"></i></button>
         </div>
         <div class="dialog-body html-editor-body">
           <div class="html-name-row">
             <label>Name</label>
-            <input v-model="htmlName" class="tag-input" placeholder="My HTML Slide" />
+            <input v-model="htmlName" class="tag-input" placeholder="My Custom Slide" />
           </div>
           <!-- Widget picker -->
           <div v-if="!htmlEditTarget && widgets.length" class="widget-picker">
@@ -378,7 +378,15 @@ async function loadWidgets() {
 }
 
 function widgetIcon(id) {
-  const icons = { clock: 'pi pi-clock', date: 'pi pi-calendar', weather: 'pi pi-cloud' }
+  const icons = {
+    clock: 'pi pi-clock',
+    date: 'pi pi-calendar',
+    weather: 'pi pi-cloud',
+    centered_text: 'pi pi-align-center',
+    heading_subtitle: 'pi pi-bars',
+    scrolling_text: 'pi pi-arrows-h',
+    countdown: 'pi pi-hourglass',
+  }
   return icons[id] || 'pi pi-box'
 }
 
@@ -704,8 +712,9 @@ h2 {
 
 .html-editor-textarea {
   width: 100%;
-  min-height: 320px;
+  min-height: 180px;
   max-height: 50vh;
+  flex: 1;
   background: #0f1117;
   border: 1px solid #2a2d3a;
   color: #e0e0e0;

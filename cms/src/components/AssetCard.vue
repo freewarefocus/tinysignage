@@ -11,7 +11,7 @@
         <i :class="typeIcon"></i>
       </div>
       <div class="hover-actions">
-        <button v-if="asset.asset_type === 'html'" @click.stop="$emit('edit-html', asset)" title="Edit HTML">
+        <button v-if="asset.asset_type === 'html'" @click.stop="$emit('edit-html', asset)" title="Edit custom slide">
           <i class="pi pi-pencil"></i>
         </button>
         <button v-if="asset.asset_type !== 'html'" @click.stop="$emit('replace', asset)" title="Replace file">

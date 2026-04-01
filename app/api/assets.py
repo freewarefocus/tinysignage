@@ -98,6 +98,7 @@ async def create_asset(
         asset_id = str(uuid.uuid4())
         filename = f"{asset_id}.html"
         filepath = _media_dir / filename
+        content = content.replace('\r\n', '\n').replace('\r', '\n')
         filepath.write_text(content, encoding="utf-8")
 
         file_size = filepath.stat().st_size
@@ -105,7 +106,7 @@ async def create_asset(
 
         asset = Asset(
             id=asset_id,
-            name=name or "HTML Slide",
+            name=name or "Custom Slide",
             asset_type="html",
             uri=filename,
             duration=duration if duration is not None else 10,
@@ -245,6 +246,7 @@ async def update_asset(
         if len(html_content.encode("utf-8")) > MAX_HTML_SIZE:
             raise HTTPException(status_code=400, detail="HTML content exceeds 64 KB limit")
         filepath = _media_dir / asset.uri
+        html_content = html_content.replace('\r\n', '\n').replace('\r', '\n')
         filepath.write_text(html_content, encoding="utf-8")
         asset.file_size = filepath.stat().st_size
         asset.content_hash = hashlib.sha256(html_content.encode("utf-8")).hexdigest()
