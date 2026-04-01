@@ -18,9 +18,10 @@ _CLOCK_HTML = """\
 <meta charset="UTF-8">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
   body {
     display: flex; align-items: center; justify-content: center;
-    height: 100vh; background: transparent;
+    background: transparent;
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   }
   .clock {
@@ -64,9 +65,10 @@ _DATE_HTML = """\
 <meta charset="UTF-8">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
   body {
     display: flex; align-items: center; justify-content: center;
-    height: 100vh; background: transparent;
+    background: transparent;
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   }
   .date {
@@ -113,21 +115,22 @@ _WEATHER_HTML = """\
 <meta charset="UTF-8">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
   body {
     display: flex; align-items: center; justify-content: center;
-    height: 100vh; background: transparent;
+    background: transparent;
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   }
   .weather {
     text-align: center; color: {{COLOR}};
   }
-  .weather-icon { font-size: 4rem; margin-bottom: 0.3rem; }
+  .weather-icon { font-size: 6vmin; margin-bottom: 0.3em; }
   .weather-temp { font-size: {{FONT_SIZE}}; font-weight: 300; }
   .weather-desc {
-    font-size: 1.4rem; opacity: 0.8; margin-top: 0.2rem;
+    font-size: 2.5vmin; opacity: 0.8; margin-top: 0.2em;
   }
   .weather-error {
-    font-size: 1.2rem; opacity: 0.6;
+    font-size: 2vmin; opacity: 0.6;
   }
 </style>
 </head>
@@ -201,6 +204,195 @@ _WEATHER_HTML = """\
 </body>
 </html>"""
 
+_CENTERED_TEXT_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    background: transparent;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  .message {
+    font-size: {{FONT_SIZE}};
+    font-weight: {{FONT_WEIGHT}};
+    color: {{COLOR}};
+    text-align: center;
+    padding: 2vmin;
+  }
+</style>
+</head>
+<body>
+<div class="message" id="msg"></div>
+<script>
+(function() {
+  document.getElementById('msg').textContent = '{{MESSAGE}}';
+})();
+</script>
+</body>
+</html>"""
+
+_HEADING_SUBTITLE_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    background: transparent;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  .container {
+    text-align: center;
+    color: {{COLOR}};
+  }
+  .heading {
+    font-size: {{HEADING_SIZE}};
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+  }
+  .subtitle {
+    font-size: {{SUBTITLE_SIZE}};
+    font-weight: 300;
+    opacity: 0.85;
+    margin-top: 0.3em;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="heading" id="heading"></div>
+  <div class="subtitle" id="subtitle"></div>
+</div>
+<script>
+(function() {
+  document.getElementById('heading').textContent = '{{HEADING}}';
+  document.getElementById('subtitle').textContent = '{{SUBTITLE}}';
+})();
+</script>
+</body>
+</html>"""
+
+_SCROLLING_TEXT_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    display: flex; align-items: center;
+    background: transparent;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  .scroll-wrap {
+    width: 100%;
+    overflow: hidden;
+  }
+  .scroll-text {
+    display: inline-block;
+    white-space: nowrap;
+    font-size: {{FONT_SIZE}};
+    font-weight: 300;
+    color: {{COLOR}};
+    animation: scroll {{SPEED}}s linear infinite;
+  }
+  @keyframes scroll {
+    0%   { transform: translateX(100vw); }
+    100% { transform: translateX(-100%); }
+  }
+</style>
+</head>
+<body>
+<div class="scroll-wrap">
+  <span class="scroll-text" id="msg"></span>
+</div>
+<script>
+(function() {
+  document.getElementById('msg').textContent = '{{MESSAGE}}';
+})();
+</script>
+</body>
+</html>"""
+
+_COUNTDOWN_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    background: transparent;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  .countdown {
+    text-align: center;
+    color: {{COLOR}};
+  }
+  .countdown-label {
+    font-size: 2.5vmin;
+    font-weight: 300;
+    opacity: 0.85;
+    margin-bottom: 0.4em;
+  }
+  .countdown-timer {
+    font-size: {{FONT_SIZE}};
+    font-weight: 300;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+  .countdown-done {
+    font-size: {{FONT_SIZE}};
+    font-weight: 300;
+  }
+</style>
+</head>
+<body>
+<div class="countdown">
+  <div class="countdown-label" id="label"></div>
+  <div class="countdown-timer" id="timer"></div>
+</div>
+<script>
+(function() {
+  var target = new Date('{{TARGET_DATE}}').getTime();
+  document.getElementById('label').textContent = '{{LABEL}}';
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function update() {
+    var now = Date.now();
+    var diff = target - now;
+    if (diff <= 0) {
+      document.getElementById('timer').innerHTML =
+        '<span class="countdown-done">Now!</span>';
+      return;
+    }
+    var d = Math.floor(diff / 86400000);
+    var h = Math.floor((diff % 86400000) / 3600000);
+    var m = Math.floor((diff % 3600000) / 60000);
+    var s = Math.floor((diff % 60000) / 1000);
+    document.getElementById('timer').textContent =
+      d + 'd ' + pad(h) + 'h ' + pad(m) + 'm ' + pad(s) + 's';
+  }
+  update();
+  setInterval(update, 1000);
+})();
+</script>
+</body>
+</html>"""
+
 # ---------------------------------------------------------------------------
 # Template registry
 # ---------------------------------------------------------------------------
@@ -214,7 +406,7 @@ WIDGETS = [
             {"name": "FORMAT_24H", "label": "24-hour format", "type": "boolean", "default": False},
             {"name": "SHOW_SECONDS", "label": "Show seconds", "type": "boolean", "default": True},
             {"name": "TIMEZONE", "label": "Timezone (e.g. America/New_York)", "type": "string", "default": ""},
-            {"name": "FONT_SIZE", "label": "Font size", "type": "string", "default": "6rem"},
+            {"name": "FONT_SIZE", "label": "Font size", "type": "string", "default": "9vmin"},
             {"name": "COLOR", "label": "Text color", "type": "string", "default": "#ffffff"},
         ],
         "template": _CLOCK_HTML,
@@ -226,7 +418,7 @@ WIDGETS = [
         "params": [
             {"name": "FORMAT", "label": "Format (long / short)", "type": "string", "default": "long"},
             {"name": "LOCALE", "label": "Locale (e.g. en-US, de-DE)", "type": "string", "default": ""},
-            {"name": "FONT_SIZE", "label": "Font size", "type": "string", "default": "3rem"},
+            {"name": "FONT_SIZE", "label": "Font size", "type": "string", "default": "4.5vmin"},
             {"name": "COLOR", "label": "Text color", "type": "string", "default": "#ffffff"},
         ],
         "template": _DATE_HTML,
@@ -240,10 +432,59 @@ WIDGETS = [
             {"name": "LONGITUDE", "label": "Longitude", "type": "number", "default": -74.01},
             {"name": "UNITS", "label": "Units (celsius / fahrenheit)", "type": "string", "default": "fahrenheit"},
             {"name": "REFRESH_MINUTES", "label": "Refresh interval (minutes)", "type": "number", "default": 15},
-            {"name": "FONT_SIZE", "label": "Temperature font size", "type": "string", "default": "4rem"},
+            {"name": "FONT_SIZE", "label": "Temperature font size", "type": "string", "default": "6vmin"},
             {"name": "COLOR", "label": "Text color", "type": "string", "default": "#ffffff"},
         ],
         "template": _WEATHER_HTML,
+    },
+    {
+        "id": "centered_text",
+        "name": "Centered Text",
+        "description": "Static centered message with configurable size and weight.",
+        "params": [
+            {"name": "MESSAGE", "label": "Message", "type": "string", "default": "Today's Special"},
+            {"name": "FONT_SIZE", "label": "Font size", "type": "string", "default": "4.5vmin"},
+            {"name": "COLOR", "label": "Text color", "type": "string", "default": "#ffffff"},
+            {"name": "FONT_WEIGHT", "label": "Font weight (300=light, 400=normal, 700=bold)", "type": "string", "default": "300"},
+        ],
+        "template": _CENTERED_TEXT_HTML,
+    },
+    {
+        "id": "heading_subtitle",
+        "name": "Heading + Subtitle",
+        "description": "Two-line text — bold heading with a lighter subtitle below.",
+        "params": [
+            {"name": "HEADING", "label": "Heading", "type": "string", "default": "WELCOME"},
+            {"name": "SUBTITLE", "label": "Subtitle", "type": "string", "default": "to our store"},
+            {"name": "HEADING_SIZE", "label": "Heading size", "type": "string", "default": "7.5vmin"},
+            {"name": "SUBTITLE_SIZE", "label": "Subtitle size", "type": "string", "default": "3vmin"},
+            {"name": "COLOR", "label": "Text color", "type": "string", "default": "#ffffff"},
+        ],
+        "template": _HEADING_SUBTITLE_HTML,
+    },
+    {
+        "id": "scrolling_text",
+        "name": "Scrolling Text",
+        "description": "Smooth horizontal scrolling marquee text.",
+        "params": [
+            {"name": "MESSAGE", "label": "Message", "type": "string", "default": "Welcome! Check out our latest offers..."},
+            {"name": "SPEED", "label": "Scroll duration (seconds — lower = faster)", "type": "number", "default": 15},
+            {"name": "FONT_SIZE", "label": "Font size", "type": "string", "default": "4.5vmin"},
+            {"name": "COLOR", "label": "Text color", "type": "string", "default": "#ffffff"},
+        ],
+        "template": _SCROLLING_TEXT_HTML,
+    },
+    {
+        "id": "countdown",
+        "name": "Countdown",
+        "description": "Live countdown to a target date, showing days, hours, minutes & seconds.",
+        "params": [
+            {"name": "TARGET_DATE", "label": "Target date (YYYY-MM-DDTHH:MM:SS)", "type": "string", "default": "2026-12-31T00:00:00"},
+            {"name": "LABEL", "label": "Label text", "type": "string", "default": "Grand Opening"},
+            {"name": "FONT_SIZE", "label": "Timer font size", "type": "string", "default": "6vmin"},
+            {"name": "COLOR", "label": "Text color", "type": "string", "default": "#ffffff"},
+        ],
+        "template": _COUNTDOWN_HTML,
     },
 ]
 
