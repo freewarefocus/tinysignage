@@ -225,3 +225,961 @@ html[data-theme="light"] .form-hint { color: #888; }
 html[data-theme="light"] .mini-player-frame {
   background: #111;
 }
+
+/* ---- PlaylistEditor.vue ---- */
+
+html[data-theme="light"] .btn-mode {
+  background: #eef0ff;
+  color: #5a61d6;
+}
+html[data-theme="light"] .btn-mode:hover {
+  background: #dde0f5;
+  color: #4a50c6;
+}
+html[data-theme="light"] .btn-mode.simplify {
+  background: #f0f1f5;
+  color: #666;
+}
+html[data-theme="light"] .btn-mode.simplify:hover {
+  background: #e0e1e8;
+  color: #1a1a2e;
+}
+
+/* ---- PlaylistRow.vue ---- */
+
+html[data-theme="light"] .control-group label {
+  color: #888;
+}
+html[data-theme="light"] .control-group select {
+  background: #ffffff;
+  border-color: #ccc;
+  color: #1a1a2e;
+}
+html[data-theme="light"] .control-group select:focus {
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .num-input {
+  background: #ffffff;
+  border-color: #ccc;
+  color: #1a1a2e;
+}
+html[data-theme="light"] .num-input:focus {
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .btn-reset {
+  border-color: #ccc;
+  color: #888;
+}
+html[data-theme="light"] .btn-reset:hover {
+  color: #5a61d6;
+  border-color: #5a61d6;
+}
+
+/* ---- MiniPlayer.vue ---- */
+
+html[data-theme="light"] .mini-player {
+  border-top-color: #e0e0e0;
+}
+html[data-theme="light"] .mini-player-label {
+  color: #666;
+}
+html[data-theme="light"] .mini-player-label i:first-child {
+  color: #5a61d6;
+}
+html[data-theme="light"] .mp-control {
+  background: #f0f1f5;
+  color: #666;
+}
+html[data-theme="light"] .mp-control:hover {
+  background: #e0e1e8;
+  color: #1a1a2e;
+}
+html[data-theme="light"] .mp-counter {
+  color: #999;
+}
+
+/* ---- AssetCard.vue ---- */
+
+html[data-theme="light"] .asset-card {
+  background: #ffffff;
+}
+html[data-theme="light"] .asset-card:hover {
+  box-shadow: 0 0 0 1px #5a61d6;
+}
+html[data-theme="light"] .thumb-wrap {
+  background: #f8f9fb;
+}
+html[data-theme="light"] .name {
+  color: #333;
+}
+html[data-theme="light"] .meta {
+  color: #666;
+}
+html[data-theme="light"] .name-edit input {
+  background: #f8f9fb;
+  border-color: #5a61d6;
+  color: #333;
+}
+html[data-theme="light"] .type-badge.type-html {
+  background: #e6f5f0;
+  color: #2d7d5d;
+}
+html[data-theme="light"] .add-tag-btn {
+  border-color: #ccc;
+  color: #888;
+}
+html[data-theme="light"] .add-tag-btn:hover {
+  border-color: #5a61d6;
+  color: #5a61d6;
+}
+html[data-theme="light"] .tag-picker {
+  background: #ffffff;
+  border-color: #e0e0e0;
+}
+html[data-theme="light"] .tag-option {
+  color: #333;
+}
+html[data-theme="light"] .tag-option:hover {
+  background: #f0f1f5;
+  color: #1a1a2e;
+}
+html[data-theme="light"] .no-tags {
+  color: #888;
+}
+html[data-theme="light"] .tag-picker-close {
+  border-top-color: #e0e0e0;
+  color: #666;
+}
+html[data-theme="light"] .tag-picker-close:hover {
+  color: #1a1a2e;
+}
+
+/* ---- MediaLibrary.vue ---- */
+
+html[data-theme="light"] .tag-mgmt-btn {
+  background: #eef0ff;
+  border-color: #e0e0e0;
+  color: #333;
+}
+html[data-theme="light"] .tag-mgmt-btn:hover {
+  background: #e8eaff;
+  color: #1a1a2e;
+}
+html[data-theme="light"] .tag-chip {
+  background: #ffffff;
+  border-color: #e0e0e0;
+  color: #888;
+}
+html[data-theme="light"] .tag-chip:hover {
+  border-color: #999;
+  color: #333;
+}
+html[data-theme="light"] .dialog {
+  background: #ffffff;
+  border-color: #e0e0e0;
+}
+html[data-theme="light"] .dialog-header {
+  border-bottom-color: #e0e0e0;
+}
+html[data-theme="light"] .dialog-header h3,
+html[data-theme="light"] .dialog h3 {
+  color: #1a1a2e;
+}
+html[data-theme="light"] .close-btn {
+  color: #666;
+}
+html[data-theme="light"] .close-btn:hover {
+  color: #1a1a2e;
+}
+html[data-theme="light"] .tag-input {
+  background: #f8f9fb;
+  border-color: #e0e0e0;
+  color: #333;
+}
+html[data-theme="light"] .tag-input:focus {
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .color-input {
+  border-color: #e0e0e0;
+  background: #f8f9fb;
+}
+html[data-theme="light"] .tag-row:hover {
+  background: #f0f1f5;
+}
+html[data-theme="light"] .tag-name {
+  color: #333;
+}
+html[data-theme="light"] .tag-count-label {
+  color: #888;
+}
+html[data-theme="light"] .tag-actions button {
+  color: #666;
+}
+html[data-theme="light"] .tag-actions button:hover {
+  color: #1a1a2e;
+  background: #f0f1f5;
+}
+html[data-theme="light"] .btn-html-add {
+  background: #e6f5f0;
+  border-color: #b3d9d0;
+  color: #2d7d5d;
+}
+html[data-theme="light"] .btn-html-add:hover {
+  background: #d4ede6;
+  border-color: #2d7d5d;
+}
+html[data-theme="light"] .html-name-row label,
+html[data-theme="light"] .html-editor-label {
+  color: #666;
+}
+html[data-theme="light"] .html-editor-textarea {
+  background: #f8f9fb;
+  border-color: #e0e0e0;
+  color: #333;
+}
+html[data-theme="light"] .html-editor-textarea:focus {
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .html-size-hint {
+  color: #888;
+}
+html[data-theme="light"] .btn-secondary {
+  background: #eef0ff;
+  border-color: #e0e0e0;
+  color: #333;
+}
+html[data-theme="light"] .btn-secondary:hover {
+  background: #e8eaff;
+  color: #1a1a2e;
+}
+html[data-theme="light"] .widget-btn {
+  background: #e8f0f5;
+  border-color: #d0dfe8;
+  color: #2d7d9d;
+}
+html[data-theme="light"] .widget-btn:hover {
+  background: #d8e5f0;
+  border-color: #2d7d9d;
+}
+html[data-theme="light"] .dialog p {
+  color: #888;
+}
+html[data-theme="light"] .btn-danger {
+  background: #f8d7da;
+  color: #721c24;
+}
+html[data-theme="light"] .btn-danger:hover {
+  background: #f5c6cb;
+}
+
+/* ---- DeviceInfo.vue ---- */
+
+html[data-theme="light"] .btn-primary {
+  background: #5a61d6;
+}
+html[data-theme="light"] .btn-primary:hover {
+  background: #5054d1;
+}
+html[data-theme="light"] .refresh-hint {
+  color: #888;
+}
+html[data-theme="light"] .btn-icon {
+  color: #666;
+  border-color: #ddd;
+}
+html[data-theme="light"] .btn-icon:hover {
+  color: #1a1a2e;
+  background: #f0f1f5;
+}
+html[data-theme="light"] .empty strong {
+  color: #5a61d6;
+}
+html[data-theme="light"] .device-card {
+  background: #ffffff;
+}
+html[data-theme="light"] .device-card:hover {
+  background: #f8f9fb;
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .card-name {
+  color: #1a1a2e;
+}
+html[data-theme="light"] .card-summary {
+  color: #888;
+}
+html[data-theme="light"] .card-summary span {
+  background: #f8f9fb;
+}
+html[data-theme="light"] .status-dot.status-unknown {
+  background: #888;
+}
+html[data-theme="light"] .signal-unknown {
+  background: #888;
+}
+html[data-theme="light"] .card-field {
+  color: #777;
+}
+html[data-theme="light"] .card-field i {
+  color: #888;
+}
+html[data-theme="light"] .dialog input {
+  background: #f8f9fb;
+  border-color: #ddd;
+  color: #333;
+}
+html[data-theme="light"] .dialog input:focus {
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .detail-header {
+  border-bottom-color: #e0e0e0;
+}
+html[data-theme="light"] .edit-icon {
+  color: #999;
+}
+html[data-theme="light"] .editable-name:hover .edit-icon {
+  color: #5a61d6;
+}
+html[data-theme="light"] .detail-field label {
+  color: #888;
+}
+html[data-theme="light"] .detail-field span {
+  color: #333;
+}
+html[data-theme="light"] .detail-field .small {
+  color: #666;
+}
+html[data-theme="light"] .detail-section > label {
+  color: #666;
+}
+html[data-theme="light"] .select-input {
+  background: #f8f9fb;
+  border-color: #ddd;
+  color: #333;
+}
+html[data-theme="light"] .select-input:focus {
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .health-label {
+  color: #888;
+}
+html[data-theme="light"] .health-item span:not(.health-label):not(.health-warnings) {
+  color: #333;
+}
+html[data-theme="light"] .detail-danger {
+  border-top-color: #e0e0e0;
+}
+html[data-theme="light"] .pending-card {
+  background: #ffffff;
+  border-color: rgba(240,173,78,0.15);
+}
+html[data-theme="light"] .btn-approve {
+  background: #d4edda;
+  color: #155724;
+}
+html[data-theme="light"] .btn-approve:hover {
+  background: #c3e6cb;
+}
+html[data-theme="light"] .btn-reject {
+  background: #f8d7da;
+  color: #721c24;
+}
+html[data-theme="light"] .btn-reject:hover {
+  background: #f5c6cb;
+}
+html[data-theme="light"] .preflight-item {
+  background: #f8f9fb;
+  color: #333;
+}
+html[data-theme="light"] .preflight-check-name {
+  color: #666;
+}
+
+/* ---- DeviceGroups.vue ---- */
+
+html[data-theme="light"] .group-card {
+  background: #ffffff;
+}
+html[data-theme="light"] .group-card:hover {
+  background: #f8f9fb;
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .card-desc {
+  color: #666;
+}
+html[data-theme="light"] .card-stat {
+  color: #777;
+}
+html[data-theme="light"] .detail-desc {
+  color: #666;
+}
+html[data-theme="light"] .detail-section label {
+  color: #666;
+}
+html[data-theme="light"] .push-msg {
+  color: #4caf50;
+}
+html[data-theme="light"] .member-row {
+  background: #f8f9fb;
+}
+html[data-theme="light"] .member-name {
+  color: #333;
+}
+
+/* ---- ScheduleEditor.vue ---- */
+
+html[data-theme="light"] .form-group label {
+  color: #666;
+}
+html[data-theme="light"] .form-group input,
+html[data-theme="light"] .form-group .select-input {
+  background: #f8f9fb;
+  border-color: #ddd;
+  color: #333;
+}
+html[data-theme="light"] .form-group input:focus,
+html[data-theme="light"] .form-group .select-input:focus {
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .rrule-summary {
+  color: #5a61d6;
+}
+html[data-theme="light"] .rrule-details summary {
+  color: #666;
+}
+html[data-theme="light"] .rrule-details summary:hover {
+  color: #888;
+}
+html[data-theme="light"] .toggle-btn {
+  background: #f8f9fb;
+  border-color: #ddd;
+  color: #777;
+}
+html[data-theme="light"] .toggle-btn.active {
+  background: #5a61d6;
+  border-color: #5a61d6;
+  color: #fff;
+}
+html[data-theme="light"] .recurrence-builder {
+  background: rgba(90,97,214,0.05);
+}
+html[data-theme="light"] .rule-preview {
+  background: #f8f9fb;
+  color: #5a61d6;
+}
+html[data-theme="light"] .day-btn {
+  background: #f8f9fb;
+  border-color: #ddd;
+  color: #777;
+}
+html[data-theme="light"] .day-btn:hover {
+  border-color: #5a61d6;
+  color: #1a1a2e;
+}
+html[data-theme="light"] .day-btn.active {
+  background: #5a61d6;
+  color: #fff;
+}
+html[data-theme="light"] .toggle-label {
+  color: #333;
+}
+html[data-theme="light"] .toggle-label input[type="checkbox"] {
+  accent-color: #5a61d6;
+}
+html[data-theme="light"] .preview-panel {
+  background: #ffffff;
+  border-color: #e0e0e0;
+}
+html[data-theme="light"] .preview-date {
+  background: #f8f9fb;
+  border-color: #ddd;
+  color: #333;
+}
+html[data-theme="light"] .preview-hint {
+  color: #888;
+}
+html[data-theme="light"] .timeline-bar {
+  background: #f8f9fb;
+}
+html[data-theme="light"] .timeline-block {
+  border-right-color: #eee;
+}
+html[data-theme="light"] .timeline-block-label {
+  color: #1a1a2e;
+}
+html[data-theme="light"] .timeline-tick {
+  color: #888;
+}
+html[data-theme="light"] .legend-item {
+  color: #888;
+}
+html[data-theme="light"] .schedule-grid {
+  border-color: #e0e0e0;
+}
+html[data-theme="light"] .grid-header {
+  background: #f0f1f5;
+}
+html[data-theme="light"] .grid-row:nth-child(even) {
+  background: rgba(0,0,0,0.02);
+}
+html[data-theme="light"] .grid-cell {
+  border-right-color: #eee;
+  border-bottom-color: #eee;
+}
+html[data-theme="light"] .time-label {
+  color: #888;
+}
+html[data-theme="light"] .day-header {
+  color: #888;
+}
+html[data-theme="light"] .schedule-block {
+  color: #1a1a2e;
+}
+html[data-theme="light"] .badge-inactive {
+  background: #e8eaff;
+  color: #777;
+}
+html[data-theme="light"] .badge-rrule {
+  background: rgba(90,97,214,0.1);
+  color: #5a61d6;
+}
+html[data-theme="light"] .detail-tag {
+  color: #666;
+  background: #f8f9fb;
+}
+
+/* ---- EmergencyOverrides.vue ---- */
+
+html[data-theme="light"] .dialog-desc {
+  color: #c62828;
+}
+html[data-theme="light"] .form-group textarea {
+  background: #f8f9fb;
+  border-color: #ddd;
+  color: #333;
+}
+html[data-theme="light"] .form-group textarea:focus {
+  border-color: #c62828;
+}
+html[data-theme="light"] .radio-label {
+  color: #333;
+}
+html[data-theme="light"] .duration-btn {
+  background: #f8f9fb;
+  border-color: #ddd;
+  color: #777;
+}
+html[data-theme="light"] .duration-btn:hover {
+  border-color: #c62828;
+  color: #1a1a2e;
+}
+html[data-theme="light"] .duration-btn.active {
+  background: #dc3545;
+  border-color: #dc3545;
+  color: #fff;
+}
+html[data-theme="light"] .active-heading {
+  color: #d32f2f;
+}
+html[data-theme="light"] .override-card {
+  background: #ffffff;
+}
+html[data-theme="light"] .active-card {
+  border-color: #dc3545;
+}
+html[data-theme="light"] .detail-tag.type-message {
+  color: #f57f17;
+}
+html[data-theme="light"] .detail-tag.type-playlist {
+  color: #5a61d6;
+}
+html[data-theme="light"] .card-preview {
+  color: #777;
+  background: #f8f9fb;
+}
+html[data-theme="light"] .btn-cancel {
+  background: rgba(211,47,47,0.1);
+  color: #d32f2f;
+  border-color: #c62828;
+}
+html[data-theme="light"] .btn-cancel:hover {
+  background: #d32f2f;
+  color: #fff;
+}
+
+/* ---- LayoutEditor.vue ---- */
+
+html[data-theme="light"] .editor-header {
+  border-bottom-color: #e0e0e0;
+}
+html[data-theme="light"] .layout-card {
+  background: #ffffff;
+}
+html[data-theme="light"] .layout-card:hover {
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .card-count {
+  color: #666;
+}
+html[data-theme="light"] .mini-preview {
+  background: #f8f9fb;
+}
+html[data-theme="light"] .mini-zone {
+  background: rgba(90,97,214,0.2);
+  border-color: rgba(90,97,214,0.4);
+}
+html[data-theme="light"] .preview-screen {
+  background: #f8f9fb;
+  border-color: #e0e0e0;
+}
+html[data-theme="light"] .preview-zone {
+  background: rgba(90,97,214,0.1);
+  border-color: rgba(90,97,214,0.3);
+}
+html[data-theme="light"] .preview-zone.selected {
+  border-color: #5a61d6;
+  background: rgba(90,97,214,0.15);
+}
+html[data-theme="light"] .zone-label {
+  color: #1a1a2e;
+}
+html[data-theme="light"] .zone-type-badge {
+  color: #5a61d6;
+}
+html[data-theme="light"] .zone-playlist-label {
+  color: #666;
+}
+html[data-theme="light"] .zone-props {
+  background: #f8f9fb;
+}
+html[data-theme="light"] .prop-field label {
+  color: #888;
+}
+html[data-theme="light"] .prop-field input,
+html[data-theme="light"] .prop-field select {
+  background: #ffffff;
+  border-color: #ddd;
+  color: #333;
+}
+html[data-theme="light"] .prop-field input:focus,
+html[data-theme="light"] .prop-field select:focus {
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .zone-list {
+  border-top-color: #e0e0e0;
+}
+html[data-theme="light"] .zone-list-item:hover {
+  background: #f0f1f5;
+}
+html[data-theme="light"] .zone-list-item.active {
+  background: #e8eaff;
+}
+html[data-theme="light"] .zone-list-name {
+  color: #333;
+}
+html[data-theme="light"] .zone-list-type {
+  color: #5a61d6;
+}
+html[data-theme="light"] .zone-list-pl {
+  color: #666;
+}
+
+/* ---- PlaylistList.vue ---- */
+
+html[data-theme="light"] .playlist-card {
+  background: #ffffff;
+}
+html[data-theme="light"] .playlist-card:hover {
+  background: #f8f9fb;
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .mode-badge {
+  background: #f3e5f5;
+  color: #7c3aed;
+}
+html[data-theme="light"] .card-meta {
+  color: #888;
+}
+html[data-theme="light"] .inline-edit {
+  background: #f8f9fb;
+  border-color: #5a61d6;
+  color: #333;
+}
+
+/* ---- StorageDashboard.vue ---- */
+
+html[data-theme="light"] .summary-card {
+  background: #ffffff;
+}
+html[data-theme="light"] .card-label {
+  color: #666;
+}
+html[data-theme="light"] .card-value {
+  color: #1a1a2e;
+}
+html[data-theme="light"] .card-sub {
+  color: #666;
+}
+html[data-theme="light"] .progress-bar {
+  background: #e8eaff;
+}
+html[data-theme="light"] .progress-fill {
+  background: #5a61d6;
+}
+html[data-theme="light"] .asset-table th {
+  color: #666;
+}
+html[data-theme="light"] .asset-table td {
+  border-bottom-color: #eee;
+  color: #333;
+}
+html[data-theme="light"] .asset-table tr:hover td {
+  background: #f0f1f5;
+}
+
+/* ---- Settings.vue ---- */
+
+html[data-theme="light"] .checkbox label {
+  color: #333;
+}
+html[data-theme="light"] .btn-save {
+  background: #5a61d6;
+}
+html[data-theme="light"] .btn-save:hover {
+  background: #5054d1;
+}
+html[data-theme="light"] .section-divider {
+  border-top-color: #e0e0e0;
+}
+html[data-theme="light"] .section-desc {
+  color: #777;
+}
+html[data-theme="light"] .btn-import {
+  background: #e8eaff;
+  border-color: #ddd;
+  color: #333;
+}
+html[data-theme="light"] .btn-import:hover {
+  background: #d8dce8;
+  border-color: #5a61d6;
+  color: #1a1a2e;
+}
+html[data-theme="light"] .import-confirm {
+  background: #ffffff;
+  border-color: #ddd;
+}
+html[data-theme="light"] .selected-file {
+  color: #333;
+}
+html[data-theme="light"] .file-size {
+  color: #666;
+}
+html[data-theme="light"] .warning {
+  color: #e65100;
+}
+html[data-theme="light"] .help-text {
+  color: #999;
+}
+
+/* ---- UserManagement.vue ---- */
+
+html[data-theme="light"] .users-table th {
+  color: #666;
+  border-bottom-color: #e0e0e0;
+}
+html[data-theme="light"] .users-table td {
+  border-bottom-color: #eee;
+}
+html[data-theme="light"] .role-admin {
+  color: #5a61d6;
+}
+html[data-theme="light"] .role-viewer {
+  color: #e65100;
+}
+html[data-theme="light"] .status-badge.inactive {
+  color: #666;
+}
+html[data-theme="light"] .btn-danger-solid {
+  background: #d32f2f;
+}
+html[data-theme="light"] .btn-danger-solid:hover {
+  background: #b71c1c;
+}
+html[data-theme="light"] .modal {
+  background: #ffffff;
+  border-color: #e0e0e0;
+}
+html[data-theme="light"] .modal h3 {
+  color: #1a1a2e;
+}
+html[data-theme="light"] .modal label {
+  color: #888;
+}
+html[data-theme="light"] .modal input[type="text"],
+html[data-theme="light"] .modal input[type="password"] {
+  background: #f8f9fb;
+  border-color: #ddd;
+  color: #333;
+}
+html[data-theme="light"] .modal input[type="text"]:focus,
+html[data-theme="light"] .modal input[type="password"]:focus {
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .modal select {
+  background: #f8f9fb;
+  border-color: #ddd;
+  color: #333;
+}
+html[data-theme="light"] .error {
+  color: #d32f2f;
+}
+html[data-theme="light"] .info-text {
+  color: #5a61d6;
+}
+
+/* ---- AuditLog.vue ---- */
+
+html[data-theme="light"] .filter-select {
+  background: #ffffff;
+  border-color: #ddd;
+  color: #333;
+}
+html[data-theme="light"] .search-input {
+  background: #ffffff;
+  border-color: #ddd;
+  color: #333;
+}
+html[data-theme="light"] .filter-date {
+  background: #ffffff;
+  border-color: #ddd;
+  color: #333;
+}
+html[data-theme="light"] .date-sep {
+  color: #666;
+}
+html[data-theme="light"] .btn-secondary:hover:not(:disabled) {
+  background: #d8dce8;
+}
+html[data-theme="light"] .status-msg {
+  color: #666;
+}
+html[data-theme="light"] .log-table th {
+  color: #666;
+  border-bottom-color: #e0e0e0;
+}
+html[data-theme="light"] .log-table td {
+  border-bottom-color: #eee;
+}
+html[data-theme="light"] .log-row:hover {
+  background: #f0f1f5;
+}
+html[data-theme="light"] .ts {
+  color: #666;
+}
+html[data-theme="light"] .user {
+  color: #5a61d6;
+}
+html[data-theme="light"] .entity-type {
+  color: #888;
+}
+html[data-theme="light"] .details-summary {
+  color: #333;
+}
+html[data-theme="light"] .action-badge.danger {
+  background: #f8d7da;
+  color: #721c24;
+}
+html[data-theme="light"] .action-badge.success {
+  background: #d4edda;
+  color: #155724;
+}
+html[data-theme="light"] .action-badge.info {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+html[data-theme="light"] .action-badge.default {
+  background: #e8eaff;
+  color: #333;
+}
+html[data-theme="light"] .detail-row td {
+  background: #f8f9fb;
+}
+html[data-theme="light"] .detail-json {
+  color: #333;
+}
+html[data-theme="light"] .detail-meta {
+  color: #666;
+}
+
+/* ---- SystemLog.vue ---- */
+
+html[data-theme="light"] .btn-danger:hover:not(:disabled) {
+  background: #f5c6cb;
+}
+html[data-theme="light"] .level-badge.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+html[data-theme="light"] .level-badge.critical {
+  background: #ffcdd2;
+  color: #b71c1c;
+}
+html[data-theme="light"] .level-badge.warning {
+  background: #ffe0b2;
+  color: #e65100;
+}
+html[data-theme="light"] .traceback {
+  color: #333;
+}
+html[data-theme="light"] .status-dot.unknown {
+  background: #666;
+}
+
+/* ---- Login.vue ---- */
+
+html[data-theme="light"] .login-page {
+  background: #f4f5f7;
+}
+html[data-theme="light"] .login-card {
+  background: #ffffff;
+}
+html[data-theme="light"] .login-card h1 {
+  color: #1a1a2e;
+}
+html[data-theme="light"] .subtitle {
+  color: #666;
+}
+html[data-theme="light"] .recovery-hint {
+  color: #888;
+}
+
+/* ---- UploadZone.vue ---- */
+
+html[data-theme="light"] .upload-zone {
+  border-color: #ddd;
+}
+html[data-theme="light"] .upload-zone:hover,
+html[data-theme="light"] .upload-zone.dragover {
+  border-color: #5a61d6;
+  background: rgba(90,97,214,0.03);
+}
+html[data-theme="light"] .upload-content i {
+  color: #888;
+}
+html[data-theme="light"] .upload-content p {
+  color: #333;
+}
+html[data-theme="light"] .hint {
+  color: #888;
+}
+html[data-theme="light"] .upload-name {
+  color: #888;
+}
+html[data-theme="light"] .upload-bar {
+  background: #e0e0e0;
+}
+html[data-theme="light"] .upload-progress {
+  background: #5a61d6;
+}
+html[data-theme="light"] .upload-error {
+  color: #d32f2f;
+}

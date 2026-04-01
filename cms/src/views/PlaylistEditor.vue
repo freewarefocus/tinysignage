@@ -381,6 +381,7 @@
           :data-item-id="item.id"
           @remove="removeItem"
           @update="updateItem"
+          @reset="resetItem"
         />
       </div>
 
@@ -796,6 +797,17 @@ async function removeItem(item) {
 async function updateItem({ id, field, value }) {
   if (!playlist.value) return
   await api.patch(`/playlists/${playlist.value.id}/items/${id}`, { [field]: value })
+  await loadPlaylist()
+}
+
+async function resetItem(itemId) {
+  if (!playlist.value) return
+  await api.patch(`/playlists/${playlist.value.id}/items/${itemId}`, {
+    transition_type: null,
+    transition_duration: null,
+    duration: null,
+    object_fit: null,
+  })
   await loadPlaylist()
 }
 

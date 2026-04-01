@@ -75,6 +75,9 @@
       </div>
     </div>
     <div class="row-actions">
+      <button v-if="hasOverride" class="btn-reset" @click.stop="resetDefaults" title="Reset all to default">
+        <i class="pi pi-undo"></i>
+      </button>
       <button @click="$emit('remove', item)" title="Remove from playlist" class="btn-remove">
         <i class="pi pi-times"></i>
       </button>
@@ -89,7 +92,18 @@ const props = defineProps({
   item: Object,
   canEdit: { type: Boolean, default: false },
 })
-const emit = defineEmits(['remove', 'update'])
+const emit = defineEmits(['remove', 'update', 'reset'])
+
+const hasOverride = computed(() =>
+  props.item.transition_type != null ||
+  props.item.transition_duration != null ||
+  props.item.duration != null ||
+  props.item.object_fit != null
+)
+
+function resetDefaults() {
+  emit('reset', props.item.id)
+}
 
 const tags = computed(() => props.item.asset?.tags || [])
 
@@ -292,5 +306,24 @@ function onDragEnd(e) {
 .btn-remove:hover {
   color: #f44336;
   border-color: #f44336;
+}
+
+.btn-reset {
+  background: none;
+  border: 1px solid #3a3a5a;
+  color: #888;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.btn-reset:hover {
+  color: #7c83ff;
+  border-color: #7c83ff;
 }
 </style>
