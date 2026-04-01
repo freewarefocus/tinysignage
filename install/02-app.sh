@@ -24,7 +24,7 @@ pip install --quiet -r requirements.txt
 
 # --- Directories ---
 echo "[3/4] Creating directories..."
-mkdir -p media media/thumbs db
+mkdir -p media media/thumbs db logs
 
 # --- Config ---
 echo "[4/4] Configuring..."

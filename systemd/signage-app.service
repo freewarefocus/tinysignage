@@ -15,7 +15,7 @@ Environment=PYTHONUNBUFFERED=1
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/home/pi/TinySignage/media /home/pi/TinySignage/db /home/pi/TinySignage/config.yaml
+ReadWritePaths=/home/pi/TinySignage/media /home/pi/TinySignage/db /home/pi/TinySignage/logs /home/pi/TinySignage/config.yaml /home/pi/TinySignage/config.env
 MemoryMax=512M
 
 [Install]
