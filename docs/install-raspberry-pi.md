@@ -45,20 +45,18 @@ This runs two shell scripts — both readable in `install/` before you execute t
 | `install/01-system.sh` | Moves project to `/opt/tinysignage`, installs apt packages, creates a dedicated `tinysignage` service user, sets hostname, enables mDNS (`.local`), installs systemd units, sets GPU memory on Pi |
 | `install/02-app.sh` | Creates a Python venv, installs pip dependencies, creates directories, generates a random `SECRET_KEY`, initializes the database |
 
-## Start the services
+## Reboot
+
+The installer enables both services to start on boot automatically. Reboot to apply the hostname, GPU memory, and watchdog changes:
 
 ```bash
-sudo systemctl start signage-app signage-player
+sudo reboot
 ```
+
+After reboot, both services start automatically:
 
 - **CMS**: `http://<hostname>.local:8080/cms` (from any device on the network)
 - **Player**: Launches in kiosk mode on the Pi's display automatically
-
-To start on boot:
-
-```bash
-sudo systemctl enable signage-app signage-player
-```
 
 ## What gets installed
 
