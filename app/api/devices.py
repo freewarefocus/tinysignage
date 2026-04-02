@@ -314,17 +314,18 @@ async def get_device_playlist(
                         return pl_val
                     return getattr(settings, field, default) if settings else default
 
+                resolved_settings = {
+                    "transition_duration": _resolve_ov("transition_duration", 1.0),
+                    "transition_type": _resolve_ov("transition_type", "fade"),
+                    "default_duration": _resolve_ov("default_duration", 10),
+                    "shuffle": _resolve_ov("shuffle", False),
+                    "object_fit": _resolve_ov("object_fit", "contain"),
+                    "effect": _resolve_ov("effect", "none"),
+                }
                 return {
-                    "hash": f"override-{active_override.id}-{_playlist_hash(active_items)}",
+                    "hash": f"override-{active_override.id}-{_playlist_hash(active_items)}-{_settings_hash(resolved_settings)}",
                     "items": [_item_to_dict(item) for item in active_items],
-                    "settings": {
-                        "transition_duration": _resolve_ov("transition_duration", 1.0),
-                        "transition_type": _resolve_ov("transition_type", "fade"),
-                        "default_duration": _resolve_ov("default_duration", 10),
-                        "shuffle": _resolve_ov("shuffle", False),
-                        "object_fit": _resolve_ov("object_fit", "contain"),
-                        "effect": _resolve_ov("effect", "none"),
-                    },
+                    "settings": resolved_settings,
                     "override": {
                         "id": active_override.id,
                         "type": "playlist",
@@ -391,17 +392,19 @@ async def get_device_playlist(
             return pl_val
         return getattr(settings, field, default) if settings else default
 
+    resolved_settings = {
+        "transition_duration": _resolve("transition_duration", 1.0),
+        "transition_type": _resolve("transition_type", "fade"),
+        "default_duration": _resolve("default_duration", 10),
+        "shuffle": _resolve("shuffle", False),
+        "object_fit": _resolve("object_fit", "contain"),
+        "effect": _resolve("effect", "none"),
+    }
+
     resp = {
-        "hash": _playlist_hash(active_items),
+        "hash": _playlist_hash(active_items) + "-" + _settings_hash(resolved_settings),
         "items": [_item_to_dict(item) for item in active_items],
-        "settings": {
-            "transition_duration": _resolve("transition_duration", 1.0),
-            "transition_type": _resolve("transition_type", "fade"),
-            "default_duration": _resolve("default_duration", 10),
-            "shuffle": _resolve("shuffle", False),
-            "object_fit": _resolve("object_fit", "contain"),
-            "effect": _resolve("effect", "none"),
-        },
+        "settings": resolved_settings,
     }
 
     # Include transition playlist for schedule-change bumpers
@@ -438,7 +441,7 @@ async def get_device_playlist(
 
     if zones_data:
         resp["zones"] = zones_data
-        base_hash = _playlist_hash(active_items) + "-" + _zones_hash(zones_data)
+        base_hash = _playlist_hash(active_items) + "-" + _settings_hash(resolved_settings) + "-" + _zones_hash(zones_data)
         if "transition_playlist" in resp:
             base_hash += f"-tp{resp['transition_playlist']['id'][:8]}"
         if "trigger_flow" in resp:
@@ -619,6 +622,11 @@ def _trigger_flow_hash(tf_payload: dict) -> str:
             f"{b['target_playlist_id']}:{target_item_ids}:{cfg}:{wh}"
         )
     return hashlib.sha256(";".join(branch_parts).encode()).hexdigest()[:12]
+
+
+def _settings_hash(settings: dict) -> str:
+    """Compute a short hash for resolved settings so setting changes trigger player update."""
+    return hashlib.sha256(str(sorted(settings.items())).encode()).hexdigest()[:8]
 
 
 def _zones_hash(zones_data: list[dict] | None) -> str:
