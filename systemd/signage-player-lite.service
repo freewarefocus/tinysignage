@@ -22,7 +22,7 @@ RuntimeDirectory=tinysignage
 Environment=XDG_RUNTIME_DIR=/run/tinysignage
 
 ExecStartPre=/bin/sleep 5
-ExecStart=/usr/bin/cage -s -- /home/pi/TinySignage/venv/bin/python /home/pi/TinySignage/launcher.py
+ExecStart=/usr/bin/cage -d -s -- /home/pi/TinySignage/venv/bin/python /home/pi/TinySignage/launcher.py
 WatchdogSec=120
 Restart=on-failure
 RestartSec=10

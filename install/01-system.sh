@@ -106,8 +106,33 @@ chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 systemctl daemon-reload
 systemctl enable signage-app signage-player
 
+# --- Transparent cursor theme (hides mouse pointer in kiosk mode) ---
+echo "[5/6] Installing transparent cursor theme..."
+CURSOR_DIR="/usr/share/icons/hidden/cursors"
+mkdir -p "$CURSOR_DIR"
+python3 "$INSTALL_DIR/install/create_hidden_cursors.py" "$CURSOR_DIR"
+tee /usr/share/icons/hidden/index.theme > /dev/null <<THEME
+[Icon Theme]
+Name=Hidden
+Comment=Transparent cursor theme for kiosk mode
+THEME
+echo "  Transparent cursor theme installed"
+
+# Set cursor theme in labwc environment (Pi OS Desktop with Wayland)
+if command -v labwc &>/dev/null; then
+    SIGNAGE_HOME=$(eval echo "~$SERVICE_USER")
+    LABWC_ENV="$SIGNAGE_HOME/.config/labwc/environment"
+    mkdir -p "$(dirname "$LABWC_ENV")"
+    grep -q 'XCURSOR_THEME' "$LABWC_ENV" 2>/dev/null || {
+        echo 'XCURSOR_THEME=hidden' >> "$LABWC_ENV"
+        echo 'XCURSOR_SIZE=1' >> "$LABWC_ENV"
+    }
+    chown -R "$SERVICE_USER:$SERVICE_USER" "$SIGNAGE_HOME/.config/labwc"
+    echo "  labwc cursor environment configured"
+fi
+
 # --- Kiosk mode (Pi) ---
-echo "[5/5] Checking kiosk mode..."
+echo "[6/6] Checking kiosk mode..."
 if [ -f /boot/config.txt ] || [ -f /boot/firmware/config.txt ]; then
     CONFIG_FILE="/boot/config.txt"
     [ -f /boot/firmware/config.txt ] && CONFIG_FILE="/boot/firmware/config.txt"
