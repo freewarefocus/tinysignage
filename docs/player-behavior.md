@@ -125,7 +125,17 @@ When a device has a layout assigned, the player receives a multi-zone payload an
 
 ## Device registration flow
 
-On first boot (no stored device token in localStorage):
+On first boot (no stored device token in localStorage), the player attempts two pairing methods in order:
+
+### Local bootstrap (automatic)
+
+If the player is running on the same machine as the server (e.g., a Raspberry Pi kiosk), it tries `POST /api/player/bootstrap` first. This localhost-only endpoint reads the `device_id` from `config.yaml`, creates an API token for it, and returns credentials. The player stores them and starts immediately — no user interaction needed.
+
+This solves the chicken-and-egg problem on headless displays: the seeded default device exists in the database but has no token, and the user cannot interact with a registration form in kiosk mode.
+
+If bootstrap fails (non-localhost, no `device_id` in config, or server unreachable), the player falls through to manual registration.
+
+### Manual registration
 
 1. The player shows a registration form with server URL and display name fields
 2. The user enters the server URL and a name for the display
@@ -133,6 +143,10 @@ On first boot (no stored device token in localStorage):
 4. The server creates a pending device and returns a device token (`ts_` prefix, role `device`)
 5. The player stores the token in localStorage and shows "Waiting for Approval"
 6. An admin approves the device in the CMS, and the player begins showing content
+
+### 401 recovery
+
+If a stored token is rejected (401 on poll), the player attempts local bootstrap before clearing credentials. On localhost installs, this re-keys the token automatically, so a database reset or token rotation does not require manual re-registration.
 
 ### Resetting registration
 
@@ -151,6 +165,8 @@ Reset requires local command-line access to the device -- there is no remote res
 ## Split deployment
 
 The player reads a `server_url` from a `<meta name="server-url">` tag injected by the backend. When set (via `server_url` in `config.yaml`), all API calls and media URLs use this as the base URL instead of the current origin.
+
+If `server_url` is empty or not set in `config.yaml`, the backend falls back to the request's own origin (e.g., `http://localhost:8080`). This means the player always has a valid server URL, even on a fresh install before the setup wizard runs.
 
 This enables running the server on one machine and the player on another, even across different networks.
 

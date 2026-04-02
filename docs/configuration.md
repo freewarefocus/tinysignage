@@ -61,7 +61,7 @@ These keys are managed by TinySignage and should not be edited manually:
 | Key | Description |
 |-----|-------------|
 | `device_id` | Auto-generated UUID for this installation's default device |
-| `server_url` | Base URL for split deployments (player on a different machine than the server) |
+| `server_url` | Base URL for split deployments (player on a different machine than the server). If empty, the player page falls back to the request's own origin |
 
 ---
 

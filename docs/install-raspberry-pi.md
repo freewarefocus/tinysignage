@@ -56,7 +56,7 @@ sudo reboot
 After reboot, both services start automatically:
 
 - **CMS**: `http://<hostname>.local:8080/cms` (from any device on the network)
-- **Player**: Launches in kiosk mode on the Pi's display automatically
+- **Player**: Launches in kiosk mode on the Pi's display automatically, auto-pairs with the server (no manual registration needed)
 
 ## What gets installed
 

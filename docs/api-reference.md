@@ -858,6 +858,19 @@ Auth: public
 
 Response: `{"status": "ok"}`.
 
+### Player bootstrap
+
+```
+POST /api/player/bootstrap
+Auth: public (localhost only)
+```
+
+Auto-pairs the local player with the default device from `config.yaml`. Only accepts requests from `127.0.0.1` or `::1` — returns 403 for all other clients.
+
+Creates (or re-keys) a bootstrap token for the seeded device. Returns `{"device_id", "token", "device_name", "status"}`. The player stores the credentials in localStorage and starts polling immediately.
+
+Bootstrap tokens coexist with tokens created through the setup wizard or manual registration. They are tagged with `created_by: "local_bootstrap"` so they can be identified and re-keyed without affecting other tokens.
+
 ### Player heartbeat
 
 ```

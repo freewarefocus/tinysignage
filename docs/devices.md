@@ -18,8 +18,14 @@ The server tracks each device's status, health signals, and assigned content.
 
 ## Adding a device
 
+### Raspberry Pi (local install)
+
+On a Pi running TinySignage locally, the player auto-pairs with the default device on first boot — no user interaction needed. The player calls `POST /api/player/bootstrap` (localhost-only), which creates a token for the seeded device from `config.yaml`. The device is immediately active.
+
+### Remote / browser-based
+
 1. Open `http://your-server:8080/player` on the device's browser
-2. The player shows a registration form (since it has no stored token)
+2. The player shows a registration form (since it has no stored token and bootstrap is not available)
 3. Enter the server URL and a display name (e.g., "Lobby TV", "Menu Board")
 4. The player submits the registration via `POST /api/devices/register`
 5. The device appears as **pending** in the CMS Devices page
@@ -28,7 +34,7 @@ The server tracks each device's status, health signals, and assigned content.
 
 ## Registration flow
 
-The registration flow is simple: the player registers itself and waits for admin approval. No shared keys or codes are needed -- the admin approval step is the security gate.
+For local installs, the player auto-pairs via local bootstrap — no interaction needed. For remote players, the player registers itself and waits for admin approval. No shared keys or codes are needed -- the admin approval step is the security gate.
 
 ### Re-registering
 

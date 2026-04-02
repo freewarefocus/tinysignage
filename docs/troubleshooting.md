@@ -70,7 +70,7 @@ Wait 10-15 seconds for the application to fully initialize. Check the applicatio
 The backend may still be starting. The player retries every 30 seconds -- give it a minute. Check that the backend is running and accessible at the URL shown in the browser's address bar.
 
 **Player shows registration form:**
-The player has no stored device token. Enter the server URL and a display name, then submit. The device will appear as "pending" in the CMS Devices page. An admin must approve it before it can show content.
+The player has no stored device token. On a local install (Raspberry Pi), the player should auto-pair via local bootstrap — if you see the registration form instead, check that `device_id` exists in `config.yaml` and that the server is running. For remote players, enter the server URL and a display name, then submit. The device will appear as "pending" in the CMS Devices page. An admin must approve it before it can show content.
 
 **Player registered with wrong server URL:**
 If you entered the wrong server address during registration, reset the player from the command line:
