@@ -1,12 +1,3 @@
-# Stage 1: Build Vue CMS
-FROM node:22-slim AS cms-build
-WORKDIR /build
-COPY cms/package.json cms/package-lock.json* ./
-RUN npm ci
-COPY cms/ ./
-RUN npm run build
-
-# Stage 2: Python runtime
 FROM python:3.11-slim
 
 # Install curl for healthcheck and ffmpeg for video thumbnails
@@ -19,9 +10,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
 COPY config.yaml .
-
-# Copy built CMS from stage 1
-COPY --from=cms-build /app/static/cms ./app/static/cms/
 
 # media/ and db/ are mounted as volumes — create empty dirs
 RUN mkdir -p media media/thumbs db

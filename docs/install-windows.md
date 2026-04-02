@@ -19,14 +19,14 @@ Open PowerShell or Command Prompt:
 ```powershell
 git clone https://github.com/freewarefocus/tinysignage.git
 cd tinysignage
-
-python -m venv venv
-venv\Scripts\activate
-
-pip install -r requirements.txt
+python install.py
 ```
 
+The installer creates a virtual environment, installs dependencies, initializes the database, and offers to generate a `start-tinysignage.bat` for easy startup and an optional Startup folder shortcut.
+
 ## Run
+
+If you didn't set up the batch file during install, start manually:
 
 ```powershell
 venv\Scripts\activate
@@ -57,21 +57,9 @@ ffmpeg -version
 
 ## Optional: Run on startup
 
-To launch TinySignage automatically when you log in:
+If you skipped startup setup during install, you can re-run `python install.py` to generate the batch file and startup shortcut.
 
-1. Create a batch file (e.g., `start-tinysignage.bat`) in the project folder:
-
-```batch
-@echo off
-cd /d "%~dp0"
-call venv\Scripts\activate
-uvicorn app.main:app --host 0.0.0.0 --port 8080
-```
-
-2. Press **Win + R**, type `shell:startup`, press Enter
-3. Create a shortcut to `start-tinysignage.bat` in the Startup folder
-
-To also open the player in kiosk mode, add this line to the batch file after the uvicorn line (in a separate `start` command), or create a second shortcut:
+To also open the player in kiosk mode, add this line to `start-tinysignage.bat` after the uvicorn line (in a separate `start` command):
 
 ```batch
 start "" "chrome" --kiosk http://localhost:8080/player
@@ -94,11 +82,10 @@ Same URLs. Data lives in `./media` and `./db` next to the compose file.
 ```powershell
 cd path\to\tinysignage
 git pull
-venv\Scripts\activate
-pip install -r requirements.txt
+python install.py --update
 ```
 
-Then restart the application.
+This reinstalls dependencies and runs database migrations. Restart the application afterward.
 
 ## Resetting the player
 

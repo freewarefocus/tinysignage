@@ -28,22 +28,21 @@ sudo apt update && sudo apt upgrade -y
 Then install TinySignage:
 
 ```bash
-sudo apt install -y git
+sudo apt install -y git python3
 git clone https://github.com/freewarefocus/tinysignage.git
 cd tinysignage
-bash install/install.sh
+sudo python3 install.py
 ```
 
 The installer will ask you for a **display name** (e.g. "Lobby TV"). This name is used both as the player's friendly name in the CMS and as the `.local` network address (sanitized to `lobby-tv.local`). For multiple displays, just give each Pi a different name.
 
-The installer then automatically moves the project to `/opt/tinysignage` so the service user can access it.
+For scripted/headless installs:
 
-This runs two shell scripts — both readable in `install/` before you execute them:
+```bash
+sudo python3 install.py --non-interactive --display-name "Lobby TV"
+```
 
-| Script | What it does |
-|--------|-------------|
-| `install/01-system.sh` | Moves project to `/opt/tinysignage`, installs apt packages, creates a dedicated `tinysignage` service user, sets hostname, enables mDNS (`.local`), installs systemd units, sets GPU memory on Pi |
-| `install/02-app.sh` | Creates a Python venv, installs pip dependencies, builds the CMS frontend, creates directories, generates a random `SECRET_KEY`, initializes the database |
+The installer automatically moves the project to `/opt/tinysignage`, creates a dedicated `tinysignage` service user, installs system packages, sets up systemd units, creates the Python venv, installs dependencies, and initializes the database. All steps are visible in the single `install.py` file.
 
 ## Reboot
 
@@ -60,7 +59,7 @@ After reboot, both services start automatically:
 
 ## What gets installed
 
-System packages via apt: `python3`, `python3-venv`, `nodejs`, `npm`, `chromium`, `ffmpeg`, `avahi-daemon`, `curl`. On Pi OS Lite, the installer also adds `cage` (a lightweight Wayland kiosk compositor) to run Chromium fullscreen without a desktop environment. Node.js is used at install time to build the CMS frontend.
+System packages via apt: `python3`, `python3-venv`, `chromium`, `ffmpeg`, `avahi-daemon`, `curl`. On Pi OS Lite, the installer also adds `cage` (a lightweight Wayland kiosk compositor) to run Chromium fullscreen without a desktop environment. The CMS frontend is pre-built and included in the repo — no Node.js required.
 
 A dedicated `tinysignage` service user is created — no application code runs as root. Systemd units include security hardening: `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, and a 512MB memory ceiling.
 
@@ -69,10 +68,10 @@ A dedicated `tinysignage` service user is created — no application code runs a
 ```bash
 cd /opt/tinysignage
 sudo -u tinysignage git pull
-sudo systemctl restart signage-app
+sudo python3 install.py --update
 ```
 
-The player reconnects automatically within 30 seconds.
+This reinstalls dependencies, runs database migrations, and restarts services. The player reconnects automatically within 30 seconds.
 
 ## Resetting the player
 

@@ -33,14 +33,14 @@ python3 --version
 ```bash
 git clone https://github.com/freewarefocus/tinysignage.git
 cd tinysignage
-
-python3 -m venv venv
-source venv/bin/activate
-
-pip install -r requirements.txt
+python3 install.py
 ```
 
+The installer creates a virtual environment, installs dependencies, initializes the database, and offers to generate a launchd plist for auto-start.
+
 ## Run
+
+If you didn't set up launchd during install, start manually:
 
 ```bash
 source venv/bin/activate
@@ -67,51 +67,9 @@ ffmpeg -version
 
 ## Optional: Run on startup with launchd
 
-To launch TinySignage automatically when you log in, create a Launch Agent.
+If you skipped launchd setup during install, you can generate it later by re-running `python3 install.py`.
 
-1. Create the plist file:
-
-```bash
-cat > ~/Library/LaunchAgents/com.tinysignage.app.plist << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.tinysignage.app</string>
-    <key>WorkingDirectory</key>
-    <string>/path/to/tinysignage</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/path/to/tinysignage/venv/bin/uvicorn</string>
-        <string>app.main:app</string>
-        <string>--host</string>
-        <string>0.0.0.0</string>
-        <string>--port</string>
-        <string>8080</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>/tmp/tinysignage.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/tinysignage.err</string>
-</dict>
-</plist>
-EOF
-```
-
-2. Edit the file and replace `/path/to/tinysignage` with your actual install path.
-
-3. Load it:
-
-```bash
-launchctl load ~/Library/LaunchAgents/com.tinysignage.app.plist
-```
-
-To stop and unload:
+To stop and unload an existing plist:
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.tinysignage.app.plist
@@ -134,11 +92,10 @@ Same URLs. Data lives in `./media` and `./db` next to the compose file.
 ```bash
 cd /path/to/tinysignage
 git pull
-source venv/bin/activate
-pip install -r requirements.txt
+python3 install.py --update
 ```
 
-Then restart the application (or `launchctl` will restart it automatically if using the Launch Agent with `KeepAlive`).
+This reinstalls dependencies and runs database migrations. If using the Launch Agent with `KeepAlive`, the app restarts automatically.
 
 ## Resetting the player
 
