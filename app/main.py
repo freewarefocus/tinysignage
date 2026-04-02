@@ -125,9 +125,12 @@ async def root():
 
 
 @app.get("/player")
-async def player_page():
+async def player_page(request: Request):
     config = yaml.safe_load(_config_path.read_text())
-    server_url = config.get("server_url", "")
+    # Use the configured server_url, but fall back to the request origin so
+    # the player always talks to whatever host served this page (important
+    # when launcher.py opens http://localhost:8080/player)
+    server_url = config.get("server_url", "") or str(request.base_url).rstrip("/")
     # Read PLAYER_VERSION from player.js for cache-busting
     player_version = "0"
     try:

@@ -294,6 +294,28 @@
         document.getElementById('pending-overlay').classList.add('hidden');
     }
 
+    // --- Local bootstrap ---
+    async function tryLocalBootstrap() {
+        // Ask the local server for credentials for the default device (seeded
+        // from config.yaml during install). Always targets localhost to satisfy
+        // the server's localhost-only security check, regardless of what
+        // server_url is configured (which may resolve to a network IP via mDNS).
+        try {
+            const localOrigin = window.location.origin;  // e.g. http://localhost:8080
+            const resp = await fetch(localOrigin + '/api/player/bootstrap', { method: 'POST' });
+            if (!resp.ok) return false;
+            const data = await resp.json();
+            if (data.device_id && data.token) {
+                PlayerLog.info('Local bootstrap: paired as ' + (data.device_name || data.device_id));
+                storeCredentials(data.device_id, data.token);
+                return true;
+            }
+        } catch (e) {
+            PlayerLog.warn('Local bootstrap unavailable: ' + e.message);
+        }
+        return false;
+    }
+
     // --- Startup ---
     async function init() {
         const params = new URLSearchParams(window.location.search);
@@ -312,6 +334,12 @@
         if (storedId && storedToken) {
             deviceId = storedId;
             deviceToken = storedToken;
+            startPlayer();
+            return;
+        }
+
+        // Try local bootstrap before showing registration overlay
+        if (await tryLocalBootstrap()) {
             startPlayer();
             return;
         }
@@ -395,7 +423,11 @@
         try {
             const resp = await authFetch(apiUrl(`/api/devices/${deviceId}/playlist`));
             if (resp.status === 401) {
-                PlayerLog.warn('Token rejected (401), clearing credentials');
+                PlayerLog.warn('Token rejected (401), attempting re-bootstrap');
+                if (await tryLocalBootstrap()) {
+                    PlayerLog.info('Re-bootstrap succeeded, retrying poll');
+                    return;  // Next scheduled poll will use the new token
+                }
                 localStorage.removeItem('tinysignage_device_id');
                 localStorage.removeItem('tinysignage_device_token');
                 deviceId = '';

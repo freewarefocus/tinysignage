@@ -1,21 +1,91 @@
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
+import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_admin, require_device, require_viewer
+from app.auth import generate_token, hash_token, require_admin, require_device, require_viewer
 from app.database import get_session
 from app.models import ApiToken, Device
 
 router = APIRouter()
+
+_config_path = Path("config.yaml")
 
 
 @router.get("/health")
 async def health_check():
     """Public health check — no auth required."""
     return {"status": "ok"}
+
+
+@router.post("/player/bootstrap")
+async def player_bootstrap(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    """Local-only endpoint: auto-pair the local player with the seeded default device.
+
+    Only works for requests from localhost (127.0.0.1 / ::1).  Reads the
+    device_id written to config.yaml during install, finds or creates a
+    device token for it, and returns credentials the player can store.
+    This eliminates the need for manual registration on headless Pi displays.
+    """
+    client_ip = request.client.host if request.client else ""
+    if client_ip not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=403, detail="Bootstrap only available from localhost")
+
+    try:
+        config = yaml.safe_load(_config_path.read_text())
+    except Exception:
+        raise HTTPException(status_code=500, detail="Cannot read config.yaml")
+
+    device_id = config.get("device_id")
+    if not device_id:
+        raise HTTPException(status_code=404, detail="No device_id in config.yaml")
+
+    device = await session.get(Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Default device not found in database")
+
+    # Check for an existing bootstrap token (don't touch tokens from setup wizard)
+    result = await session.execute(
+        select(ApiToken).where(
+            ApiToken.device_id == device_id,
+            ApiToken.role == "device",
+            ApiToken.is_active == True,
+            ApiToken.created_by == "local_bootstrap",
+        )
+    )
+    bootstrap_token = result.scalars().first()
+
+    if bootstrap_token:
+        # Re-key the existing bootstrap token
+        plaintext = generate_token()
+        bootstrap_token.token_hash = hash_token(plaintext)
+    else:
+        # Create a new bootstrap token (leaves setup wizard tokens intact)
+        plaintext = generate_token()
+        new_token = ApiToken(
+            token_hash=hash_token(plaintext),
+            name=f"Device: {device.name} (bootstrap)",
+            role="device",
+            device_id=device_id,
+            created_by="local_bootstrap",
+        )
+        session.add(new_token)
+
+    await session.commit()
+
+    return {
+        "device_id": device_id,
+        "token": plaintext,
+        "device_name": device.name,
+        "status": device.status,
+    }
 
 
 @router.post("/player/heartbeat")

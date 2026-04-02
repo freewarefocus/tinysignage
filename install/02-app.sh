@@ -36,7 +36,8 @@ mkdir -p media media/thumbs db logs
 # --- Config ---
 echo "[5/5] Configuring..."
 if [ ! -f config.yaml ]; then
-    cp config.yaml.example config.yaml 2>/dev/null || true
+    echo "  Error: config.yaml not found in repo"
+    exit 1
 fi
 
 # Player configuration — display name and hostname are inherited from install.sh
@@ -46,13 +47,13 @@ SERVER_URL="http://localhost:8080"
 
 # Write player settings to config.yaml
 if [ -n "$SERVER_URL" ]; then
-    python3 -c "
-import yaml
+    SERVER_URL="$SERVER_URL" DISPLAY_NAME="$DISPLAY_NAME" python3 -c "
+import os, yaml
 from pathlib import Path
 p = Path('config.yaml')
 c = yaml.safe_load(p.read_text())
-c['server_url'] = '$SERVER_URL'
-c['display_name'] = '$DISPLAY_NAME'
+c['server_url'] = os.environ['SERVER_URL']
+c['display_name'] = os.environ['DISPLAY_NAME']
 p.write_text(yaml.dump(c, default_flow_style=False, sort_keys=False))
 "
     echo "  Wrote server_url, display_name to config.yaml"
