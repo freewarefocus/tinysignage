@@ -36,7 +36,23 @@ cd tinysignage
 python3 install.py
 ```
 
-The installer creates a virtual environment, installs dependencies, initializes the database, and offers to generate a launchd plist for auto-start.
+The installer asks what to install:
+
+1. **Everything (CMS + Player)** — manages and displays content on this Mac.
+2. **CMS only** — runs the content management server. Point player devices at this machine.
+3. **Player only** — configures this Mac to display content from a CMS running elsewhere. You'll be asked for the CMS server address.
+
+For "Everything" and "CMS only", the installer creates a virtual environment, installs dependencies, initializes the database, and offers to generate a launchd plist for auto-start.
+
+For scripted installs:
+
+```bash
+# CMS server only
+python3 install.py --mode cms --non-interactive
+
+# Player only, pointing at a remote CMS
+python3 install.py --mode player --server-url http://192.168.1.50:8080
+```
 
 ## Run
 

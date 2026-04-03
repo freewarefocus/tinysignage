@@ -56,6 +56,8 @@ Open `http://localhost:8080/setup` to create your admin account, then `/cms` to 
 | **Windows** | [Install on Windows](docs/install-windows.md) |
 | **macOS** | [Install on macOS](docs/install-macos.md) |
 
+> **Multiple screens?** The installer lets you choose what to install: CMS + Player together on one device, CMS only (central server), or Player only (display screen pointing at a remote CMS). See the [Raspberry Pi guide](docs/install-raspberry-pi.md) for a walkthrough of multi-screen setups.
+
 ---
 
 ## How it works

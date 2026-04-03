@@ -61,7 +61,8 @@ These keys are managed by TinySignage and should not be edited manually:
 | Key | Description |
 |-----|-------------|
 | `device_id` | Auto-generated UUID for this installation's default device |
-| `server_url` | Base URL for split deployments (player on a different machine than the server). If empty, the player page falls back to the request's own origin |
+| `server_url` | Base URL for the CMS server. Used by the kiosk launcher (`launcher.py`) to know where to point the browser. For player-only installs, this is the remote CMS address (e.g. `http://museum-cms.local:8080`). For all-in-one installs, defaults to `http://localhost:8080`. Also injected as a meta tag into the player HTML for split deployments |
+| `display_name` | Friendly name for this installation (set during install) |
 
 ---
 
@@ -100,7 +101,11 @@ Edit the file on the host and restart the container to apply changes. The `media
 
 ## Raspberry Pi notes
 
-The install script generates a `config.env` file with the `SECRET_KEY` for session security. The `config.yaml` defaults work for most Pi installations.
+The installer generates a `config.env` file with the `SECRET_KEY` for session security. The `config.yaml` defaults work for most Pi installations.
+
+For **player-only** Pi installs (`--mode player`), the installer sets `server_url` to the remote CMS address you provide. The kiosk launcher reads this value to point Chromium at the correct server — no local backend runs on the device.
+
+For **CMS-only** Pi installs (`--mode cms`), no player service is configured. The `server_url` is set to `http://localhost:8080`.
 
 ---
 

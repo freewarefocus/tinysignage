@@ -60,8 +60,6 @@ def get_kiosk_flags(is_pi: bool = False) -> list[str]:
 
 def launch(config_path: str = "config.yaml"):
     config = yaml.safe_load(Path(config_path).read_text())
-    host = config["server"]["host"]
-    port = config["server"]["port"]
     browser_config = config.get("player", {}).get("browser", "auto")
     kiosk = config.get("player", {}).get("kiosk", True)
 
@@ -74,7 +72,12 @@ def launch(config_path: str = "config.yaml"):
         print("ERROR: No Chromium-based browser found.")
         return
 
-    url = f"http://localhost:{port}/player"
+    # Use server_url if set, otherwise fall back to localhost
+    port = config.get("server", {}).get("port", 8080)
+    server_url = config.get("server_url", "").rstrip("/")
+    if not server_url:
+        server_url = f"http://localhost:{port}"
+    url = f"{server_url}/player"
     is_pi = Path("/proc/device-tree/model").exists()  # Rough Pi detection
 
     args = [browser]

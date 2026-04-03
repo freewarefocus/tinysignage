@@ -22,7 +22,23 @@ cd tinysignage
 python install.py
 ```
 
-The installer creates a virtual environment, installs dependencies, initializes the database, and offers to generate a `start-tinysignage.bat` for easy startup and an optional Startup folder shortcut.
+The installer asks what to install:
+
+1. **Everything (CMS + Player)** — manages and displays content on this machine.
+2. **CMS only** — runs the content management server. Point player devices at this machine.
+3. **Player only** — configures this machine to display content from a CMS running elsewhere. You'll be asked for the CMS server address.
+
+For "Everything" and "CMS only", the installer creates a virtual environment, installs dependencies, initializes the database, and offers to generate a `start-tinysignage.bat` for easy startup and an optional Startup folder shortcut.
+
+For scripted installs:
+
+```powershell
+# CMS server only
+python install.py --mode cms --non-interactive
+
+# Player only, pointing at a remote CMS
+python install.py --mode player --server-url http://192.168.1.50:8080
+```
 
 ## Run
 

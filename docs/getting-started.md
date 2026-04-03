@@ -8,7 +8,7 @@ By the end of this guide you will have TinySignage running, an image uploaded, a
 
 ## Install
 
-The fastest path is Docker. If you prefer a native install, see the platform guides: [Raspberry Pi](install-raspberry-pi.md), [Windows](install-windows.md), [macOS](install-macos.md).
+The fastest path is Docker. If you prefer a native install, see the platform guides: [Raspberry Pi](install-raspberry-pi.md), [Windows](install-windows.md), [macOS](install-macos.md). The native installer lets you choose to install the CMS, the Player, or both -- see the platform guides for details.
 
 ```bash
 git clone https://github.com/freewarefocus/tinysignage.git

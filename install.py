@@ -110,6 +110,62 @@ RestartSec=10
 WantedBy=multi-user.target
 """
 
+# --- Standalone player systemd units (player-only, no local backend) ------
+
+SYSTEMD_PLAYER_STANDALONE = """\
+[Unit]
+Description=TinySignage Player (Kiosk Browser)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User={user}
+Environment=DISPLAY=:0
+Environment=XCURSOR_THEME=hidden
+Environment=XCURSOR_SIZE=1
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/bin/python3 {install_dir}/launcher.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical.target
+"""
+
+SYSTEMD_PLAYER_LITE_STANDALONE = """\
+[Unit]
+Description=TinySignage Player (Kiosk Browser — Lite)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User={user}
+
+# cage creates its own Wayland session on this TTY
+TTYPath=/dev/tty1
+StandardInput=tty-force
+StandardOutput=journal
+StandardError=journal
+
+RuntimeDirectory=tinysignage
+Environment=XDG_RUNTIME_DIR=/run/tinysignage
+
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/bin/cage -d -s -- /usr/bin/python3 {install_dir}/launcher.py
+WatchdogSec=120
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+"""
+
 # --- Systemd user service (desktop Linux) --------------------------------
 
 SYSTEMD_USER = """\
@@ -340,6 +396,46 @@ def prompt_yn(message, default=True):
     return value in ("y", "yes")
 
 
+def prompt_mode():
+    """Prompt for install mode: both, cms, or player."""
+    print("What would you like to install?\n")
+    print("  1. Everything — CMS + Player on this device")
+    print("     Best for a single device that manages AND displays content.")
+    print("     Example: a coffee shop with one screen behind the counter.\n")
+    print("  2. CMS only — content management server")
+    print("     Runs the server that manages playlists, schedules, and media.")
+    print("     Install this once, then point all your player screens at it.\n")
+    print("  3. Player only — display screen")
+    print("     Turns this device into a display that connects to a CMS.")
+    print("     You'll need a CMS server already set up somewhere.\n")
+    try:
+        choice = input("Choice [1]: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        sys.exit(1)
+    mode = {"": "both", "1": "both", "2": "cms", "3": "player"}.get(choice)
+    if mode is None:
+        print("  Please enter 1, 2, or 3.\n")
+        return prompt_mode()
+    return mode
+
+
+def prompt_server_url():
+    """Prompt for the CMS server URL (player-only mode)."""
+    print("\nEnter the address of your CMS server.")
+    print("This is the device where you installed the TinySignage CMS.\n")
+    print("  Examples:  http://192.168.1.50:8080")
+    print("             http://lobby-tv.local:8080\n")
+    url = prompt_input("CMS server address")
+    if not url:
+        print("  A server address is required for player-only installs.")
+        return prompt_server_url()
+    url = url.rstrip("/")
+    if not url.startswith(("http://", "https://")):
+        url = "http://" + url
+    return url
+
+
 def step(number, total, message):
     print(f"[{number}/{total}] {message}")
 
@@ -438,19 +534,22 @@ def pi_move_to_opt(source_dir):
     return TARGET_DIR
 
 
-def pi_system_setup(install_dir, display_name, hostname, lite):
+def pi_system_setup(install_dir, display_name, hostname, lite, mode="both"):
     """All Pi system-level steps (requires root)."""
     total = 6
 
     # --- [1] apt packages ---
     step(1, total, "Installing system packages...")
-    packages = [
-        "python3", "python3-venv", "python3-pip",
-        "chromium", "ffmpeg", "avahi-daemon", "curl",
-    ]
-    if lite:
-        info("Detected Pi OS Lite — will install kiosk compositor (cage)")
-        packages.extend(["cage", "xwayland"])
+    packages = ["python3", "avahi-daemon", "curl"]
+    if mode in ("both", "cms"):
+        packages.extend(["python3-venv", "python3-pip", "ffmpeg"])
+    if mode in ("both", "player"):
+        packages.append("chromium")
+        if mode == "player":
+            packages.append("python3-yaml")  # launcher.py needs PyYAML
+        if lite:
+            info("Detected Pi OS Lite — will install kiosk compositor (cage)")
+            packages.extend(["cage", "xwayland"])
     run_cmd(["apt-get", "update", "-qq"])
     run_cmd(
         ["apt-get", "install", "-y", "-qq"] + packages,
@@ -503,27 +602,38 @@ def pi_system_setup(install_dir, display_name, hostname, lite):
     # --- [4] Systemd units (generated from templates — no sed patching) ---
     step(4, total, "Installing systemd units...")
     tv = {"install_dir": install_dir, "user": SERVICE_USER}
+    services = []
 
-    with open("/etc/systemd/system/signage-app.service", "w") as f:
-        f.write(SYSTEMD_APP.format(**tv))
+    if mode in ("both", "cms"):
+        with open("/etc/systemd/system/signage-app.service", "w") as f:
+            f.write(SYSTEMD_APP.format(**tv))
+        services.append("signage-app")
 
-    if lite:
-        info("Using Lite kiosk service (cage + Chromium)")
+    if mode in ("both", "player"):
+        if mode == "player":
+            # Standalone player — uses system Python, no local backend
+            template = SYSTEMD_PLAYER_LITE_STANDALONE if lite else SYSTEMD_PLAYER_STANDALONE
+        else:
+            template = SYSTEMD_PLAYER_LITE if lite else SYSTEMD_PLAYER
+        if lite:
+            info("Using Lite kiosk service (cage + Chromium)")
         with open("/etc/systemd/system/signage-player.service", "w") as f:
-            f.write(SYSTEMD_PLAYER_LITE.format(**tv))
-    else:
-        with open("/etc/systemd/system/signage-player.service", "w") as f:
-            f.write(SYSTEMD_PLAYER.format(**tv))
+            f.write(template.format(**tv))
+        services.append("signage-player")
 
     run_cmd(["systemctl", "daemon-reload"])
-    run_cmd(["systemctl", "enable", "signage-app", "signage-player"])
+    if services:
+        run_cmd(["systemctl", "enable"] + services)
 
     # --- [5] Transparent cursor theme ---
     step(5, total, "Installing transparent cursor theme...")
-    install_cursor_theme()
+    if mode in ("both", "player"):
+        install_cursor_theme()
+    else:
+        info("Skipped (no player on this device)")
 
     # Set cursor theme in labwc environment (Pi OS Desktop with Wayland)
-    if shutil.which("labwc"):
+    if mode in ("both", "player") and shutil.which("labwc"):
         try:
             import pwd
             pw = pwd.getpwnam(SERVICE_USER)
@@ -551,7 +661,7 @@ def pi_system_setup(install_dir, display_name, hostname, lite):
         with open(config_file) as f:
             boot = f.read()
         additions = ""
-        if "gpu_mem=128" not in boot:
+        if mode in ("both", "player") and "gpu_mem=128" not in boot:
             additions += "gpu_mem=128\n"
             info("GPU memory set to 128MB (reboot required)")
         if "dtparam=watchdog=on" not in boot:
@@ -827,12 +937,13 @@ def do_update(plat, install_dir):
 # Main install flows
 # =========================================================================
 
-def install_pi(install_dir, display_name, non_interactive):
+def install_pi(install_dir, display_name, non_interactive, mode="both", server_url=None):
     """Full Raspberry Pi install."""
     if os.geteuid() != 0:
         error_exit("Pi install requires root. Run: sudo python3 install.py")
 
-    print("=== TinySignage Pi Installer ===\n")
+    mode_labels = {"both": "CMS + Player", "cms": "CMS Only", "player": "Player Only"}
+    print(f"=== TinySignage Pi Installer ({mode_labels[mode]}) ===\n")
 
     # Sanity check
     if not os.path.isfile(os.path.join(install_dir, "config.yaml")):
@@ -858,93 +969,160 @@ def install_pi(install_dir, display_name, non_interactive):
     print()
 
     # ---- System setup (as root) ----
-    pi_system_setup(install_dir, display_name, hostname, lite)
+    pi_system_setup(install_dir, display_name, hostname, lite, mode)
     print()
 
-    # ---- App setup (as tinysignage user) ----
-    print("=== App Setup ===\n")
-    total = 6
-    python_cmd = find_python()
-    venv_dir = os.path.join(install_dir, "venv")
-    venv_python = get_venv_python(install_dir)
-    pip_cmd = get_venv_pip(install_dir)
+    # ---- App setup ----
+    if mode == "player":
+        # Player-only: minimal setup, no backend needed
+        print("=== Player Setup ===\n")
+        total = 2
 
-    step(1, total, "Creating virtual environment...")
-    if os.path.isdir(venv_dir):
-        info("venv already exists")
-    else:
-        run_as_user(SERVICE_USER, [python_cmd, "-m", "venv", venv_dir],
-                     cwd=install_dir)
-
-    step(2, total, "Installing Python dependencies...")
-    run_as_user(SERVICE_USER, [
-        pip_cmd, "install", "--quiet",
-        "-r", os.path.join(install_dir, "requirements.txt"),
-    ], cwd=install_dir)
-
-    step(3, total, "Creating directories...")
-    for d in ["media", "media/thumbs", "db", "logs"]:
+        step(1, total, "Creating directories...")
         run_as_user(SERVICE_USER, [
-            "mkdir", "-p", os.path.join(install_dir, d),
+            "mkdir", "-p", os.path.join(install_dir, "data", "browser-profile"),
         ])
 
-    step(4, total, "Generating config.env...")
-    config_env = os.path.join(install_dir, "config.env")
-    if os.path.isfile(config_env):
-        info("config.env already exists")
+        step(2, total, "Configuring CMS server connection...")
+        # Player-only uses system python3 (python3-yaml installed via apt)
+        yaml_script = (
+            "import yaml; from pathlib import Path; "
+            f"p = Path({os.path.join(install_dir, 'config.yaml')!r}); "
+            "c = yaml.safe_load(p.read_text()); "
+            f"c['server_url'] = {server_url!r}; "
+            f"c['display_name'] = {display_name!r}; "
+            "p.write_text(yaml.dump(c, default_flow_style=False, sort_keys=False))"
+        )
+        run_as_user(SERVICE_USER, ["python3", "-c", yaml_script], cwd=install_dir)
+        info(f"Server URL: {server_url}")
+        info(f"Display name: {display_name}")
+
     else:
-        secret_key = secrets.token_hex(32)
-        with open(config_env, "w") as f:
-            f.write("# TinySignage environment config (auto-generated)\n")
-            f.write(f"SECRET_KEY={secret_key}\n")
-        run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}", config_env])
-        info("Generated config.env with SECRET_KEY")
+        # CMS or Both: full app setup
+        print("=== App Setup ===\n")
+        total = 6
+        python_cmd = find_python()
+        venv_dir = os.path.join(install_dir, "venv")
+        venv_python = get_venv_python(install_dir)
+        pip_cmd = get_venv_pip(install_dir)
 
-    step(5, total, "Updating config.yaml...")
-    yaml_script = (
-        "import yaml; from pathlib import Path; "
-        f"p = Path({os.path.join(install_dir, 'config.yaml')!r}); "
-        "c = yaml.safe_load(p.read_text()); "
-        "c['server_url'] = 'http://localhost:8080'; "
-        f"c['display_name'] = {display_name!r}; "
-        "p.write_text(yaml.dump(c, default_flow_style=False, sort_keys=False))"
-    )
-    run_as_user(SERVICE_USER, [venv_python, "-c", yaml_script], cwd=install_dir)
-    info(f"Set display_name={display_name}, server_url=http://localhost:8080")
+        step(1, total, "Creating virtual environment...")
+        if os.path.isdir(venv_dir):
+            info("venv already exists")
+        else:
+            run_as_user(SERVICE_USER, [python_cmd, "-m", "venv", venv_dir],
+                         cwd=install_dir)
 
-    step(6, total, "Initializing database...")
-    db_script = textwrap.dedent("""\
-        import asyncio
-        from app.database import init_db, engine
-        async def setup():
-            await init_db()
-            await engine.dispose()
-        asyncio.run(setup())
-    """)
-    run_as_user(SERVICE_USER, [venv_python, "-c", db_script], cwd=install_dir)
+        step(2, total, "Installing Python dependencies...")
+        run_as_user(SERVICE_USER, [
+            pip_cmd, "install", "--quiet",
+            "-r", os.path.join(install_dir, "requirements.txt"),
+        ], cwd=install_dir)
+
+        step(3, total, "Creating directories...")
+        for d in ["media", "media/thumbs", "db", "logs"]:
+            run_as_user(SERVICE_USER, [
+                "mkdir", "-p", os.path.join(install_dir, d),
+            ])
+
+        step(4, total, "Generating config.env...")
+        config_env = os.path.join(install_dir, "config.env")
+        if os.path.isfile(config_env):
+            info("config.env already exists")
+        else:
+            secret_key = secrets.token_hex(32)
+            with open(config_env, "w") as f:
+                f.write("# TinySignage environment config (auto-generated)\n")
+                f.write(f"SECRET_KEY={secret_key}\n")
+            run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}", config_env])
+            info("Generated config.env with SECRET_KEY")
+
+        step(5, total, "Updating config.yaml...")
+        local_url = server_url or "http://localhost:8080"
+        yaml_script = (
+            "import yaml; from pathlib import Path; "
+            f"p = Path({os.path.join(install_dir, 'config.yaml')!r}); "
+            "c = yaml.safe_load(p.read_text()); "
+            f"c['server_url'] = {local_url!r}; "
+            f"c['display_name'] = {display_name!r}; "
+            "p.write_text(yaml.dump(c, default_flow_style=False, sort_keys=False))"
+        )
+        run_as_user(SERVICE_USER, [venv_python, "-c", yaml_script], cwd=install_dir)
+        info(f"Set display_name={display_name}, server_url={local_url}")
+
+        step(6, total, "Initializing database...")
+        db_script = textwrap.dedent("""\
+            import asyncio
+            from app.database import init_db, engine
+            async def setup():
+                await init_db()
+                await engine.dispose()
+            asyncio.run(setup())
+        """)
+        run_as_user(SERVICE_USER, [venv_python, "-c", db_script], cwd=install_dir)
 
     # Success
     print()
     print("=" * 50)
-    print("  Installation complete! Reboot to start:")
-    print()
-    print("    sudo reboot")
-    print()
-    print("  After reboot:")
-    print(f"    CMS:    http://{hostname}.local:8080/cms")
-    print("    Player: launches automatically on the display")
+    if mode == "player":
+        print("  Player installation complete! Reboot to start:")
+        print()
+        print("    sudo reboot")
+        print()
+        print("  After reboot:")
+        print(f"    Player connects to: {server_url}")
+        print(f"    Manage content at:  {server_url}/cms")
+    elif mode == "cms":
+        print("  CMS installation complete! Reboot to start:")
+        print()
+        print("    sudo reboot")
+        print()
+        print("  After reboot:")
+        print(f"    CMS: http://{hostname}.local:8080/cms")
+        print()
+        print("  Point your player devices at this server during their install.")
+    else:
+        print("  Installation complete! Reboot to start:")
+        print()
+        print("    sudo reboot")
+        print()
+        print("  After reboot:")
+        print(f"    CMS:    http://{hostname}.local:8080/cms")
+        print("    Player: launches automatically on the display")
     print("=" * 50)
 
 
-def install_desktop(plat, install_dir, non_interactive):
+def install_desktop(plat, install_dir, non_interactive, mode="both", server_url=None):
     """Install for macOS, Windows, or desktop Linux."""
     names = {"macos": "macOS", "windows": "Windows", "linux": "Linux"}
-    print(f"=== TinySignage {names[plat]} Installer ===\n")
+    mode_suffix = {"both": "", "cms": " (CMS Only)", "player": " (Player Only)"}
+    print(f"=== TinySignage {names[plat]} Installer{mode_suffix[mode]} ===\n")
 
     # Sanity check
     if not os.path.isfile(os.path.join(install_dir, "config.yaml")):
         error_exit(f"config.yaml not found in {install_dir} — is this the repo root?")
 
+    if mode == "player":
+        # Player-only: just save server_url and print instructions
+        print("Configuring player to connect to remote CMS...\n")
+        update_config_yaml(install_dir, server_url=server_url)
+
+        print()
+        print("=" * 50)
+        print("  Player setup complete!")
+        print()
+        print("  Open this URL in any browser:")
+        print(f"    {server_url}/player")
+        print()
+        print("  Or run the kiosk launcher:")
+        if plat == "windows":
+            print(r"    python launcher.py")
+        else:
+            print("    python3 launcher.py")
+        print("=" * 50)
+        return
+
+    # CMS or Both: full setup
     # Dependency checks
     {"macos": check_macos_deps, "windows": check_windows_deps,
      "linux": check_linux_deps}[plat]()
@@ -990,7 +1168,11 @@ def install_desktop(plat, install_dir, non_interactive):
     print()
     print(f"  Setup wizard: http://localhost:{DEFAULT_PORT}/setup  (first run)")
     print(f"  CMS:          http://localhost:{DEFAULT_PORT}/cms")
-    print(f"  Player:       http://localhost:{DEFAULT_PORT}/player")
+    if mode == "both":
+        print(f"  Player:       http://localhost:{DEFAULT_PORT}/player")
+    elif mode == "cms":
+        print()
+        print("  Point your player devices at this machine's address during their install.")
     print("=" * 50)
 
 
@@ -1007,6 +1189,8 @@ def main():
         epilog=textwrap.dedent("""\
             examples:
               python3 install.py                                         Interactive install
+              python3 install.py --mode cms                              CMS server only
+              python3 install.py --mode player --server-url http://cms.local:8080   Player only
               python3 install.py --update                                Update existing install
               sudo python3 install.py --non-interactive --display-name "Lobby TV"   Scripted Pi
         """),
@@ -1014,6 +1198,14 @@ def main():
     parser.add_argument(
         "--update", action="store_true",
         help="update existing install (pip deps + db migrations + restart)",
+    )
+    parser.add_argument(
+        "--mode", choices=["both", "cms", "player"],
+        help="install mode: both (CMS + Player), cms (server only), player (display only)",
+    )
+    parser.add_argument(
+        "--server-url",
+        help="CMS server URL for player-only installs (e.g. http://192.168.1.50:8080)",
     )
     parser.add_argument(
         "--display-name",
@@ -1031,10 +1223,28 @@ def main():
 
     if args.update:
         do_update(plat, install_dir)
-    elif plat == "pi":
-        install_pi(install_dir, args.display_name, args.non_interactive)
+        return
+
+    # Determine install mode
+    mode = args.mode
+    if not mode and not args.non_interactive:
+        mode = prompt_mode()
+    elif not mode:
+        mode = "both"
+
+    # Get server URL for player-only mode
+    server_url = args.server_url
+    if mode == "player" and not server_url:
+        if args.non_interactive:
+            error_exit("Player-only mode requires --server-url")
+        server_url = prompt_server_url()
+
+    print()
+
+    if plat == "pi":
+        install_pi(install_dir, args.display_name, args.non_interactive, mode, server_url)
     else:
-        install_desktop(plat, install_dir, args.non_interactive)
+        install_desktop(plat, install_dir, args.non_interactive, mode, server_url)
 
 
 if __name__ == "__main__":

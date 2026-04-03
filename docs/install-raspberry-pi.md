@@ -11,7 +11,7 @@ Dedicated kiosk display -- boots straight into fullscreen playback, managed via 
 - Raspberry Pi 4 or 5 (2GB+ RAM)
 - **Raspberry Pi OS Lite (Bookworm or later)** — recommended for dedicated signage
 - Network connection (Ethernet or WiFi)
-- HDMI display
+- HDMI display (not needed for CMS-only installs)
 
 > **Why Lite?** Pi OS Lite has no desktop environment, which means faster boot times, lower memory usage, and fewer unnecessary services — ideal for a single-purpose signage display. The installer sets up a minimal kiosk compositor (`cage`) that runs Chromium fullscreen without a full desktop.
 >
@@ -34,34 +34,74 @@ cd tinysignage
 sudo python3 install.py
 ```
 
-The installer will ask you for a **display name** (e.g. "Lobby TV"). This name is used both as the player's friendly name in the CMS and as the `.local` network address (sanitized to `lobby-tv.local`). For multiple displays, just give each Pi a different name.
+### Choosing what to install
 
-For scripted/headless installs:
+The installer asks what you'd like to install:
+
+1. **Everything (CMS + Player)** — manages and displays content on the same device. Best for a single Pi behind a screen (e.g. a coffee shop menu board).
+2. **CMS only** — runs the server that manages playlists, schedules, and media. Install this on one device, then point your player screens at it.
+3. **Player only** — turns this Pi into a display that connects to a CMS running elsewhere. Much lighter -- no Python venv, no database, just Chromium in kiosk mode.
+
+After choosing, the installer asks for a **display name** (e.g. "Lobby TV"). This name is used both as the player's friendly name in the CMS and as the `.local` network address (sanitized to `lobby-tv.local`). For multiple displays, just give each Pi a different name.
+
+For player-only installs, you'll also be asked for the **CMS server address** (e.g. `http://museum-cms.local:8080`).
+
+### Scripted/headless installs
 
 ```bash
+# Everything on one device (default)
 sudo python3 install.py --non-interactive --display-name "Lobby TV"
+
+# CMS server only
+sudo python3 install.py --mode cms --non-interactive --display-name "Signage Server"
+
+# Player-only display pointing at a remote CMS
+sudo python3 install.py --mode player --non-interactive --display-name "Gallery 3" \
+    --server-url http://museum-cms.local:8080
 ```
 
-The installer automatically moves the project to `/opt/tinysignage`, creates a dedicated `tinysignage` service user, installs system packages, sets up systemd units, creates the Python venv, installs dependencies, and initializes the database. All steps are visible in the single `install.py` file.
+### Typical setups
+
+**One screen, one Pi** (coffee shop, small office):
+Install "Everything" on a single Pi. The CMS and player both run on the same device.
+
+**Multiple screens, one central CMS** (museum, hotel, school):
+Install "CMS only" on one Pi (or any server). Install "Player only" on each display Pi, pointing them all at the CMS server address.
 
 ## Reboot
 
-The installer enables both services to start on boot automatically. Reboot to apply the hostname, GPU memory, and watchdog changes:
+The installer enables services to start on boot automatically. Reboot to apply the hostname, GPU memory, and watchdog changes:
 
 ```bash
 sudo reboot
 ```
 
-After reboot, both services start automatically:
+After reboot:
 
-- **CMS**: `http://<hostname>.local:8080/cms` (from any device on the network)
-- **Player**: Launches in kiosk mode on the Pi's display automatically, auto-pairs with the server (no manual registration needed)
+- **Everything mode**: CMS at `http://<hostname>.local:8080/cms`, player launches on the Pi's display automatically
+- **CMS-only mode**: CMS at `http://<hostname>.local:8080/cms` — no local player
+- **Player-only mode**: Chromium launches in kiosk mode, connected to the remote CMS
 
 ## What gets installed
 
-System packages via apt: `python3`, `python3-venv`, `chromium`, `ffmpeg`, `avahi-daemon`, `curl`. On Pi OS Lite, the installer also adds `cage` (a lightweight Wayland kiosk compositor) to run Chromium fullscreen without a desktop environment. The CMS frontend is pre-built and included in the repo — no Node.js required.
+What the installer sets up depends on the mode:
 
-A dedicated `tinysignage` service user is created — no application code runs as root. Systemd units include security hardening: `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, and a 512MB memory ceiling.
+| | Everything | CMS Only | Player Only |
+|---|---|---|---|
+| Python venv + pip dependencies | Yes | Yes | No |
+| SQLite database | Yes | Yes | No |
+| ffmpeg (video thumbnails) | Yes | Yes | No |
+| Chromium browser | Yes | No | Yes |
+| Kiosk compositor (cage, Lite only) | Yes | No | Yes |
+| Transparent cursor theme | Yes | No | Yes |
+| `signage-app` systemd service | Yes | Yes | No |
+| `signage-player` systemd service | Yes | No | Yes |
+
+All modes install: `python3`, `avahi-daemon` (mDNS), `curl`. A dedicated `tinysignage` service user is created in every mode — no application code runs as root.
+
+Player-only installs are very lightweight: no Python virtual environment, no database, no pip dependencies. The launcher script uses system `python3` and `python3-yaml` (installed via apt).
+
+Systemd units for the CMS backend include security hardening: `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, and a 512MB memory ceiling. The CMS frontend is pre-built and included in the repo — no Node.js required.
 
 ## Updating
 

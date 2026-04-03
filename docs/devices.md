@@ -119,9 +119,14 @@ Groups are also used as targets for schedules and emergency overrides -- you can
 
 ## Split deployment
 
-For setups where the player runs on a different machine than the server, configure `server_url` in `config.yaml`. The backend injects this URL into the player page as a `<meta>` tag, and the player uses it as the base URL for all API calls and media requests.
+For setups where the CMS server and player screens run on different machines (e.g. a museum with one central server and many display screens):
 
-This lets you run the server on one machine and the player on another, even across different networks.
+- **Install the CMS** on your server: `sudo python3 install.py --mode cms`
+- **Install the Player** on each display device: `sudo python3 install.py --mode player --server-url http://your-cms.local:8080`
+
+The player-only installer sets `server_url` in `config.yaml` and configures the kiosk browser to point at the remote CMS. No local backend runs on player-only devices.
+
+For manual configuration, set `server_url` in `config.yaml` to the CMS address. The backend injects this URL into the player page as a `<meta>` tag, and the player uses it as the base URL for all API calls and media requests.
 
 ---
 
