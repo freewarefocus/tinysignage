@@ -19,6 +19,8 @@ import struct
 import subprocess
 import sys
 import textwrap
+import urllib.request
+import urllib.error
 
 # =========================================================================
 # Constants & templates
@@ -56,115 +58,79 @@ MemoryMax=512M
 WantedBy=multi-user.target
 """
 
-SYSTEMD_PLAYER = """\
-[Unit]
-Description=TinySignage Player (Kiosk Browser)
-After=signage-app.service graphical.target
-Wants=signage-app.service
-StartLimitIntervalSec=60
-StartLimitBurst=5
+def _build_player_unit(lite, standalone, install_dir, user):
+    """Build a systemd unit for the player service.
 
-[Service]
-Type=simple
-User={user}
-Environment=DISPLAY=:0
-Environment=XCURSOR_THEME=hidden
-Environment=XCURSOR_SIZE=1
-ExecStartPre=/bin/sleep 5
-ExecStart={install_dir}/venv/bin/python {install_dir}/launcher.py
-Restart=on-failure
-RestartSec=10
+    lite:       True for Pi OS Lite (cage/Wayland), False for X11/Desktop
+    standalone: True for player-only (no local backend), False for co-located
+    """
+    if standalone:
+        after = "network-online.target"
+        wants = "network-online.target"
+    elif lite:
+        after = "signage-app.service multi-user.target"
+        wants = "signage-app.service"
+    else:
+        after = "signage-app.service graphical.target"
+        wants = "signage-app.service"
 
-[Install]
-WantedBy=graphical.target
-"""
+    python_bin = "/usr/bin/python3" if standalone else f"{install_dir}/venv/bin/python"
 
-SYSTEMD_PLAYER_LITE = """\
-[Unit]
-Description=TinySignage Player (Kiosk Browser — Lite)
-After=signage-app.service multi-user.target
-Wants=signage-app.service
-StartLimitIntervalSec=300
-StartLimitBurst=5
+    if lite:
+        return textwrap.dedent(f"""\
+            [Unit]
+            Description=TinySignage Player (Kiosk Browser — Lite)
+            After={after}
+            Wants={wants}
+            StartLimitIntervalSec=300
+            StartLimitBurst=5
 
-[Service]
-Type=simple
-User={user}
+            [Service]
+            Type=simple
+            User={user}
 
-# cage creates its own Wayland session on this TTY
-TTYPath=/dev/tty1
-StandardInput=tty-force
-StandardOutput=journal
-StandardError=journal
+            # cage creates its own Wayland session on this TTY
+            TTYPath=/dev/tty1
+            StandardInput=tty-force
+            StandardOutput=journal
+            StandardError=journal
 
-RuntimeDirectory=tinysignage
-Environment=XDG_RUNTIME_DIR=/run/tinysignage
+            RuntimeDirectory=tinysignage
+            Environment=XDG_RUNTIME_DIR=/run/tinysignage
 
-ExecStartPre=/bin/sleep 5
-ExecStart=/usr/bin/cage -d -s -- {install_dir}/venv/bin/python {install_dir}/launcher.py
-WatchdogSec=120
-Restart=on-failure
-RestartSec=10
+            ExecStartPre=/bin/sleep 5
+            ExecStart=/usr/bin/cage -d -s -- {python_bin} {install_dir}/launcher.py
+            WatchdogSec=120
+            Restart=on-failure
+            RestartSec=10
 
-[Install]
-WantedBy=multi-user.target
-"""
+            [Install]
+            WantedBy=multi-user.target
+        """)
+    else:
+        wanted_by = "graphical.target"
+        return textwrap.dedent(f"""\
+            [Unit]
+            Description=TinySignage Player (Kiosk Browser)
+            After={after}
+            Wants={wants}
+            StartLimitIntervalSec=60
+            StartLimitBurst=5
 
-# --- Standalone player systemd units (player-only, no local backend) ------
+            [Service]
+            Type=simple
+            User={user}
+            Environment=DISPLAY=:0
+            Environment=XCURSOR_THEME=hidden
+            Environment=XCURSOR_SIZE=1
+            ExecStartPre=/bin/sleep 5
+            ExecStart={python_bin} {install_dir}/launcher.py
+            Restart=on-failure
+            RestartSec=10
 
-SYSTEMD_PLAYER_STANDALONE = """\
-[Unit]
-Description=TinySignage Player (Kiosk Browser)
-After=network-online.target
-Wants=network-online.target
-StartLimitIntervalSec=60
-StartLimitBurst=5
-
-[Service]
-Type=simple
-User={user}
-Environment=DISPLAY=:0
-Environment=XCURSOR_THEME=hidden
-Environment=XCURSOR_SIZE=1
-ExecStartPre=/bin/sleep 5
-ExecStart=/usr/bin/python3 {install_dir}/launcher.py
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=graphical.target
-"""
-
-SYSTEMD_PLAYER_LITE_STANDALONE = """\
-[Unit]
-Description=TinySignage Player (Kiosk Browser — Lite)
-After=network-online.target
-Wants=network-online.target
-StartLimitIntervalSec=300
-StartLimitBurst=5
-
-[Service]
-Type=simple
-User={user}
-
-# cage creates its own Wayland session on this TTY
-TTYPath=/dev/tty1
-StandardInput=tty-force
-StandardOutput=journal
-StandardError=journal
-
-RuntimeDirectory=tinysignage
-Environment=XDG_RUNTIME_DIR=/run/tinysignage
-
-ExecStartPre=/bin/sleep 5
-ExecStart=/usr/bin/cage -d -s -- /usr/bin/python3 {install_dir}/launcher.py
-WatchdogSec=120
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-"""
+            [Install]
+            WantedBy={wanted_by}
+        """)
 
 # --- Systemd user service (desktop Linux) --------------------------------
 
@@ -222,7 +188,7 @@ LAUNCHD_PLIST = """\
 WINDOWS_BAT = """\
 @echo off
 cd /d "{install_dir}"
-call venv\\Scripts\\activate
+call "{install_dir}\\venv\\Scripts\\activate"
 uvicorn app.main:app --host 0.0.0.0 --port 8080
 """
 
@@ -398,26 +364,26 @@ def prompt_yn(message, default=True):
 
 def prompt_mode():
     """Prompt for install mode: both, cms, or player."""
-    print("What would you like to install?\n")
-    print("  1. Everything — CMS + Player on this device")
-    print("     Best for a single device that manages AND displays content.")
-    print("     Example: a coffee shop with one screen behind the counter.\n")
-    print("  2. CMS only — content management server")
-    print("     Runs the server that manages playlists, schedules, and media.")
-    print("     Install this once, then point all your player screens at it.\n")
-    print("  3. Player only — display screen")
-    print("     Turns this device into a display that connects to a CMS.")
-    print("     You'll need a CMS server already set up somewhere.\n")
-    try:
-        choice = input("Choice [1]: ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        sys.exit(1)
-    mode = {"": "both", "1": "both", "2": "cms", "3": "player"}.get(choice)
-    if mode is None:
+    while True:
+        print("What would you like to install?\n")
+        print("  1. Everything — CMS + Player on this device")
+        print("     Best for a single device that manages AND displays content.")
+        print("     Example: a coffee shop with one screen behind the counter.\n")
+        print("  2. CMS only — content management server")
+        print("     Runs the server that manages playlists, schedules, and media.")
+        print("     Install this once, then point all your player screens at it.\n")
+        print("  3. Player only — display screen")
+        print("     Turns this device into a display that connects to a CMS.")
+        print("     You'll need a CMS server already set up somewhere.\n")
+        try:
+            choice = input("Choice [1]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            sys.exit(1)
+        mode = {"": "both", "1": "both", "2": "cms", "3": "player"}.get(choice)
+        if mode is not None:
+            return mode
         print("  Please enter 1, 2, or 3.\n")
-        return prompt_mode()
-    return mode
 
 
 def prompt_server_url():
@@ -426,14 +392,30 @@ def prompt_server_url():
     print("This is the device where you installed the TinySignage CMS.\n")
     print("  Examples:  http://192.168.1.50:8080")
     print("             http://lobby-tv.local:8080\n")
-    url = prompt_input("CMS server address")
-    if not url:
+    while True:
+        url = prompt_input("CMS server address")
+        if url:
+            break
         print("  A server address is required for player-only installs.")
-        return prompt_server_url()
     url = url.rstrip("/")
     if not url.startswith(("http://", "https://")):
         url = "http://" + url
     return url
+
+
+def validate_server_url(url):
+    """Check if the CMS server is reachable. Warns but does not block."""
+    try:
+        req = urllib.request.Request(f"{url}/health", method="GET")
+        resp = urllib.request.urlopen(req, timeout=5)
+        if resp.status == 200:
+            info(f"CMS server at {url} is reachable")
+            return
+    except (urllib.error.URLError, OSError, ValueError):
+        pass
+    warn(f"Could not reach CMS server at {url}")
+    info("This is OK if the server is on a different network or not running yet.")
+    info("Make sure the address is correct before the player connects.")
 
 
 def step(number, total, message):
@@ -521,13 +503,30 @@ def install_cursor_theme():
 # Pi system setup
 # =========================================================================
 
-def pi_move_to_opt(source_dir):
+def pi_move_to_opt(source_dir, non_interactive=False):
     """Move install directory to /opt/tinysignage if not already there."""
     if os.path.realpath(source_dir) == os.path.realpath(TARGET_DIR):
         return TARGET_DIR
     print(f"Moving install from {source_dir} to {TARGET_DIR}...")
     if os.path.isdir(TARGET_DIR):
-        info(f"{TARGET_DIR} already exists — removing old copy")
+        has_db = os.path.isfile(os.path.join(TARGET_DIR, "db", "signage.db"))
+        has_media = os.path.isdir(os.path.join(TARGET_DIR, "media"))
+        if has_db or has_media:
+            warn(f"{TARGET_DIR} already exists with data:")
+            if has_db:
+                info("  - Database (db/signage.db)")
+            if has_media:
+                media_count = sum(
+                    1 for f in os.listdir(os.path.join(TARGET_DIR, "media"))
+                    if not f.startswith(".") and f != "thumbs"
+                )
+                if media_count:
+                    info(f"  - Media files ({media_count} items)")
+            if not non_interactive:
+                if not prompt_yn("Replace existing install? (data will be lost)", default=False):
+                    error_exit("Install cancelled. Back up your data and try again.")
+            else:
+                info("Non-interactive mode — replacing existing install")
         shutil.rmtree(TARGET_DIR)
     shutil.move(source_dir, TARGET_DIR)
     info(f"Install directory is now {TARGET_DIR}")
@@ -601,24 +600,20 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both"):
 
     # --- [4] Systemd units (generated from templates — no sed patching) ---
     step(4, total, "Installing systemd units...")
-    tv = {"install_dir": install_dir, "user": SERVICE_USER}
     services = []
 
     if mode in ("both", "cms"):
         with open("/etc/systemd/system/signage-app.service", "w") as f:
-            f.write(SYSTEMD_APP.format(**tv))
+            f.write(SYSTEMD_APP.format(install_dir=install_dir, user=SERVICE_USER))
         services.append("signage-app")
 
     if mode in ("both", "player"):
-        if mode == "player":
-            # Standalone player — uses system Python, no local backend
-            template = SYSTEMD_PLAYER_LITE_STANDALONE if lite else SYSTEMD_PLAYER_STANDALONE
-        else:
-            template = SYSTEMD_PLAYER_LITE if lite else SYSTEMD_PLAYER
+        standalone = (mode == "player")
         if lite:
             info("Using Lite kiosk service (cage + Chromium)")
+        unit = _build_player_unit(lite, standalone, install_dir, SERVICE_USER)
         with open("/etc/systemd/system/signage-player.service", "w") as f:
-            f.write(template.format(**tv))
+            f.write(unit)
         services.append("signage-player")
 
     run_cmd(["systemctl", "daemon-reload"])
@@ -725,19 +720,25 @@ def generate_config_env(install_dir):
     if os.path.isfile(path):
         info("config.env already exists")
         return
-    with open(path, "w") as f:
-        f.write("# TinySignage environment config (auto-generated)\n")
-        f.write(f"SECRET_KEY={secrets.token_hex(32)}\n")
+    content = (
+        "# TinySignage environment config (auto-generated)\n"
+        f"SECRET_KEY={secrets.token_hex(32)}\n"
+    )
+    if sys.platform != "win32":
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+    else:
+        with open(path, "w") as f:
+            f.write(content)
     info("Generated config.env with SECRET_KEY")
 
 
-def update_config_yaml(install_dir, display_name=None, server_url=None):
-    """Update config.yaml fields using venv's PyYAML."""
-    if not display_name and not server_url:
-        return
+def _build_yaml_update_script(config_path, display_name=None, server_url=None):
+    """Build a Python one-liner to update config.yaml fields."""
     parts = [
         "import yaml; from pathlib import Path",
-        f"p = Path({os.path.join(install_dir, 'config.yaml')!r})",
+        f"p = Path({config_path!r})",
         "c = yaml.safe_load(p.read_text())",
     ]
     if server_url:
@@ -747,7 +748,22 @@ def update_config_yaml(install_dir, display_name=None, server_url=None):
     parts.append(
         "p.write_text(yaml.dump(c, default_flow_style=False, sort_keys=False))"
     )
-    run_cmd([get_venv_python(install_dir), "-c", "; ".join(parts)], cwd=install_dir)
+    return "; ".join(parts)
+
+
+def update_config_yaml(install_dir, display_name=None, server_url=None, python_cmd=None):
+    """Update config.yaml fields using PyYAML.
+
+    Uses venv Python by default, or an explicit python_cmd if provided
+    (e.g. system python3 for player-only installs that have no venv).
+    """
+    if not display_name and not server_url:
+        return
+    if python_cmd is None:
+        python_cmd = get_venv_python(install_dir)
+    config_path = os.path.join(install_dir, "config.yaml")
+    script = _build_yaml_update_script(config_path, display_name, server_url)
+    run_cmd([python_cmd, "-c", script], cwd=install_dir)
     if display_name:
         info(f"Set display_name to: {display_name}")
     if server_url:
@@ -869,14 +885,42 @@ def linux_post_install(install_dir, non_interactive):
 # Update mode
 # =========================================================================
 
+def _detect_installed_mode(install_dir, plat):
+    """Detect what was originally installed by checking for artifacts."""
+    has_venv = os.path.isdir(os.path.join(install_dir, "venv"))
+    if plat == "pi":
+        has_app = os.path.isfile("/etc/systemd/system/signage-app.service")
+        has_player = os.path.isfile("/etc/systemd/system/signage-player.service")
+    else:
+        has_app = has_venv  # desktop CMS always has a venv
+        has_player = False  # desktop player has no detectable service
+    if has_app and has_player:
+        return "both"
+    if has_app:
+        return "cms"
+    return "player"
+
+
 def do_update(plat, install_dir):
     """Update an existing installation: deps, migrations, restart."""
     print("=== TinySignage Update ===\n")
 
-    venv_dir = os.path.join(install_dir, "venv")
-    if not os.path.isdir(venv_dir):
+    mode = _detect_installed_mode(install_dir, plat)
+    info(f"Detected install mode: {mode}")
+    print()
+
+    has_venv = os.path.isdir(os.path.join(install_dir, "venv"))
+
+    if mode == "player" and not has_venv:
+        # Player-only installs have no venv or database to update
+        info("Player-only install — nothing to update.")
+        info("To change the CMS server address, re-run install.py --mode player --server-url <url>")
+        print("\nUpdate complete!")
+        return
+
+    if not has_venv:
         error_exit(
-            f"No venv found at {venv_dir}.\n"
+            f"No venv found at {os.path.join(install_dir, 'venv')}.\n"
             "Run install.py without --update for a fresh install."
         )
 
@@ -905,9 +949,12 @@ def do_update(plat, install_dir):
         ], cwd=install_dir)
 
         step(3, 3, "Restarting services...")
-        run_cmd(["systemctl", "restart", "signage-app"])
-        run_cmd(["systemctl", "restart", "signage-player"])
-        info("Services restarted")
+        for svc in ["signage-app", "signage-player"]:
+            if os.path.isfile(f"/etc/systemd/system/{svc}.service"):
+                run_cmd(["systemctl", "restart", svc])
+                info(f"Restarted {svc}")
+            else:
+                info(f"Skipped {svc} (not installed)")
 
     else:
         step(1, 3, "Updating Python dependencies...")
@@ -965,7 +1012,7 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
     lite = is_pi_lite()
 
     # Move to /opt/tinysignage
-    install_dir = pi_move_to_opt(install_dir)
+    install_dir = pi_move_to_opt(install_dir, non_interactive)
     print()
 
     # ---- System setup (as root) ----
@@ -985,13 +1032,9 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
 
         step(2, total, "Configuring CMS server connection...")
         # Player-only uses system python3 (python3-yaml installed via apt)
-        yaml_script = (
-            "import yaml; from pathlib import Path; "
-            f"p = Path({os.path.join(install_dir, 'config.yaml')!r}); "
-            "c = yaml.safe_load(p.read_text()); "
-            f"c['server_url'] = {server_url!r}; "
-            f"c['display_name'] = {display_name!r}; "
-            "p.write_text(yaml.dump(c, default_flow_style=False, sort_keys=False))"
+        config_path = os.path.join(install_dir, "config.yaml")
+        yaml_script = _build_yaml_update_script(
+            config_path, display_name=display_name, server_url=server_url,
         )
         run_as_user(SERVICE_USER, ["python3", "-c", yaml_script], cwd=install_dir)
         info(f"Server URL: {server_url}")
@@ -1031,7 +1074,8 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
             info("config.env already exists")
         else:
             secret_key = secrets.token_hex(32)
-            with open(config_env, "w") as f:
+            fd = os.open(config_env, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as f:
                 f.write("# TinySignage environment config (auto-generated)\n")
                 f.write(f"SECRET_KEY={secret_key}\n")
             run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}", config_env])
@@ -1039,13 +1083,9 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
 
         step(5, total, "Updating config.yaml...")
         local_url = server_url or "http://localhost:8080"
-        yaml_script = (
-            "import yaml; from pathlib import Path; "
-            f"p = Path({os.path.join(install_dir, 'config.yaml')!r}); "
-            "c = yaml.safe_load(p.read_text()); "
-            f"c['server_url'] = {local_url!r}; "
-            f"c['display_name'] = {display_name!r}; "
-            "p.write_text(yaml.dump(c, default_flow_style=False, sort_keys=False))"
+        config_path = os.path.join(install_dir, "config.yaml")
+        yaml_script = _build_yaml_update_script(
+            config_path, display_name=display_name, server_url=local_url,
         )
         run_as_user(SERVICE_USER, [venv_python, "-c", yaml_script], cwd=install_dir)
         info(f"Set display_name={display_name}, server_url={local_url}")
@@ -1104,8 +1144,9 @@ def install_desktop(plat, install_dir, non_interactive, mode="both", server_url=
 
     if mode == "player":
         # Player-only: just save server_url and print instructions
+        # No venv exists for player-only — use the current interpreter
         print("Configuring player to connect to remote CMS...\n")
-        update_config_yaml(install_dir, server_url=server_url)
+        update_config_yaml(install_dir, server_url=server_url, python_cmd=sys.executable)
 
         print()
         print("=" * 50)
@@ -1238,6 +1279,10 @@ def main():
         if args.non_interactive:
             error_exit("Player-only mode requires --server-url")
         server_url = prompt_server_url()
+
+    # Validate server URL reachability (warning only — doesn't block install)
+    if mode == "player" and server_url:
+        validate_server_url(server_url)
 
     print()
 
