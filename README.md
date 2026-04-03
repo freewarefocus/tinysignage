@@ -134,6 +134,7 @@ Also works on: any x86 mini PC, retired office PC, Mac, Linux server, or Docker 
 | [Scheduling](docs/scheduling.md) | Time windows, recurrence, priority |
 | [Multi-Zone Layouts](docs/multi-zone-layouts.md) | Split-screen zone positioning |
 | [Interactive Triggers](docs/interactive-triggers.md) | Keyboard, touch, GPIO, webhook triggers |
+| [BrightSign Support](docs/brightsign.md) | BrightSign player integration and MRSS feeds (experimental) |
 | [GPIO Bridge](docs/gpio-bridge.md) | Physical buttons on Raspberry Pi |
 | [Emergency Overrides](docs/emergency-overrides.md) | Instant override push and auto-expiry |
 | [Users and Permissions](docs/users-and-permissions.md) | RBAC roles, API tokens, sessions |

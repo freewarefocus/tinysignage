@@ -132,4 +132,5 @@ This lets you run the server on one machine and the player on another, even acro
 - [Multi-Zone Layouts](multi-zone-layouts.md) -- Assigning layouts to devices
 - [Emergency Overrides](emergency-overrides.md) -- Pushing urgent content to devices
 - [Player Behavior](player-behavior.md) -- How the player communicates with the server
+- [BrightSign Support](brightsign.md) -- BrightSign player integration and MRSS feeds (experimental)
 - [API Reference](api-reference.md) -- Device and group endpoints

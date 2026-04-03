@@ -60,20 +60,23 @@ async def _lookup_token(token_str: str, session: AsyncSession) -> ApiToken:
     return api_token
 
 
-def _extract_bearer(request: Request) -> str:
-    """Extract Bearer token from Authorization header. Raises 401 if missing."""
+def _extract_token(request: Request) -> str:
+    """Extract token from Authorization header or query string ?token= param."""
     auth = request.headers.get("Authorization")
-    if not auth or not auth.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
-    return auth[7:]
+    if auth and auth.startswith("Bearer "):
+        return auth[7:]
+    token_param = request.query_params.get("token")
+    if token_param:
+        return token_param
+    raise HTTPException(status_code=401, detail="Missing Authorization header or token parameter")
 
 
 async def require_token(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> ApiToken:
-    """FastAPI dependency: require a valid Bearer token."""
-    token_str = _extract_bearer(request)
+    """FastAPI dependency: require a valid Bearer token (header or query string)."""
+    token_str = _extract_token(request)
     return await _lookup_token(token_str, session)
 
 

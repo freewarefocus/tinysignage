@@ -329,6 +329,30 @@
             return;
         }
 
+        // Headless auto-registration: ?name= param (used by BrightSign autorun)
+        const autoName = params.get('name');
+        if (autoName) {
+            const serverUrl = baseUrl || window.location.origin;
+            try {
+                const resp = await fetch(registrationApiUrl(serverUrl, '/api/devices/register'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: autoName }),
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    storeServerUrl(serverUrl);
+                    storeCredentials(data.device_id, data.token);
+                    cleanUrl();
+                    startPlayer();
+                    return;
+                }
+            } catch (e) {
+                PlayerLog.warn('Auto-registration failed: ' + e.message);
+            }
+            // Fall through to existing flow on failure
+        }
+
         const storedId = localStorage.getItem('tinysignage_device_id');
         const storedToken = localStorage.getItem('tinysignage_device_token');
         if (storedId && storedToken) {
@@ -1373,7 +1397,7 @@
             reported_at: new Date().toISOString(),
             software: {
                 player_version: PLAYER_VERSION,
-                player_type: 'browser',
+                player_type: /BrightSign/i.test(navigator.userAgent) ? 'brightsign' : 'browser',
                 user_agent: navigator.userAgent,
             },
             display: {

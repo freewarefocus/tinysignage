@@ -76,10 +76,21 @@ async function request(method, path, body = null, options = {}) {
   return resp.json()
 }
 
+async function requestBlob(path) {
+  const url = `${BASE}${path}`
+  const authHeaders = getAuthHeaders()
+  const resp = await fetch(url, { headers: authHeaders })
+  if (!resp.ok) {
+    throw new Error(`${resp.status}: ${resp.statusText}`)
+  }
+  return resp.blob()
+}
+
 export const api = {
   get: (path) => request('GET', path),
   post: (path, body) => request('POST', path, body),
   patch: (path, body) => request('PATCH', path, body),
   put: (path, body) => request('PUT', path, body),
   delete: (path) => request('DELETE', path),
+  getBlob: (path) => requestBlob(path),
 }

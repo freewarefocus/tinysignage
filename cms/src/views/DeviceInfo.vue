@@ -106,13 +106,33 @@
           </select>
         </div>
 
+        <!-- MRSS Feed URL -->
+        <div v-if="selectedDevice.status !== 'pending'" class="detail-section">
+          <label>MRSS Feed URL</label>
+          <div class="mrss-row">
+            <input
+              :value="mrssFeedUrl"
+              readonly
+              class="mrss-url-input"
+              @click="$event.target.select()"
+            />
+            <button class="btn-secondary btn-sm" @click="copyMrssUrl">
+              {{ mrssCopied ? 'Copied' : 'Copy' }}
+            </button>
+          </div>
+          <p class="mrss-hint">Use this URL in BrightSign or any MRSS-compatible player. Images and videos only.</p>
+        </div>
+
         <!-- Hardware info -->
         <div v-if="deviceHealth" class="detail-section">
           <label>Hardware</label>
           <div class="health-fields">
             <div class="health-item">
               <span class="health-label">Player Type</span>
-              <span>{{ deviceHealth.player_type || '—' }}</span>
+              <span>
+                {{ deviceHealth.player_type || '—' }}
+                <span v-if="deviceHealth.player_type === 'brightsign'" class="brightsign-badge">BrightSign</span>
+              </span>
             </div>
             <div class="health-item">
               <span class="health-label">Resolution</span>
@@ -228,6 +248,14 @@
       </div>
     </div>
 
+    <!-- BrightSign setup bundle -->
+    <div class="brightsign-setup">
+      <button class="btn-secondary" @click="downloadBrightSignBundle">
+        <i class="pi pi-download"></i> Download BrightSign Setup
+      </button>
+      <span class="setup-hint">Extract ZIP to SD card to connect a BrightSign player</span>
+    </div>
+
     <div v-if="loading" class="loading">Loading devices...</div>
 
     <div v-else-if="activeDevices.length === 0 && pendingDevices.length === 0" class="empty">
@@ -335,6 +363,16 @@ const detailLayoutId = ref('')
 const deviceHealth = ref(null)
 const deleteTarget = ref(null)
 const rejectTarget = ref(null)
+
+// MRSS
+const mrssCopied = ref(false)
+
+const mrssFeedUrl = computed(() => {
+  if (!selectedDevice.value) return ''
+  const base = window.location.origin
+  const token = localStorage.getItem('tinysignage_token') || localStorage.getItem('tinysignage_admin_token') || ''
+  return `${base}/api/devices/${selectedDevice.value.id}/mrss?token=${encodeURIComponent(token)}`
+})
 
 // Pre-flight
 const showPreflightDialog = ref(false)
@@ -499,6 +537,28 @@ function cancelPreflight() {
   pendingPlaylistAssign = null
   // Revert dropdown to original value
   detailPlaylistId.value = selectedDevice.value.playlist_id || ''
+}
+
+async function copyMrssUrl() {
+  try {
+    await navigator.clipboard.writeText(mrssFeedUrl.value)
+    mrssCopied.value = true
+    setTimeout(() => { mrssCopied.value = false }, 2000)
+  } catch { /* clipboard API may fail in insecure context */ }
+}
+
+async function downloadBrightSignBundle() {
+  try {
+    const blob = await api.getBlob('/brightsign/setup-bundle')
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'tinysignage-brightsign.zip'
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    console.error('[DeviceInfo] BrightSign bundle download failed:', err)
+  }
 }
 
 async function assignLayout() {
@@ -1030,4 +1090,62 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 }
 
 .btn-reject:hover { background: #7a2840; }
+
+/* BrightSign badge */
+.brightsign-badge {
+  display: inline-block;
+  background: #6d28d9;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
+/* MRSS feed URL */
+.mrss-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.mrss-url-input {
+  flex: 1;
+  font-family: monospace;
+  font-size: 0.78rem;
+  background: #0f1117;
+  border: 1px solid #3a3a5a;
+  color: #aaa;
+  padding: 0.35rem 0.6rem;
+  border-radius: 4px;
+  outline: none;
+  cursor: text;
+  margin-bottom: 0 !important;
+}
+
+.mrss-url-input:focus { border-color: #7c83ff; }
+
+.mrss-hint {
+  font-size: 0.75rem;
+  color: #555;
+  margin-top: 0.3rem;
+  margin-bottom: 0 !important;
+}
+
+/* BrightSign setup bundle */
+.brightsign-setup {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.2rem;
+}
+
+.setup-hint {
+  font-size: 0.8rem;
+  color: #666;
+}
 </style>

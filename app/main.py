@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.audit import router as audit_router
+from app.api.brightsign import router as brightsign_router
 from app.api.assets import router as assets_router
 from app.api.backup import router as backup_router
 from app.api.devices import router as devices_router
@@ -17,6 +18,7 @@ from app.api.groups import router as groups_router
 from app.api.health import router as health_router
 from app.api.layouts import router as layouts_router
 from app.api.logs import router as logs_router
+from app.api.mrss import router as mrss_router
 from app.api.overrides import router as overrides_router
 from app.api.playlists import router as playlists_router
 from app.api.schedules import router as schedules_router
@@ -95,6 +97,8 @@ if _cms_dir.exists():
 
 app.include_router(audit_router, prefix="/api")
 app.include_router(assets_router, prefix="/api")
+app.include_router(brightsign_router, prefix="/api")
+app.include_router(mrss_router, prefix="/api")
 app.include_router(backup_router, prefix="/api")
 app.include_router(playlists_router, prefix="/api")
 app.include_router(devices_router, prefix="/api")
