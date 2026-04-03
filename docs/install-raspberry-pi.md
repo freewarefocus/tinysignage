@@ -78,9 +78,9 @@ This reinstalls dependencies, runs database migrations, and restarts services. T
 If you entered the wrong server URL during registration, reset the player to return to the registration screen:
 
 ```bash
-sudo systemctl stop signage-player-lite
+sudo systemctl stop signage-player
 python3 /opt/tinysignage/launcher.py --reset
-sudo systemctl restart signage-player-lite
+sudo systemctl restart signage-player
 ```
 
 ---
@@ -133,9 +133,9 @@ sudo raspi-config
 # Performance Options → Overlay File System → Enable
 ```
 
-**Important:** TinySignage stores its database and uploaded media in `/home/tinysignage/TinySignage/data/`. This directory must remain writable. After enabling OverlayFS, either:
-- Keep the data directory on a separate writable partition, or
-- Bind-mount the data directory to a tmpfs or USB drive
+**Important:** TinySignage stores its database and uploaded media in `/opt/tinysignage/db/` and `/opt/tinysignage/media/`. These directories must remain writable. After enabling OverlayFS, either:
+- Keep the data directories on a separate writable partition, or
+- Bind-mount them to a tmpfs or USB drive
 
 If you just need basic protection and don't want to deal with partition layouts, skip OverlayFS and use a high-endurance SD card (see below).
 

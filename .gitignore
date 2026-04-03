@@ -46,7 +46,6 @@ logs/*
 # Node / Vue CMS
 node_modules/
 cms/node_modules/
-cms/dist/
 
 # Temp files
 *.tmp.*

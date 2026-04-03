@@ -12,7 +12,7 @@ COPY app/ ./app/
 COPY config.yaml .
 
 # media/ and db/ are mounted as volumes — create empty dirs
-RUN mkdir -p media media/thumbs db
+RUN mkdir -p media media/thumbs db logs
 
 EXPOSE 8080
 
