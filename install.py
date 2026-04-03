@@ -19,6 +19,7 @@ import struct
 import subprocess
 import sys
 import textwrap
+import urllib.parse
 import urllib.request
 import urllib.error
 
@@ -31,6 +32,15 @@ SERVICE_USER = "tinysignage"
 TARGET_DIR = "/opt/tinysignage"
 DEFAULT_PORT = 8080
 
+DB_INIT_SCRIPT = textwrap.dedent("""\
+    import asyncio
+    from app.database import init_db, engine
+    async def setup():
+        await init_db()
+        await engine.dispose()
+    asyncio.run(setup())
+""")
+
 # --- Systemd unit templates (Pi) ----------------------------------------
 
 SYSTEMD_APP = """\
@@ -42,7 +52,7 @@ After=network.target
 Type=simple
 User={user}
 WorkingDirectory={install_dir}
-ExecStart={install_dir}/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
+ExecStart={install_dir}/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port {port}
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
@@ -142,7 +152,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory={install_dir}
-ExecStart={install_dir}/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
+ExecStart={install_dir}/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port {port}
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
@@ -169,7 +179,7 @@ LAUNCHD_PLIST = """\
         <string>--host</string>
         <string>0.0.0.0</string>
         <string>--port</string>
-        <string>8080</string>
+        <string>{port}</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -189,7 +199,7 @@ WINDOWS_BAT = """\
 @echo off
 cd /d "{install_dir}"
 call "{install_dir}\\venv\\Scripts\\activate"
-uvicorn app.main:app --host 0.0.0.0 --port 8080
+uvicorn app.main:app --host 0.0.0.0 --port {port}
 """
 
 # --- Xcursor constants ---------------------------------------------------
@@ -400,18 +410,29 @@ def prompt_server_url():
     url = url.rstrip("/")
     if not url.startswith(("http://", "https://")):
         url = "http://" + url
+    parsed = urllib.parse.urlparse(url)
+    if not parsed.port:
+        suggested = f"{url}:{DEFAULT_PORT}"
+        info(f"No port specified — did you mean {suggested} ?")
+        if prompt_yn(f"Use {suggested} instead?", default=True):
+            url = suggested
     return url
 
 
 def validate_server_url(url):
     """Check if the CMS server is reachable. Warns but does not block."""
+    parsed = urllib.parse.urlparse(url)
+    if not parsed.scheme or not parsed.hostname:
+        warn(f"'{url}' doesn't look like a valid URL.")
+        info("Expected format: http://192.168.1.50:8080 or http://hostname.local:8080")
+        return
     try:
         req = urllib.request.Request(f"{url}/health", method="GET")
         resp = urllib.request.urlopen(req, timeout=5)
         if resp.status == 200:
             info(f"CMS server at {url} is reachable")
             return
-    except (urllib.error.URLError, OSError, ValueError):
+    except (urllib.error.URLError, OSError):
         pass
     warn(f"Could not reach CMS server at {url}")
     info("This is OK if the server is on a different network or not running yet.")
@@ -435,15 +456,30 @@ def error_exit(message):
     sys.exit(1)
 
 
+def _check_python_version(path):
+    """Return True if the interpreter at path is Python 3.9+."""
+    try:
+        out = subprocess.check_output(
+            [path, "--version"], stderr=subprocess.STDOUT, text=True, timeout=5
+        ).strip()
+        # e.g. "Python 3.11.4"
+        m = re.search(r'(\d+)\.(\d+)', out)
+        if m and (int(m.group(1)), int(m.group(2))) >= MIN_PYTHON:
+            return True
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        pass
+    return False
+
+
 def find_python():
-    """Find the best available Python 3 interpreter (full path)."""
-    for name in ["python3.13", "python3.12", "python3.11", "python3"]:
+    """Find the best available Python 3.9+ interpreter (full path)."""
+    for name in ["python3.13", "python3.12", "python3.11", "python3.10", "python3.9", "python3"]:
         path = shutil.which(name)
-        if path:
+        if path and _check_python_version(path):
             return path
     if sys.platform == "win32":
         path = shutil.which("python")
-        if path:
+        if path and _check_python_version(path):
             return path
     return sys.executable
 
@@ -528,12 +564,18 @@ def pi_move_to_opt(source_dir, non_interactive=False):
             else:
                 info("Non-interactive mode — replacing existing install")
         shutil.rmtree(TARGET_DIR)
-    shutil.move(source_dir, TARGET_DIR)
+    shutil.copytree(source_dir, TARGET_DIR)
+    # Verify the copy before removing the source
+    key_files = ["config.yaml", "install.py", "requirements.txt"]
+    if all(os.path.isfile(os.path.join(TARGET_DIR, f)) for f in key_files):
+        shutil.rmtree(source_dir)
+    else:
+        warn(f"Copy verification failed — source preserved at {source_dir}")
     info(f"Install directory is now {TARGET_DIR}")
     return TARGET_DIR
 
 
-def pi_system_setup(install_dir, display_name, hostname, lite, mode="both"):
+def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port=DEFAULT_PORT):
     """All Pi system-level steps (requires root)."""
     total = 6
 
@@ -604,7 +646,7 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both"):
 
     if mode in ("both", "cms"):
         with open("/etc/systemd/system/signage-app.service", "w") as f:
-            f.write(SYSTEMD_APP.format(install_dir=install_dir, user=SERVICE_USER))
+            f.write(SYSTEMD_APP.format(install_dir=install_dir, user=SERVICE_USER, port=port))
         services.append("signage-app")
 
     if mode in ("both", "player"):
@@ -734,36 +776,55 @@ def generate_config_env(install_dir):
     info("Generated config.env with SECRET_KEY")
 
 
-def _build_yaml_update_script(config_path, display_name=None, server_url=None):
-    """Build a Python one-liner to update config.yaml fields."""
-    parts = [
-        "import yaml; from pathlib import Path",
-        f"p = Path({config_path!r})",
-        "c = yaml.safe_load(p.read_text())",
-    ]
-    if server_url:
-        parts.append(f"c['server_url'] = {server_url!r}")
-    if display_name:
-        parts.append(f"c['display_name'] = {display_name!r}")
-    parts.append(
-        "p.write_text(yaml.dump(c, default_flow_style=False, sort_keys=False))"
-    )
-    return "; ".join(parts)
+def _yaml_quote(value):
+    """Quote a value for safe YAML serialization (stdlib only)."""
+    s = str(value)
+    return "'" + s.replace("'", "''") + "'"
 
 
-def update_config_yaml(install_dir, display_name=None, server_url=None, python_cmd=None):
-    """Update config.yaml fields using PyYAML.
+def _update_yaml_file(config_path, **updates):
+    """Update top-level scalar keys in a YAML file (stdlib only).
 
-    Uses venv Python by default, or an explicit python_cmd if provided
-    (e.g. system python3 for player-only installs that have no venv).
+    Replaces existing keys in place; appends new keys at the end.
+    Safe for simple config values — does not require PyYAML.
     """
+    lines = []
+    if os.path.isfile(config_path):
+        with open(config_path) as f:
+            lines = f.readlines()
+
+    remaining = dict(updates)
+    new_lines = []
+    for line in lines:
+        replaced = False
+        if not line.lstrip().startswith('#'):
+            for key in list(remaining):
+                if re.match(rf'^{re.escape(key)}\s*:', line):
+                    new_lines.append(f"{key}: {_yaml_quote(remaining.pop(key))}\n")
+                    replaced = True
+                    break
+        if not replaced:
+            new_lines.append(line)
+
+    # Append any keys not already in the file
+    for key, value in remaining.items():
+        new_lines.append(f"{key}: {_yaml_quote(value)}\n")
+
+    with open(config_path, "w") as f:
+        f.writelines(new_lines)
+
+
+def update_config_yaml(install_dir, display_name=None, server_url=None):
+    """Update config.yaml fields (stdlib only — no PyYAML dependency)."""
     if not display_name and not server_url:
         return
-    if python_cmd is None:
-        python_cmd = get_venv_python(install_dir)
     config_path = os.path.join(install_dir, "config.yaml")
-    script = _build_yaml_update_script(config_path, display_name, server_url)
-    run_cmd([python_cmd, "-c", script], cwd=install_dir)
+    updates = {}
+    if server_url:
+        updates["server_url"] = server_url
+    if display_name:
+        updates["display_name"] = display_name
+    _update_yaml_file(config_path, **updates)
     if display_name:
         info(f"Set display_name to: {display_name}")
     if server_url:
@@ -772,46 +833,40 @@ def update_config_yaml(install_dir, display_name=None, server_url=None, python_c
 
 def init_database(install_dir):
     """Run Alembic migrations + seed data."""
-    script = textwrap.dedent("""\
-        import asyncio
-        from app.database import init_db, engine
-        async def setup():
-            await init_db()
-            await engine.dispose()
-        asyncio.run(setup())
-    """)
-    run_cmd([get_venv_python(install_dir), "-c", script], cwd=install_dir)
+    run_cmd([get_venv_python(install_dir), "-c", DB_INIT_SCRIPT], cwd=install_dir)
 
 
 # =========================================================================
 # Dependency checks (desktop platforms)
 # =========================================================================
 
-def check_macos_deps():
-    if not shutil.which("ffmpeg"):
+def check_macos_deps(mode="both"):
+    if mode != "player" and not shutil.which("ffmpeg"):
         warn("FFmpeg not found. Video thumbnails won't be generated.")
         info("Fix: brew install ffmpeg")
 
 
-def check_windows_deps():
-    if not shutil.which("ffmpeg"):
+def check_windows_deps(mode="both"):
+    if mode != "player" and not shutil.which("ffmpeg"):
         warn("FFmpeg not found. Video thumbnails won't be generated.")
         info("Fix: winget install Gyan.FFmpeg")
 
 
-def check_linux_deps():
+def check_linux_deps(mode="both"):
     missing = []
-    if not shutil.which("chromium") and not shutil.which("chromium-browser"):
-        missing.append("chromium")
-    if not shutil.which("ffmpeg"):
+    if mode in ("both", "player"):
+        if not shutil.which("chromium") and not shutil.which("chromium-browser"):
+            missing.append("chromium")
+    if mode != "player" and not shutil.which("ffmpeg"):
         missing.append("ffmpeg")
-    try:
-        subprocess.run(
-            [sys.executable, "-c", "import venv"],
-            capture_output=True, check=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        missing.append("python3-venv")
+    if mode != "player":
+        try:
+            subprocess.run(
+                [sys.executable, "-c", "import venv"],
+                capture_output=True, check=True,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            missing.append("python3-venv")
     if missing:
         warn(f"Missing optional packages: {', '.join(missing)}")
         info(f"Fix: sudo apt install {' '.join(missing)}")
@@ -821,14 +876,14 @@ def check_linux_deps():
 # Post-install — platform-specific
 # =========================================================================
 
-def macos_post_install(install_dir, non_interactive):
+def macos_post_install(install_dir, non_interactive, port=DEFAULT_PORT):
     plist_dir = os.path.expanduser("~/Library/LaunchAgents")
     plist_path = os.path.join(plist_dir, "com.tinysignage.app.plist")
 
     if non_interactive or prompt_yn("Generate launchd plist to run on startup?"):
         os.makedirs(plist_dir, exist_ok=True)
         with open(plist_path, "w") as f:
-            f.write(LAUNCHD_PLIST.format(install_dir=install_dir))
+            f.write(LAUNCHD_PLIST.format(install_dir=install_dir, port=port))
         info(f"Created {plist_path}")
 
         if not non_interactive and prompt_yn("Load it now (start TinySignage)?"):
@@ -838,12 +893,12 @@ def macos_post_install(install_dir, non_interactive):
         info("Skipped launchd setup")
 
 
-def windows_post_install(install_dir, non_interactive):
+def windows_post_install(install_dir, non_interactive, port=DEFAULT_PORT):
     bat_path = os.path.join(install_dir, "start-tinysignage.bat")
 
     if non_interactive or prompt_yn("Generate start-tinysignage.bat?"):
         with open(bat_path, "w") as f:
-            f.write(WINDOWS_BAT.format(install_dir=install_dir))
+            f.write(WINDOWS_BAT.format(install_dir=install_dir, port=port))
         info(f"Created {bat_path}")
 
         if not non_interactive and prompt_yn(
@@ -854,9 +909,13 @@ def windows_post_install(install_dir, non_interactive):
                 r"Microsoft\Windows\Start Menu\Programs\Startup",
             )
             if os.path.isdir(startup):
-                shortcut = os.path.join(startup, "tinysignage.bat")
+                shortcut = os.path.join(startup, "tinysignage.vbs")
+                safe_path = bat_path.replace('"', '')
                 with open(shortcut, "w") as f:
-                    f.write(f'@start "" /min cmd /c "{bat_path}"\n')
+                    f.write(
+                        'CreateObject("WScript.Shell").Run '
+                        f'Chr(34) & "{safe_path}" & Chr(34), 0, False\n'
+                    )
                 info(f"Created startup shortcut: {shortcut}")
             else:
                 warn(f"Startup folder not found: {startup}")
@@ -864,21 +923,21 @@ def windows_post_install(install_dir, non_interactive):
         info("Skipped bat file generation")
 
 
-def linux_post_install(install_dir, non_interactive):
+def linux_post_install(install_dir, non_interactive, port=DEFAULT_PORT):
     service_dir = os.path.expanduser("~/.config/systemd/user")
     service_path = os.path.join(service_dir, "tinysignage.service")
 
     if non_interactive or prompt_yn("Generate systemd user service?"):
         os.makedirs(service_dir, exist_ok=True)
         with open(service_path, "w") as f:
-            f.write(SYSTEMD_USER.format(install_dir=install_dir))
+            f.write(SYSTEMD_USER.format(install_dir=install_dir, port=port))
         info(f"Created {service_path}")
         info("To start: systemctl --user start tinysignage")
         info("To enable on login: systemctl --user enable tinysignage")
     else:
         info("Skipped systemd user service setup")
         info("To run manually:")
-        info(f"  {get_venv_python(install_dir)} -m uvicorn app.main:app --host 0.0.0.0 --port 8080")
+        info(f"  {get_venv_python(install_dir)} -m uvicorn app.main:app --host 0.0.0.0 --port {port}")
 
 
 # =========================================================================
@@ -936,16 +995,8 @@ def do_update(plat, install_dir):
         ], cwd=install_dir)
 
         step(2, 3, "Running database migrations...")
-        script = textwrap.dedent("""\
-            import asyncio
-            from app.database import init_db, engine
-            async def setup():
-                await init_db()
-                await engine.dispose()
-            asyncio.run(setup())
-        """)
         run_as_user(SERVICE_USER, [
-            get_venv_python(install_dir), "-c", script,
+            get_venv_python(install_dir), "-c", DB_INIT_SCRIPT,
         ], cwd=install_dir)
 
         step(3, 3, "Restarting services...")
@@ -975,7 +1026,14 @@ def do_update(plat, install_dir):
             else:
                 info("No launchd plist found — restart manually")
         else:
-            info("Restart the application manually")
+            service_path = os.path.expanduser(
+                "~/.config/systemd/user/tinysignage.service"
+            )
+            if os.path.isfile(service_path):
+                run_cmd(["systemctl", "--user", "restart", "tinysignage"], check=False)
+                info("systemd user service restarted")
+            else:
+                info("Restart the application manually")
 
     print("\nUpdate complete!")
 
@@ -984,7 +1042,7 @@ def do_update(plat, install_dir):
 # Main install flows
 # =========================================================================
 
-def install_pi(install_dir, display_name, non_interactive, mode="both", server_url=None):
+def install_pi(install_dir, display_name, non_interactive, mode="both", server_url=None, port=DEFAULT_PORT):
     """Full Raspberry Pi install."""
     if os.geteuid() != 0:
         error_exit("Pi install requires root. Run: sudo python3 install.py")
@@ -1016,10 +1074,13 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
     print()
 
     # ---- System setup (as root) ----
-    pi_system_setup(install_dir, display_name, hostname, lite, mode)
+    pi_system_setup(install_dir, display_name, hostname, lite, mode, port)
     print()
 
     # ---- App setup ----
+    if mode == "player" and not server_url:
+        error_exit("Player mode requires a server URL (--server-url)")
+
     if mode == "player":
         # Player-only: minimal setup, no backend needed
         print("=== Player Setup ===\n")
@@ -1031,14 +1092,9 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
         ])
 
         step(2, total, "Configuring CMS server connection...")
-        # Player-only uses system python3 (python3-yaml installed via apt)
-        config_path = os.path.join(install_dir, "config.yaml")
-        yaml_script = _build_yaml_update_script(
-            config_path, display_name=display_name, server_url=server_url,
-        )
-        run_as_user(SERVICE_USER, ["python3", "-c", yaml_script], cwd=install_dir)
-        info(f"Server URL: {server_url}")
-        info(f"Display name: {display_name}")
+        update_config_yaml(install_dir, display_name=display_name, server_url=server_url)
+        run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}",
+                 os.path.join(install_dir, "config.yaml")])
 
     else:
         # CMS or Both: full app setup
@@ -1082,24 +1138,13 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
             info("Generated config.env with SECRET_KEY")
 
         step(5, total, "Updating config.yaml...")
-        local_url = server_url or "http://localhost:8080"
-        config_path = os.path.join(install_dir, "config.yaml")
-        yaml_script = _build_yaml_update_script(
-            config_path, display_name=display_name, server_url=local_url,
-        )
-        run_as_user(SERVICE_USER, [venv_python, "-c", yaml_script], cwd=install_dir)
-        info(f"Set display_name={display_name}, server_url={local_url}")
+        local_url = server_url or f"http://localhost:{port}"
+        update_config_yaml(install_dir, display_name=display_name, server_url=local_url)
+        run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}",
+                 os.path.join(install_dir, "config.yaml")])
 
         step(6, total, "Initializing database...")
-        db_script = textwrap.dedent("""\
-            import asyncio
-            from app.database import init_db, engine
-            async def setup():
-                await init_db()
-                await engine.dispose()
-            asyncio.run(setup())
-        """)
-        run_as_user(SERVICE_USER, [venv_python, "-c", db_script], cwd=install_dir)
+        run_as_user(SERVICE_USER, [venv_python, "-c", DB_INIT_SCRIPT], cwd=install_dir)
 
     # Success
     print()
@@ -1118,7 +1163,7 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
         print("    sudo reboot")
         print()
         print("  After reboot:")
-        print(f"    CMS: http://{hostname}.local:8080/cms")
+        print(f"    CMS: http://{hostname}.local:{port}/cms")
         print()
         print("  Point your player devices at this server during their install.")
     else:
@@ -1127,12 +1172,12 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
         print("    sudo reboot")
         print()
         print("  After reboot:")
-        print(f"    CMS:    http://{hostname}.local:8080/cms")
+        print(f"    CMS:    http://{hostname}.local:{port}/cms")
         print("    Player: launches automatically on the display")
     print("=" * 50)
 
 
-def install_desktop(plat, install_dir, non_interactive, mode="both", server_url=None):
+def install_desktop(plat, install_dir, non_interactive, mode="both", server_url=None, port=DEFAULT_PORT):
     """Install for macOS, Windows, or desktop Linux."""
     names = {"macos": "macOS", "windows": "Windows", "linux": "Linux"}
     mode_suffix = {"both": "", "cms": " (CMS Only)", "player": " (Player Only)"}
@@ -1146,7 +1191,7 @@ def install_desktop(plat, install_dir, non_interactive, mode="both", server_url=
         # Player-only: just save server_url and print instructions
         # No venv exists for player-only — use the current interpreter
         print("Configuring player to connect to remote CMS...\n")
-        update_config_yaml(install_dir, server_url=server_url, python_cmd=sys.executable)
+        update_config_yaml(install_dir, server_url=server_url)
 
         print()
         print("=" * 50)
@@ -1166,7 +1211,7 @@ def install_desktop(plat, install_dir, non_interactive, mode="both", server_url=
     # CMS or Both: full setup
     # Dependency checks
     {"macos": check_macos_deps, "windows": check_windows_deps,
-     "linux": check_linux_deps}[plat]()
+     "linux": check_linux_deps}[plat](mode)
     print()
 
     # App setup
@@ -1187,11 +1232,15 @@ def install_desktop(plat, install_dir, non_interactive, mode="both", server_url=
     step(5, total, "Initializing database...")
     init_database(install_dir)
 
+    # Set server_url so the player knows where to connect
+    if mode == "both":
+        update_config_yaml(install_dir, server_url=f"http://localhost:{port}")
+
     print()
 
     # Platform-specific post-install
     {"macos": macos_post_install, "windows": windows_post_install,
-     "linux": linux_post_install}[plat](install_dir, non_interactive)
+     "linux": linux_post_install}[plat](install_dir, non_interactive, port)
 
     # Success message
     print()
@@ -1203,14 +1252,14 @@ def install_desktop(plat, install_dir, non_interactive, mode="both", server_url=
         if os.path.isfile(bat):
             print("  Start: double-click start-tinysignage.bat")
         else:
-            print(r"  Start: venv\Scripts\activate && uvicorn app.main:app --host 0.0.0.0 --port 8080")
+            print(rf"  Start: venv\Scripts\activate && uvicorn app.main:app --host 0.0.0.0 --port {port}")
     else:
-        print("  Start: source venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port 8080")
+        print(f"  Start: source venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port {port}")
     print()
-    print(f"  Setup wizard: http://localhost:{DEFAULT_PORT}/setup  (first run)")
-    print(f"  CMS:          http://localhost:{DEFAULT_PORT}/cms")
+    print(f"  Setup wizard: http://localhost:{port}/setup  (first run)")
+    print(f"  CMS:          http://localhost:{port}/cms")
     if mode == "both":
-        print(f"  Player:       http://localhost:{DEFAULT_PORT}/player")
+        print(f"  Player:       http://localhost:{port}/player")
     elif mode == "cms":
         print()
         print("  Point your player devices at this machine's address during their install.")
@@ -1253,6 +1302,10 @@ def main():
         help="display name (Pi only; also sets hostname)",
     )
     parser.add_argument(
+        "--port", type=int, default=DEFAULT_PORT,
+        help=f"server port (default: {DEFAULT_PORT})",
+    )
+    parser.add_argument(
         "--non-interactive", action="store_true",
         help="skip all prompts, use defaults",
     )
@@ -1286,10 +1339,12 @@ def main():
 
     print()
 
+    port = args.port
+
     if plat == "pi":
-        install_pi(install_dir, args.display_name, args.non_interactive, mode, server_url)
+        install_pi(install_dir, args.display_name, args.non_interactive, mode, server_url, port)
     else:
-        install_desktop(plat, install_dir, args.non_interactive, mode, server_url)
+        install_desktop(plat, install_dir, args.non_interactive, mode, server_url, port)
 
 
 if __name__ == "__main__":
