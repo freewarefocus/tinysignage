@@ -98,6 +98,7 @@ def _build_player_unit(lite, standalone, install_dir, user):
             [Service]
             Type=simple
             User={user}
+            WorkingDirectory={install_dir}
 
             # cage creates its own Wayland session on this TTY
             TTYPath=/dev/tty1
@@ -130,6 +131,7 @@ def _build_player_unit(lite, standalone, install_dir, user):
             [Service]
             Type=simple
             User={user}
+            WorkingDirectory={install_dir}
             Environment=DISPLAY=:0
             Environment=XCURSOR_THEME=hidden
             Environment=XCURSOR_SIZE=1
