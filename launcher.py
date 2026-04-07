@@ -5,17 +5,25 @@ import subprocess
 import platform
 import shutil
 import sys
+import time
+import urllib.request
 from pathlib import Path
 import yaml
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 BROWSER_PROFILE_DIR = SCRIPT_DIR / "data" / "browser-profile"
+# Real, writable tmpfs path for Chromium's disk cache on Pi.
+# /tmp is tmpfs on Pi OS, so this still avoids SD-card wear, but unlike
+# /dev/null it is an actual directory Chromium can mkdir into.
+PI_DISK_CACHE_DIR = "/tmp/tinysignage-cache"
 
 
 def find_browser() -> str | None:
     """Find an installed Chromium-based browser."""
     candidates = {
-        "linux": ["chromium-browser", "chromium", "google-chrome", "google-chrome-stable"],
+        # On Trixie only /usr/bin/chromium exists; put the canonical
+        # Debian name first so shutil.which hits on the first try.
+        "linux": ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"],
         "darwin": [
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
             "/Applications/Chromium.app/Contents/MacOS/Chromium",
@@ -49,13 +57,60 @@ def get_kiosk_flags(is_pi: bool = False) -> list[str]:
     ]
 
     if is_pi:
+        # Pick the ozone backend from the actual session type.
+        # Hard-coding wayland breaks Pi OS Desktop X11 sessions; missing it
+        # entirely makes Chromium guess (often wrong on labwc/wayfire).
+        session = os.environ.get("XDG_SESSION_TYPE", "").lower()
+        if session == "wayland":
+            flags.append("--ozone-platform=wayland")
+        elif session == "x11":
+            flags.append("--ozone-platform=x11")
+        # else: leave it to Chromium's auto-detection
+
         flags.extend([
-            "--ozone-platform=wayland",
             "--disable-background-timer-throttling",
-            "--disk-cache-dir=/dev/null",
+            # Real tmpfs path — /dev/null is a char device and Chromium's
+            # mkdir of /dev/null/Default/Code Cache/* fails noisily and on
+            # cold boots can delay/suppress the kiosk window.
+            f"--disk-cache-dir={PI_DISK_CACHE_DIR}",
+            "--disk-cache-size=1",
+            # Clear inherited --js-flags from Pi OS's chromium.conf
+            # (which injects --js-flags=--no-decommit-pooled-pages, an
+            # unrecognized flag that spams stderr and hides real errors).
+            "--js-flags=",
         ])
 
     return flags
+
+
+def _ensure_pi_cache_dir() -> None:
+    """Make sure the Chromium disk cache dir exists and is writable.
+
+    /tmp is tmpfs on Pi OS so this directory disappears on every reboot;
+    create it on each launch rather than relying on install.py.
+    """
+    try:
+        os.makedirs(PI_DISK_CACHE_DIR, exist_ok=True)
+    except OSError as e:
+        print(f"WARN: could not create {PI_DISK_CACHE_DIR}: {e}")
+
+
+def _wait_for_url(url: str, timeout: int = 60) -> None:
+    """Block until `url` responds, or `timeout` seconds elapse.
+
+    On cold boot signage-app.service may not be listening on :8080 yet
+    when the desktop autostart fires. Without this poll Chromium hits
+    its connection-error page and (depending on cache state) may fail
+    to recover before the wrapper's restart loop tears it down.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=1):
+                return
+        except Exception:
+            time.sleep(1)
+    print(f"WARN: {url} did not become ready within {timeout}s; launching anyway")
 
 
 def launch(config_path: str = "config.yaml"):
@@ -80,11 +135,20 @@ def launch(config_path: str = "config.yaml"):
     url = f"{server_url}/player"
     is_pi = Path("/proc/device-tree/model").exists()  # Rough Pi detection
 
+    if is_pi:
+        _ensure_pi_cache_dir()
+
     args = [browser]
     if kiosk:
         args.extend(get_kiosk_flags(is_pi))
     args.append(f"--user-data-dir={BROWSER_PROFILE_DIR}")
     args.append(url)
+
+    # Wait for the backend to be reachable before launching the kiosk.
+    # Avoids the cold-boot race where chromium loads its connection-error
+    # page because signage-app.service hasn't bound :8080 yet.
+    print(f"Waiting for {url} to become ready...")
+    _wait_for_url(url)
 
     print(f"Launching: {' '.join(args)}")
 
