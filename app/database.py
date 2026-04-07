@@ -42,23 +42,66 @@ def _alembic_cfg() -> AlembicConfig:
 
 
 def _run_migrations() -> None:
-    """Run Alembic upgrade head (synchronous — called before async work)."""
+    """Run Alembic upgrade head (synchronous — called before async work).
+
+    Self-heals two legacy states from before the migration squash:
+      1. v3 databases that were never stamped (no alembic_version table).
+      2. databases stamped at one of the 28 pre-squash revisions, none of
+         which exist in the current chain — without re-stamping, alembic
+         would raise "Can't locate revision identified by ...".
+    Both cases are re-stamped at the squashed baseline (the script chain's
+    only base revision) and then upgraded normally.
+    """
     cfg = _alembic_cfg()
 
-    # Check if this is an existing pre-Alembic database that needs stamping
+    from alembic.script import ScriptDirectory
     from sqlalchemy import create_engine, inspect as sa_inspect
+
+    script = ScriptDirectory.from_config(cfg)
+    known_revisions = {rev.revision for rev in script.walk_revisions()}
+    base_revision = script.get_current_head()  # squashed baseline
+
     sync_engine = create_engine(f"sqlite:///{_db_path}", poolclass=NullPool)
     with sync_engine.connect() as conn:
         inspector = sa_inspect(conn)
         tables = inspector.get_table_names()
         has_alembic = "alembic_version" in tables
         has_existing_tables = "assets" in tables
+        current_rev = None
+        if has_alembic:
+            row = conn.exec_driver_sql(
+                "SELECT version_num FROM alembic_version"
+            ).fetchone()
+            current_rev = row[0] if row else None
     sync_engine.dispose()
 
+    needs_restamp = False
+    drop_old_version_row = False
     if has_existing_tables and not has_alembic:
-        # Existing v3 database — stamp it at the initial revision
-        log.info("Existing database detected — stamping Alembic revision")
-        command.stamp(cfg, "cba88a050e57")
+        log.info("Existing v3 database detected — stamping Alembic revision")
+        needs_restamp = True
+    elif current_rev and current_rev not in known_revisions:
+        log.info(
+            "Database stamped at unknown revision %s (pre-squash) — "
+            "re-stamping at squashed baseline %s",
+            current_rev,
+            base_revision,
+        )
+        needs_restamp = True
+        drop_old_version_row = True
+
+    if needs_restamp:
+        if drop_old_version_row:
+            # alembic.command.stamp would otherwise try to resolve the
+            # existing revision before overwriting it, which fails when
+            # that revision no longer exists in the script chain.
+            sync_engine = create_engine(
+                f"sqlite:///{_db_path}", poolclass=NullPool
+            )
+            with sync_engine.begin() as conn:
+                conn.exec_driver_sql("DELETE FROM alembic_version")
+            sync_engine.dispose()
+        command.stamp(cfg, base_revision)
 
     # Always run upgrade to apply any pending migrations
     command.upgrade(cfg, "head")
