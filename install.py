@@ -16,6 +16,7 @@ import platform
 import re
 import secrets
 import shutil
+import socket
 import struct
 import subprocess
 import sys
@@ -356,6 +357,32 @@ def _remove_legacy_player_user_unit(desktop_user):
             info(f"Removed legacy enable symlink: {link}")
         except OSError as e:
             warn(f"Could not remove {link}: {e}")
+
+
+def _get_primary_ip():
+    """Return this machine's primary outbound IPv4 address, or None.
+
+    Used so the installer can print an IP-based CMS URL alongside the
+    mDNS one — Windows clients often fail to resolve *.local, so giving
+    users both forms means they always have a working address.
+
+    Uses the UDP-socket trick: connect() on a UDP socket doesn't send
+    any packet, it just picks the routing interface, which we then read
+    back with getsockname(). Target 192.0.2.1 is TEST-NET-1 (RFC 5737),
+    so it can't collide with anything real.
+    """
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("192.0.2.1", 1))
+            ip = s.getsockname()[0]
+        finally:
+            s.close()
+        if ip and not ip.startswith("127."):
+            return ip
+    except OSError:
+        pass
+    return None
 
 
 def _write_player_wrapper_script(install_dir, python_bin):
@@ -1742,8 +1769,11 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
         print()
         print("    sudo reboot")
         print()
-        print("  After reboot:")
-        print(f"    CMS: http://{hostname}.local:{port}/cms")
+        print("  After reboot, open the CMS at either:")
+        print(f"    http://{hostname}.local:{port}/cms")
+        ip = _get_primary_ip()
+        if ip:
+            print(f"    http://{ip}:{port}/cms   (use this if .local doesn't resolve)")
         print()
         print("  Point your player devices at this server during their install.")
     else:
@@ -1751,9 +1781,12 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
         print()
         print("    sudo reboot")
         print()
-        print("  After reboot:")
-        print(f"    CMS:    http://{hostname}.local:{port}/cms")
-        print("    Player: launches automatically on the display")
+        print("  After reboot, open the CMS at either:")
+        print(f"    http://{hostname}.local:{port}/cms")
+        ip = _get_primary_ip()
+        if ip:
+            print(f"    http://{ip}:{port}/cms   (use this if .local doesn't resolve)")
+        print("  The player launches automatically on the display.")
     print("=" * 50)
 
 
