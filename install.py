@@ -1332,6 +1332,290 @@ def do_update(plat, install_dir):
 
 
 # =========================================================================
+# Uninstall mode
+# =========================================================================
+
+def _remove_path(path, label=None):
+    """Remove a file, symlink, or directory if it exists. Tolerate missing."""
+    label = label or path
+    try:
+        if os.path.islink(path) or os.path.isfile(path):
+            os.remove(path)
+            info(f"Removed {label}")
+            return True
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+            info(f"Removed {label}")
+            return True
+    except OSError as e:
+        warn(f"Could not remove {label}: {e}")
+    return False
+
+
+def _stop_and_remove_system_unit(name):
+    """Stop, disable, and remove /etc/systemd/system/<name>.service.
+
+    Returns True if the unit existed and was removed, False otherwise.
+    """
+    unit_file = f"/etc/systemd/system/{name}.service"
+    if not os.path.isfile(unit_file):
+        return False
+    run_cmd(["systemctl", "stop", name], check=False)
+    run_cmd(["systemctl", "disable", name], check=False)
+    _remove_path(unit_file, label=f"{name}.service")
+    return True
+
+
+def _strip_labwc_cursor_lines(home_dir):
+    """Remove the XCURSOR_THEME=hidden / XCURSOR_SIZE=1 lines we wrote
+    into a labwc environment file. Leaves any other lines intact, and
+    deletes the file if it becomes empty.
+    """
+    env_path = os.path.join(home_dir, ".config", "labwc", "environment")
+    if not os.path.isfile(env_path):
+        return
+    try:
+        with open(env_path) as f:
+            lines = f.readlines()
+    except OSError:
+        return
+    kept = [
+        ln for ln in lines
+        if ln.strip() not in ("XCURSOR_THEME=hidden", "XCURSOR_SIZE=1")
+    ]
+    if kept == lines:
+        return
+    try:
+        if any(ln.strip() for ln in kept):
+            with open(env_path, "w") as f:
+                f.writelines(kept)
+            info(f"Cleaned cursor lines from {env_path}")
+        else:
+            os.remove(env_path)
+            info(f"Removed empty {env_path}")
+    except OSError as e:
+        warn(f"Could not update {env_path}: {e}")
+
+
+def _backup_pi_data(install_dir):
+    """Move user data out of install_dir to a timestamped backup directory.
+
+    Returns the backup path, or None if there was nothing to back up.
+    Backup goes into the invoking sudo user's home dir if available,
+    otherwise /root.
+    """
+    import time
+    items = [
+        name for name in ("db", "media", "config.yaml", "config.env")
+        if os.path.exists(os.path.join(install_dir, name))
+    ]
+    if not items:
+        return None
+    sudo_user = os.environ.get("SUDO_USER")
+    backup_parent = "/root"
+    owner_uid = owner_gid = None
+    if sudo_user:
+        try:
+            import pwd
+            pw = pwd.getpwnam(sudo_user)
+            backup_parent = pw.pw_dir
+            owner_uid, owner_gid = pw.pw_uid, pw.pw_gid
+        except (ImportError, KeyError):
+            pass
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    backup_dir = os.path.join(backup_parent, f"tinysignage-backup-{timestamp}")
+    try:
+        os.makedirs(backup_dir)
+    except OSError as e:
+        warn(f"Could not create backup directory {backup_dir}: {e}")
+        return None
+    for name in items:
+        try:
+            shutil.move(
+                os.path.join(install_dir, name),
+                os.path.join(backup_dir, name),
+            )
+        except OSError as e:
+            warn(f"Could not back up {name}: {e}")
+    if owner_uid is not None:
+        for root, dirs, files in os.walk(backup_dir):
+            try:
+                os.chown(root, owner_uid, owner_gid)
+            except OSError:
+                pass
+            for f in files:
+                try:
+                    os.chown(os.path.join(root, f), owner_uid, owner_gid)
+                except OSError:
+                    pass
+    info(f"Backed up data to: {backup_dir}")
+    return backup_dir
+
+
+def do_uninstall(plat, install_dir, non_interactive=False, purge=False):
+    """Remove TinySignage from this device."""
+    print("=== TinySignage Uninstall ===\n")
+    print("This will remove TinySignage services, files, and the service user.")
+    print("Hostname, autologin, and boot config tweaks are left alone.")
+    print()
+
+    if not non_interactive:
+        if not prompt_yn("Are you sure you want to uninstall?", default=False):
+            print("Cancelled.")
+            return
+        keep_data = prompt_yn(
+            "Keep your media files and database? (saves a backup)",
+            default=True,
+        )
+    else:
+        keep_data = not purge
+    print()
+
+    if plat == "pi":
+        _uninstall_pi(install_dir, keep_data)
+    else:
+        _uninstall_desktop(plat, install_dir, keep_data)
+
+    print()
+    print("=" * 50)
+    print("  Uninstall complete.")
+    print("=" * 50)
+
+
+def _uninstall_pi(install_dir, keep_data):
+    """Remove all TinySignage state from a Raspberry Pi."""
+    if os.geteuid() != 0:
+        error_exit(
+            "Pi uninstall requires root. "
+            "Run: sudo python3 install.py --uninstall"
+        )
+
+    total = 6
+
+    # --- [1] Stop and remove system services ---
+    step(1, total, "Stopping and removing system services...")
+    _stop_and_remove_system_unit("signage-app")
+    lite_player_removed = _stop_and_remove_system_unit("signage-player")
+    run_cmd(["systemctl", "daemon-reload"], check=False)
+
+    # --- [2] Remove desktop player artifacts ---
+    step(2, total, "Removing player desktop entries...")
+    desktop_user = None
+    try:
+        desktop_user = detect_desktop_user()
+    except Exception:
+        pass
+    if desktop_user:
+        try:
+            import pwd
+            home = pwd.getpwnam(desktop_user).pw_dir
+            _remove_path(
+                os.path.join(home, ".config/autostart/signage-player.desktop"),
+                label="player autostart entry",
+            )
+            _remove_legacy_player_user_unit(desktop_user)
+            _strip_labwc_cursor_lines(home)
+        except (ImportError, KeyError):
+            pass
+    # The pre-fix installer wrote the labwc env file under the SERVICE_USER
+    # home by mistake — clean that up too if present.
+    try:
+        import pwd
+        su_home = pwd.getpwnam(SERVICE_USER).pw_dir
+        _strip_labwc_cursor_lines(su_home)
+    except (ImportError, KeyError):
+        pass
+
+    # --- [3] Remove transparent cursor theme ---
+    step(3, total, "Removing transparent cursor theme...")
+    _remove_path("/usr/share/icons/hidden", label="cursor theme")
+
+    # --- [4] Restore tty1 if Lite cage masked it ---
+    if lite_player_removed:
+        step(4, total, "Restoring tty1 console...")
+        run_cmd(["systemctl", "unmask", "getty@tty1.service"], check=False)
+        run_cmd(["systemctl", "enable", "getty@tty1.service"], check=False)
+    else:
+        step(4, total, "Restoring tty1 console... (skipped — not Lite)")
+
+    # --- [5] Back up data and remove install directory ---
+    step(5, total, "Removing install directory...")
+    if os.path.isdir(TARGET_DIR):
+        # Make sure we're not running from inside the dir we're deleting.
+        try:
+            os.chdir("/")
+        except OSError:
+            pass
+        if keep_data:
+            _backup_pi_data(TARGET_DIR)
+        try:
+            shutil.rmtree(TARGET_DIR)
+            info(f"Removed {TARGET_DIR}")
+        except OSError as e:
+            warn(f"Could not remove {TARGET_DIR}: {e}")
+    else:
+        info(f"{TARGET_DIR} not found")
+
+    # --- [6] Remove service user ---
+    step(6, total, "Removing service user...")
+    r = run_cmd(["id", SERVICE_USER], capture=True, check=False)
+    if r and r.returncode == 0:
+        run_cmd(["userdel", "-r", SERVICE_USER], check=False)
+        info(f"Removed user '{SERVICE_USER}'")
+    else:
+        info(f"User '{SERVICE_USER}' not present")
+
+
+def _uninstall_desktop(plat, install_dir, keep_data):
+    """Remove TinySignage launcher state from macOS, Windows, or desktop Linux.
+
+    The repository directory itself is left in place — on these
+    platforms users typically run from a clone, so deleting it would be
+    surprising. Only the launcher hook (plist / user unit / .bat) is
+    removed, plus optionally the runtime data inside the repo.
+    """
+    info(f"On {plat}, the repository directory itself will be left alone.")
+    info("Only the launcher service and (optionally) runtime data will be removed.")
+    print()
+
+    if plat == "macos":
+        plist = os.path.expanduser(
+            "~/Library/LaunchAgents/com.tinysignage.app.plist"
+        )
+        if os.path.isfile(plist):
+            run_cmd(["launchctl", "unload", plist], check=False)
+            _remove_path(plist, label="launchd plist")
+        else:
+            info("No launchd plist found")
+    elif plat == "linux":
+        service = os.path.expanduser(
+            "~/.config/systemd/user/tinysignage.service"
+        )
+        if os.path.isfile(service):
+            run_cmd(["systemctl", "--user", "stop", "tinysignage"], check=False)
+            run_cmd(["systemctl", "--user", "disable", "tinysignage"], check=False)
+            _remove_path(service, label="systemd user unit")
+        else:
+            info("No systemd user unit found")
+    elif plat == "windows":
+        bat = os.path.join(install_dir, "start-tinysignage.bat")
+        if os.path.isfile(bat):
+            _remove_path(bat, label="start batch file")
+        else:
+            info("No start batch file found")
+
+    # Runtime data inside the repo
+    if not keep_data:
+        info("Removing runtime data (db, media, venv, config.env)...")
+        for name in ("db", "media", "venv", "config.env"):
+            path = os.path.join(install_dir, name)
+            if os.path.exists(path):
+                _remove_path(path, label=name)
+    else:
+        info("Runtime data left in place (db, media, venv, config.env).")
+
+
+# =========================================================================
 # Main install flows
 # =========================================================================
 
@@ -1575,12 +1859,21 @@ def main():
               python3 install.py --mode cms                              CMS server only
               python3 install.py --mode player --server-url http://cms.local:8080   Player only
               python3 install.py --update                                Update existing install
+              sudo python3 install.py --uninstall                        Remove TinySignage
               sudo python3 install.py --non-interactive --display-name "Lobby TV"   Scripted Pi
         """),
     )
     parser.add_argument(
         "--update", action="store_true",
         help="update existing install (pip deps + db migrations + restart)",
+    )
+    parser.add_argument(
+        "--uninstall", action="store_true",
+        help="remove TinySignage services, files, and service user",
+    )
+    parser.add_argument(
+        "--purge", action="store_true",
+        help="with --uninstall --non-interactive, also delete media and database",
     )
     parser.add_argument(
         "--mode", choices=["both", "cms", "player"],
@@ -1604,9 +1897,16 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.update and args.uninstall:
+        error_exit("--update and --uninstall are mutually exclusive")
+
     install_dir = os.path.dirname(os.path.abspath(__file__))
     plat = detect_platform()
     print(f"Detected platform: {plat}\n")
+
+    if args.uninstall:
+        do_uninstall(plat, install_dir, args.non_interactive, args.purge)
+        return
 
     if args.update:
         do_update(plat, install_dir)
