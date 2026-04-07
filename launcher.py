@@ -113,8 +113,12 @@ def _wait_for_url(url: str, timeout: int = 60) -> None:
     print(f"WARN: {url} did not become ready within {timeout}s; launching anyway")
 
 
-def launch(config_path: str = "config.yaml"):
-    config = yaml.safe_load(Path(config_path).read_text())
+def launch(config_path: str | None = None):
+    # Resolve config.yaml relative to this script so the launcher works
+    # regardless of the caller's cwd. XDG autostart fires with cwd=$HOME,
+    # which used to crash the launcher with FileNotFoundError: 'config.yaml'.
+    cfg = Path(config_path) if config_path else SCRIPT_DIR / "config.yaml"
+    config = yaml.safe_load(cfg.read_text())
     browser_config = config.get("player", {}).get("browser", "auto")
     kiosk = config.get("player", {}).get("kiosk", True)
 
