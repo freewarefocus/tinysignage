@@ -45,8 +45,12 @@ function onDrop(e) {
 }
 
 function onFileSelect(e) {
-  if (e.target.files) uploadFiles(e.target.files)
+  // Snapshot files before clearing the input — uploadFiles is async, and
+  // resetting value='' empties the live FileList mid-iteration, so without
+  // the copy only the first selected file would actually upload.
+  const files = e.target.files ? Array.from(e.target.files) : []
   e.target.value = ''
+  if (files.length) uploadFiles(files)
 }
 
 async function uploadFiles(files) {
