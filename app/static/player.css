@@ -389,11 +389,12 @@ html, body, #player { width: 100%; height: 100%; overflow: hidden; background: #
 }
 
 .status-online {
-    background: #4caf50;
+    /* Hidden when everything is fine — only show the dot on problems. */
+    display: none;
 }
 
 .status-offline {
-    background: #f44336;
+    background: #ff8a80; /* light red — visible but not alarming */
 }
 
 /* --- Motion Effects (Ken Burns) --- */
