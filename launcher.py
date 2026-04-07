@@ -78,6 +78,12 @@ def get_kiosk_flags(is_pi: bool = False) -> list[str]:
             # (which injects --js-flags=--no-decommit-pooled-pages, an
             # unrecognized flag that spams stderr and hides real errors).
             "--js-flags=",
+            # Skip libsecret/gnome-keyring. On a fresh Pi OS Desktop
+            # session there's no unlocked keyring agent, so Chromium
+            # blocks at startup with a "Unlock keyring" dialog and the
+            # kiosk never appears. We don't store passwords in the
+            # signage profile, so a plaintext local store is fine.
+            "--password-store=basic",
         ])
 
     return flags
