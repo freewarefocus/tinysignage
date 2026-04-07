@@ -29,7 +29,18 @@ def generate_image_thumbnail(
         dest = thumbs_dir / thumb_filename
         with Image.open(source) as img:
             img.thumbnail(THUMB_SIZE)
-            img.save(dest, "JPEG", quality=80)
+            # JPEG can't store alpha — flatten transparency onto white so
+            # PNGs exported from PDF/design tools (which are usually RGBA)
+            # don't fail thumbnail generation.
+            if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                rgba = img.convert("RGBA")
+                background = Image.new("RGB", rgba.size, (255, 255, 255))
+                background.paste(rgba, mask=rgba.split()[3])
+                background.save(dest, "JPEG", quality=80)
+            else:
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+                img.save(dest, "JPEG", quality=80)
         log.info("Generated image thumbnail: %s", thumb_filename)
         return thumb_filename
     except ImportError:
