@@ -761,6 +761,14 @@ def pi_move_to_opt(source_dir, non_interactive=False):
     key_files = ["config.yaml", "install.py", "requirements.txt"]
     if all(os.path.isfile(os.path.join(TARGET_DIR, f)) for f in key_files):
         shutil.rmtree(source_dir)
+        # If we were running from inside source_dir, our CWD just got
+        # deleted — any subprocess we spawn will print
+        # `getcwd() failed: No such file or directory`. Move into the
+        # new install dir so child processes have a valid CWD.
+        try:
+            os.chdir(TARGET_DIR)
+        except OSError:
+            pass
     else:
         warn(f"Copy verification failed — source preserved at {source_dir}")
     info(f"Install directory is now {TARGET_DIR}")
