@@ -286,6 +286,121 @@ def is_pi_lite():
         return False
 
 
+def detect_desktop_user():
+    """Return the Pi desktop autologin user (e.g. 'pi').
+
+    Looked up in this order:
+      1. lightdm autologin-user
+      2. /etc/systemd/system/getty@tty1.service.d/autologin.conf (raspi-config style)
+      3. First /etc/passwd entry with UID 1000
+      4. Fallback: 'pi'
+    """
+    # 1. lightdm
+    for p in ("/etc/lightdm/lightdm.conf",
+              "/etc/lightdm/lightdm.conf.d/50-pi.conf"):
+        try:
+            with open(p) as f:
+                for line in f:
+                    m = re.match(r"\s*autologin-user\s*=\s*(\S+)", line)
+                    if m:
+                        return m.group(1)
+        except FileNotFoundError:
+            pass
+    # 2. raspi-config getty autologin override
+    try:
+        with open("/etc/systemd/system/getty@tty1.service.d/autologin.conf") as f:
+            m = re.search(r"--autologin\s+(\S+)", f.read())
+            if m:
+                return m.group(1)
+    except FileNotFoundError:
+        pass
+    # 3. UID 1000
+    try:
+        import pwd
+        for entry in pwd.getpwall():
+            if entry.pw_uid == 1000:
+                return entry.pw_name
+    except (ImportError, KeyError):
+        pass
+    # 4. fallback
+    return "pi"
+
+
+def _build_player_user_unit(install_dir, standalone):
+    """Build a *user* systemd unit for the kiosk player.
+
+    Runs inside the desktop user's graphical session, so DISPLAY/
+    WAYLAND_DISPLAY/XDG_RUNTIME_DIR are inherited automatically — no need
+    to hard-code DISPLAY=:0 (which never worked when the unit ran as the
+    'tinysignage' system user).
+    """
+    python_bin = "/usr/bin/python3" if standalone \
+        else f"{install_dir}/venv/bin/python"
+    return textwrap.dedent(f"""\
+        [Unit]
+        Description=TinySignage Player (Kiosk Browser)
+        PartOf=graphical-session.target
+        After=graphical-session.target
+
+        [Service]
+        Type=simple
+        WorkingDirectory={install_dir}
+        Environment=XCURSOR_THEME=hidden
+        Environment=XCURSOR_SIZE=1
+        ExecStartPre=/bin/sleep 5
+        ExecStart={python_bin} {install_dir}/launcher.py
+        Restart=always
+        RestartSec=5
+
+        [Install]
+        WantedBy=graphical-session.target
+    """)
+
+
+def _install_player_user_unit(install_dir, desktop_user, standalone):
+    """Install signage-player as a user unit for `desktop_user`.
+
+    We write the unit file and the [Install] symlink directly, instead of
+    invoking `systemctl --user enable` as the target user (which would
+    require an active session bus). The unit will be picked up when the
+    user's systemd --user instance starts at autologin.
+    """
+    import pwd
+    try:
+        pw = pwd.getpwnam(desktop_user)
+    except KeyError:
+        warn(f"Desktop user '{desktop_user}' not found — skipping player user unit")
+        return
+    user_systemd = os.path.join(pw.pw_dir, ".config", "systemd", "user")
+    wants_dir = os.path.join(user_systemd, "graphical-session.target.wants")
+    os.makedirs(wants_dir, exist_ok=True)
+    unit_path = os.path.join(user_systemd, "signage-player.service")
+    with open(unit_path, "w") as f:
+        f.write(_build_player_user_unit(install_dir, standalone))
+    # [Install] symlink (equivalent to `systemctl --user enable`)
+    link = os.path.join(wants_dir, "signage-player.service")
+    if os.path.islink(link) or os.path.exists(link):
+        os.remove(link)
+    os.symlink(unit_path, link)
+    # Ownership
+    run_cmd(["chown", "-R", f"{desktop_user}:{desktop_user}",
+             os.path.join(pw.pw_dir, ".config")])
+    # Allow user services to run even before the user logs in (harmless if
+    # autologin is on, useful if not).
+    run_cmd(["loginctl", "enable-linger", desktop_user], check=False)
+    info(f"Installed signage-player as user unit for {desktop_user}")
+
+
+def _enable_pi_autologin(lite):
+    """Enable autologin via raspi-config so a session exists at boot."""
+    if not shutil.which("raspi-config"):
+        warn("raspi-config not found — cannot configure autologin automatically")
+        return
+    target = "B2" if lite else "B4"  # B2=console autologin, B4=desktop autologin
+    run_cmd(["raspi-config", "nonint", "do_boot_behaviour", target], check=False)
+    info(f"Enabled {'console' if lite else 'desktop'} autologin")
+
+
 def find_boot_config():
     """Return the Pi boot config path, or None."""
     for p in ["/boot/firmware/config.txt", "/boot/config.txt"]:
@@ -654,11 +769,27 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
     if mode in ("both", "player"):
         standalone = (mode == "player")
         if lite:
-            info("Using Lite kiosk service (cage + Chromium)")
-        unit = _build_player_unit(lite, standalone, install_dir, SERVICE_USER)
-        with open("/etc/systemd/system/signage-player.service", "w") as f:
-            f.write(unit)
-        services.append("signage-player")
+            info("Using Lite kiosk service (cage + Chromium on tty1)")
+            unit = _build_player_unit(lite, standalone, install_dir, SERVICE_USER)
+            with open("/etc/systemd/system/signage-player.service", "w") as f:
+                f.write(unit)
+            services.append("signage-player")
+            # cage needs sole ownership of tty1 — kick getty off it.
+            run_cmd(["systemctl", "disable", "--now", "getty@tty1.service"],
+                    check=False)
+            run_cmd(["systemctl", "mask", "getty@tty1.service"], check=False)
+        else:
+            # Pi OS Desktop: the player must run *inside* the desktop user's
+            # graphical session (X11 or Wayland). Running it as the
+            # 'tinysignage' system user with DISPLAY=:0 never worked because
+            # that user has no graphical session of its own. Install it as a
+            # user systemd unit under the autologin desktop user instead.
+            desktop_user = detect_desktop_user()
+            info(f"Installing player as a user service for desktop user '{desktop_user}'")
+            _install_player_user_unit(install_dir, desktop_user, standalone)
+
+        # Make sure the Pi actually boots into a session at all.
+        _enable_pi_autologin(lite)
 
     run_cmd(["systemctl", "daemon-reload"])
     if services:
@@ -729,6 +860,21 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
 
     # Set ownership of entire install directory
     run_cmd(["chown", "-R", f"{SERVICE_USER}:{SERVICE_USER}", install_dir])
+
+    # On Pi OS Desktop the player runs as the desktop user (not tinysignage),
+    # so its writable browser profile dir must be owned by that user. Also
+    # make sure the install dir is traversable/readable for them.
+    if mode in ("both", "player") and not lite:
+        desktop_user = detect_desktop_user()
+        data_dir = os.path.join(install_dir, "data")
+        bp_dir = os.path.join(data_dir, "browser-profile")
+        os.makedirs(bp_dir, exist_ok=True)
+        run_cmd(["chown", "-R", f"{desktop_user}:{desktop_user}", data_dir])
+        # Make every directory world-traversable so the desktop user can
+        # reach config.yaml, the venv, and launcher.py. Use +X (capital) so
+        # this only touches directories and already-executable files —
+        # importantly, config.env stays 0600.
+        run_cmd(["chmod", "-R", "a+X", install_dir])
 
 
 # =========================================================================
@@ -952,6 +1098,18 @@ def _detect_installed_mode(install_dir, plat):
     if plat == "pi":
         has_app = os.path.isfile("/etc/systemd/system/signage-app.service")
         has_player = os.path.isfile("/etc/systemd/system/signage-player.service")
+        if not has_player:
+            # Pi OS Desktop installs the player as a *user* unit instead.
+            try:
+                import pwd
+                du = detect_desktop_user()
+                user_unit = os.path.join(
+                    pwd.getpwnam(du).pw_dir,
+                    ".config/systemd/user/signage-player.service",
+                )
+                has_player = os.path.isfile(user_unit)
+            except (ImportError, KeyError):
+                pass
     else:
         has_app = has_venv  # desktop CMS always has a venv
         has_player = False  # desktop player has no detectable service
@@ -1008,6 +1166,22 @@ def do_update(plat, install_dir):
                 info(f"Restarted {svc}")
             else:
                 info(f"Skipped {svc} (not installed)")
+        # Pi OS Desktop player runs as a user unit — restart it via the
+        # desktop user's systemd --user instance if present.
+        try:
+            import pwd
+            du = detect_desktop_user()
+            pw = pwd.getpwnam(du)
+            user_unit = os.path.join(
+                pw.pw_dir, ".config/systemd/user/signage-player.service")
+            if os.path.isfile(user_unit):
+                run_cmd([
+                    "systemctl", "--user", "-M", f"{du}@.host",
+                    "restart", "signage-player.service",
+                ], check=False)
+                info(f"Restarted signage-player (user unit, {du})")
+        except (ImportError, KeyError):
+            pass
 
     else:
         step(1, 3, "Updating Python dependencies...")
