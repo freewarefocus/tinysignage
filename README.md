@@ -12,6 +12,7 @@ Upload images and videos through a web CMS, arrange them into playlists, and a f
 ### Core features
 
 - **Drag-and-drop media management** -- upload images, videos, web URLs, and HTML snippets
+- **Visual Page Designer** -- WYSIWYG slide builder with text, images, shapes, live widgets (clock, weather, countdown, scrolling text), and 5 starter templates -- no HTML required
 - **Playlist editor** -- drag to reorder, per-item duration, shuffle, preview
 - **Smooth playback** -- dual-layer CSS fade transitions, GPU-composited
 - **Offline resilient** -- player caches everything locally and keeps playing if the network drops
@@ -131,6 +132,7 @@ Also works on: any x86 mini PC, retired office PC, Mac, Linux server, or Docker 
 | [Install on Windows](docs/install-windows.md) | Local application on Windows |
 | [Install on macOS](docs/install-macos.md) | Local application on macOS |
 | [Managing Media](docs/managing-media.md) | Uploads, tags, HTML snippets, widgets |
+| [Page Designer](docs/page-designer.md) | Visual builder for custom slides with text, images, shapes, and live widgets |
 | [Playlists](docs/playlists.md) | Creation, editing, per-playlist settings |
 | [Devices](docs/devices.md) | Registration, health monitoring, groups |
 | [Scheduling](docs/scheduling.md) | Time windows, recurrence, priority |

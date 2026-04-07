@@ -1,6 +1,6 @@
 # Managing Media
 
-Media assets are the content that displays on your screens. TinySignage supports images, videos, web URLs, and HTML snippets.
+Media assets are the content that displays on your screens. TinySignage supports images, videos, web URLs, HTML snippets, and visually designed Custom Slides.
 
 ---
 
@@ -12,6 +12,7 @@ Media assets are the content that displays on your screens. TinySignage supports
 | **Video** | MP4, WebM | Thumbnails require FFmpeg |
 | **Web URL** | Any URL | Embedded as an iframe |
 | **HTML snippet** | Raw HTML | Up to 64KB, rendered inline |
+| **Custom Slide** | Designed in the [Page Designer](page-designer.md) | Visual editor -- text, images, shapes, live widgets |
 
 ## Uploading media
 
@@ -25,9 +26,17 @@ New uploads are automatically added to the default playlist. You can remove them
 
 Click **Add URL** and enter a web address. The URL is embedded as an iframe in the player. This works for any publicly accessible web page, dashboard, or web app.
 
-### HTML snippets
+### Custom Slides (Page Designer)
 
-Click **Add HTML** and paste or type HTML content (up to 64KB). The HTML is rendered directly in the player. Use this for custom messages, styled announcements, or any content you want to build by hand.
+For announcements, event posters, lower thirds, live clocks, and other branded one-off content, use the **Page Designer** instead of writing HTML by hand. Click **Add Custom Slide** (the palette icon at the top of the Media page) or open **Designer** in the sidebar to launch the visual editor.
+
+Custom Slides support text, images, shapes, and live widgets (clock, weather, countdown, scrolling text, and more). They scale automatically to any screen size and can be edited any number of times after saving.
+
+See the [Page Designer](page-designer.md) guide for a full walkthrough.
+
+### HTML snippets (raw editor)
+
+For power users, **Add HTML** still exists as an escape hatch. Paste or type raw HTML (up to 64KB) and it's rendered directly in the player. This is useful when you have a hand-written snippet or need CSS that the visual designer doesn't expose. Slides created this way can only be edited in the raw HTML editor -- they don't open in the Page Designer.
 
 ---
 
@@ -63,17 +72,23 @@ Click a tag in the filter bar to show only assets with that tag. This is useful 
 
 ---
 
-## Widget templates
+## Live widgets
 
-TinySignage includes built-in widget templates that generate HTML assets:
+TinySignage includes built-in live widgets that update in real time on the player:
 
 | Widget | Description |
 |--------|-------------|
-| **Clock** | Digital clock display with configurable format |
-| **Date** | Date display with configurable format |
-| **Weather** | Weather display (requires configuration) |
+| **Clock** | Live digital clock, configurable 12/24h, seconds, timezone, font, color |
+| **Date** | Current date with format and locale options |
+| **Weather** | Current temperature from Open-Meteo (free, no API key) |
+| **Centered Text** | Static centered message with configurable size and weight |
+| **Heading + Subtitle** | Two-line heading + subtitle pair |
+| **Scrolling Text** | Smooth horizontal marquee text |
+| **Countdown** | Live countdown to a target date and time |
 
-Widgets are created through the API (`GET /api/widgets` lists available templates with default HTML). Each widget is an HTML asset that you can customize after creation.
+The easiest way to use widgets is to drop them onto a slide in the [Page Designer](page-designer.md) -- you get a visual property panel for each widget's settings, and you can mix widgets with text, images, and shapes on the same slide.
+
+Widgets are also available through the API (`GET /api/widgets` lists every widget with its parameters and default HTML) for scripted asset creation.
 
 ---
 
@@ -113,6 +128,7 @@ The storage dashboard (`/storage` in the CMS, or `GET /api/storage`) shows:
 
 ## See also
 
+- [Page Designer](page-designer.md) -- Visual editor for Custom Slides
 - [Playlists](playlists.md) -- Organizing media into playlists
 - [Multi-Zone Layouts](multi-zone-layouts.md) -- Displaying different content in screen regions
 - [Configuration](configuration.md) -- Storage settings
