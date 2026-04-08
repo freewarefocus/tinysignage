@@ -47,10 +47,38 @@ TinySignage's Python dependencies are all pure-Python except Pillow (image thumb
 Make sure you are running Alembic from the project root directory (where `alembic.ini` is). If the database is corrupted, delete `db/signage.db` and run the command again -- a fresh database will be created.
 
 **Port 8080 already in use:**
-Another application is using port 8080. Either stop it, or start TinySignage on a different port:
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 9090
+Another application is using port 8080. Either stop it, or edit `config.yaml` to use a different port:
+```yaml
+server:
+  host: 0.0.0.0
+  port: 9090
 ```
+Then start TinySignage with `python -m app.server`.
+
+---
+
+## HTTPS issues
+
+**Browser shows "Your connection is not private" / "not secure":**
+Expected on first visit when HTTPS is enabled with a self-signed certificate. Click **Advanced → Proceed to localhost (unsafe)** once; the browser remembers the exception. The warning does not mean your connection is unencrypted — it only means the certificate is not signed by a public certificate authority. To verify the certificate, open **CMS → Settings → Network & Security → Technical details** and compare the SHA-256 fingerprint against `openssl x509 -in certs/cert.pem -noout -fingerprint -sha256`.
+
+**Plain `http://localhost:8080` stops responding after enabling HTTPS:**
+This is intentional. TinySignage is HTTPS-only when `server.https.enabled: true` — there is no HTTP→HTTPS redirect. Use `https://localhost:8080` instead. To go back to HTTP, edit `config.yaml` and set `server.https.enabled: false`, then restart.
+
+**Player can't connect after enabling HTTPS:**
+The kiosk launcher (`launcher.py`) auto-detects the cert and passes the right Chromium flags to accept it. If you see a cert warning in the kiosk browser, make sure:
+1. `config.yaml` has the new `https://` scheme in `server_url` (the setup wizard writes this automatically, but `--mode player` installs need it set manually)
+2. The `cryptography` Python package is installed — without it, `launcher.py` falls back to a blunter `--ignore-certificate-errors` flag that still works but is less targeted
+3. For split deployments, the remote CMS cert isn't locally readable, so the launcher uses the fallback flag automatically
+
+**`certs/cert.pem: permission denied`:**
+The private key (`certs/key.pem`) is written with mode `0o600`. If you run the server as a different user than the one that created the cert, either `chown` the files or regenerate them by deleting `certs/` and restarting (TinySignage will recreate them).
+
+**Docker: HTTPS works once, then breaks after `docker compose down`:**
+The `./certs` directory must be bind-mounted so the generated cert persists across container rebuilds. Check that `docker-compose.yml` includes `- ./certs:/app/certs` under `volumes`. If you upgraded from an older version, add that line manually.
+
+**Want to use a real certificate (not self-signed):**
+Point `server.https.cert_file` and `server.https.key_file` at your PEM files, set `server.https.auto_generate_self_signed: false`, and restart. TinySignage won't touch the files. Let's Encrypt/ACME is not built in — use `certbot` or similar to manage renewals externally.
 
 ---
 

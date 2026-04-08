@@ -31,9 +31,10 @@ All data lives in bind-mounted directories next to the compose file:
 |-----------|---------------|----------|
 | `./media` | `/app/media` | Uploaded images, videos, thumbnails |
 | `./db` | `/app/db` | SQLite database |
+| `./certs` | `/app/certs` | Self-signed TLS certificate and key (only populated if HTTPS is enabled) |
 | `./config.yaml` | `/app/config.yaml` | Configuration file |
 
-These directories are visible, portable, and easy to back up. Nothing is hidden inside the container.
+These directories are visible, portable, and easy to back up. Nothing is hidden inside the container. The `./certs` mount lets self-generated HTTPS certificates survive container rebuilds — see [Configuration → HTTPS](configuration.md#https-optional).
 
 ## Updating
 

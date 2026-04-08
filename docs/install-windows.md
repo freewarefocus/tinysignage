@@ -46,7 +46,7 @@ If you didn't set up the batch file during install, start manually:
 
 ```powershell
 venv\Scripts\activate
-uvicorn app.main:app --host 0.0.0.0 --port 8080
+python -m app.server
 ```
 
 - **Setup wizard**: `http://localhost:8080/setup` (first run only)
@@ -75,7 +75,7 @@ ffmpeg -version
 
 If you skipped startup setup during install, you can re-run `python install.py` to generate the batch file and startup shortcut.
 
-To also open the player in kiosk mode, add this line to `start-tinysignage.bat` after the uvicorn line (in a separate `start` command):
+To also open the player in kiosk mode, add this line to `start-tinysignage.bat` after the `python -m app.server` line (in a separate `start` command):
 
 ```batch
 start "" "chrome" --kiosk http://localhost:8080/player
@@ -121,10 +121,18 @@ Make sure the browser is closed first -- Windows locks open files and the reset 
 Python wasn't added to PATH during install. Reinstall from [python.org](https://www.python.org/downloads/) and check "Add Python to PATH", or use the full path (e.g., `C:\Python311\python.exe`).
 
 **Port 8080 is already in use:**
-Another application is using port 8080. Either stop that application or use a different port:
+Another application is using port 8080. Either stop that application or edit `config.yaml` to use a different port:
+
+```yaml
+server:
+  host: 0.0.0.0
+  port: 9090
+```
+
+Then start the app:
 
 ```powershell
-uvicorn app.main:app --host 0.0.0.0 --port 9090
+python -m app.server
 ```
 
 **Player won't go fullscreen:**

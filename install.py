@@ -1329,7 +1329,7 @@ def linux_post_install(install_dir, non_interactive, port=DEFAULT_PORT):
     else:
         info("Skipped systemd user service setup")
         info("To run manually:")
-        info(f"  {get_venv_python(install_dir)} -m uvicorn app.main:app --host 0.0.0.0 --port {port}")
+        info(f"  {get_venv_python(install_dir)} -m app.server")
 
 
 # =========================================================================
@@ -1984,9 +1984,9 @@ def install_desktop(plat, install_dir, non_interactive, mode="both", server_url=
         if os.path.isfile(bat):
             print("  Start: double-click start-tinysignage.bat")
         else:
-            print(rf"  Start: venv\Scripts\activate && uvicorn app.main:app --host 0.0.0.0 --port {port}")
+            print(r"  Start: venv\Scripts\activate && python -m app.server")
     else:
-        print(f"  Start: source venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port {port}")
+        print("  Start: source venv/bin/activate && python -m app.server")
     print()
     print(f"  Setup wizard: http://localhost:{port}/setup  (first run)")
     print(f"  CMS:          http://localhost:{port}/cms")

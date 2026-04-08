@@ -27,6 +27,7 @@ Upload images and videos through a web CMS, arrange them into playlists, and a f
 - **Interactive triggers** -- keyboard, touch zones, GPIO buttons, webhooks, timeouts -- link playlists with trigger-driven transitions for kiosks, wayfinding, and emergency alerts
 - **Emergency overrides** -- instant message or playlist push to all/group/device, auto-expiry
 - **Role-based access** -- admin, editor, viewer roles with API tokens
+- **Optional HTTPS** -- one-click enable in the setup wizard, auto-generates a self-signed certificate, or bring your own PEM files
 - **Structured logging** -- backend error log, player persistent log with remote retrieval, audit trail
 - **Backup and restore** -- one-click ZIP export of database and media
 

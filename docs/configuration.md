@@ -12,6 +12,11 @@ The configuration file is read at startup. Changes require restarting the applic
 server:
   host: 0.0.0.0
   port: 8080
+  https:
+    enabled: false
+    cert_file: ./certs/cert.pem
+    key_file: ./certs/key.pem
+    auto_generate_self_signed: true
 
 storage:
   media_dir: ./media
@@ -41,7 +46,11 @@ logging:
 | Section | Key | Type | Default | Description |
 |---------|-----|------|---------|-------------|
 | `server` | `host` | string | `0.0.0.0` | Bind address |
-| `server` | `port` | integer | `8080` | Bind port |
+| `server` | `port` | integer | `8080` | Bind port (same port serves HTTP or HTTPS depending on `https.enabled`) |
+| `server` | `https.enabled` | boolean | `false` | Serve the CMS and player over HTTPS. HTTPS-only mode — plain HTTP stops responding when enabled |
+| `server` | `https.cert_file` | string | `./certs/cert.pem` | Path to TLS certificate (PEM) |
+| `server` | `https.key_file` | string | `./certs/key.pem` | Path to TLS private key (PEM, created with mode `0o600`) |
+| `server` | `https.auto_generate_self_signed` | boolean | `true` | Generate a 10-year self-signed cert on startup if `cert_file`/`key_file` don't exist |
 | `storage` | `media_dir` | string | `./media` | Directory for uploaded media files |
 | `storage` | `db_path` | string | `./db/signage.db` | SQLite database file path |
 | `storage` | `warning_threshold_mb` | integer | `500` | Storage warning threshold in MB |
@@ -63,6 +72,29 @@ These keys are managed by TinySignage and should not be edited manually:
 | `device_id` | Auto-generated UUID for this installation's default device |
 | `server_url` | Base URL for the CMS server. Used by the kiosk launcher (`launcher.py`) to know where to point the browser. For player-only installs, this is the remote CMS address (e.g. `http://museum-cms.local:8080`). For all-in-one installs, defaults to `http://localhost:8080`. Also injected as a meta tag into the player HTML for split deployments |
 | `display_name` | Friendly name for this installation (set during install) |
+
+---
+
+## HTTPS (optional)
+
+By default, TinySignage serves the CMS and player over plain HTTP. This is fine when the server and browser are on the same trusted network. If you access the CMS from across the internet, a shared cafe network, or any link you don't fully control, enable HTTPS so passwords and content aren't sent in the clear.
+
+**Two ways to turn it on:**
+
+1. **During first-boot setup** — tick the **"Advanced: Enable HTTPS"** checkbox in the setup wizard. TinySignage generates a self-signed certificate and writes the correct values into `config.yaml` for you.
+2. **After setup** — edit `config.yaml`, set `server.https.enabled: true`, and restart. On next start, TinySignage auto-generates a cert into `./certs/` if one doesn't already exist.
+
+**What to expect:**
+
+- **A browser warning on first visit.** Self-signed certificates aren't trusted by browsers, so you'll see a "Your connection is not private" page. Click **Advanced → Proceed** once; the browser remembers the exception.
+- **HTTPS-only mode.** Once enabled, plain `http://` requests stop responding. There's no automatic HTTP→HTTPS redirect.
+- **Same port.** HTTPS runs on the same port as HTTP (8080 by default). Change `server.port` if you want the conventional `8443`.
+- **Check the fingerprint.** The CMS **Settings → Network & Security** panel shows the SHA-256 fingerprint of the active certificate, handy if you want to pin it or verify it across devices.
+- **Persistence in Docker.** The `./certs` directory is volume-mounted, so self-generated certs survive `docker compose down && up`.
+
+**Providing your own certificate:**
+
+TinySignage doesn't fetch certs from Let's Encrypt or any ACME service. If you want to use a real cert (e.g. from your own CA), point `cert_file` and `key_file` at the PEM files, set `auto_generate_self_signed: false`, and restart. The files must be readable by the user running TinySignage.
 
 ---
 
@@ -95,9 +127,10 @@ In Docker, `config.yaml` is bind-mounted:
 ```yaml
 volumes:
   - ./config.yaml:/app/config.yaml
+  - ./certs:/app/certs
 ```
 
-Edit the file on the host and restart the container to apply changes. The `media_dir` and `db_path` paths in the config refer to container paths (`/app/media`, `/app/db`), which are mapped to host directories via the other volume mounts.
+Edit the file on the host and restart the container to apply changes. The `media_dir` and `db_path` paths in the config refer to container paths (`/app/media`, `/app/db`), which are mapped to host directories via the other volume mounts. The `./certs` mount is what lets self-generated HTTPS certificates survive `docker compose down && up`.
 
 ## Raspberry Pi notes
 

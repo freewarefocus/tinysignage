@@ -18,7 +18,7 @@ venv\Scripts\activate       # Windows
 
 pip install -r requirements.txt
 alembic upgrade head
-uvicorn app.main:app --reload --port 8080
+python -m app.server
 ```
 
 The setup wizard runs at `http://localhost:8080/setup` on first boot. After that, the CMS is at `/cms` and the player at `/player`.

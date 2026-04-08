@@ -60,7 +60,7 @@ If you didn't set up launchd during install, start manually:
 
 ```bash
 source venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8080
+python -m app.server
 ```
 
 - **Setup wizard**: `http://localhost:8080/setup` (first run only)
@@ -141,10 +141,18 @@ Find what's using it:
 lsof -i :8080
 ```
 
-Either stop that process or use a different port:
+Either stop that process or edit `config.yaml` to use a different port:
+
+```yaml
+server:
+  host: 0.0.0.0
+  port: 9090
+```
+
+Then start the app:
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 9090
+python -m app.server
 ```
 
 **macOS firewall prompt:**
