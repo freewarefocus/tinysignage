@@ -373,6 +373,8 @@
 
     function startPlayer() {
         hideRegistrationOverlay();
+        // One-time cleanup: remove stale trigger-state key from older builds
+        localStorage.removeItem('tinysignage_trigger_state');
         loadCachedPlaylist();
         poll();
         schedulePoll();
@@ -396,24 +398,8 @@
                 settings = data.settings || {};
                 applySettings(settings);
 
-                // Restore trigger flow from cache
                 if (data.trigger_flow) {
-                    let sourceId = data.trigger_flow.source_playlist_id;
-                    let restoredLoopCount = 0;
-                    const savedState = loadTriggerState();
-                    if (savedState && savedState.flowId === data.trigger_flow.id && savedState.sourcePlaylistId) {
-                        const savedBranch = data.trigger_flow.branches.find(
-                            b => b.target_playlist_id === savedState.sourcePlaylistId
-                        );
-                        if (savedBranch && savedBranch.target_playlist) {
-                            sourceId = savedState.sourcePlaylistId;
-                            playlist = savedBranch.target_playlist.items || [];
-                            settings = savedBranch.target_playlist.settings || {};
-                            applySettings(settings);
-                            restoredLoopCount = savedState.loopCount || 0;
-                        }
-                    }
-                    initTriggerEngine(data.trigger_flow, sourceId, restoredLoopCount);
+                    initTriggerEngine(data.trigger_flow, data.trigger_flow.source_playlist_id, 0);
                 }
             }
         } catch (e) {
@@ -539,25 +525,7 @@
 
                 // --- Trigger engine integration ---
                 if (data.trigger_flow) {
-                    // Restore source playlist from saved state if resuming same flow
-                    let sourceId = data.trigger_flow.source_playlist_id;
-                    let restoredLoopCount = 0;
-                    const savedState = loadTriggerState();
-                    if (savedState && savedState.flowId === data.trigger_flow.id && savedState.sourcePlaylistId) {
-                        // Find the saved source in the flow's branches as a target
-                        const savedBranch = data.trigger_flow.branches.find(
-                            b => b.target_playlist_id === savedState.sourcePlaylistId
-                        );
-                        if (savedBranch && savedBranch.target_playlist) {
-                            // Resume on the previously active playlist
-                            sourceId = savedState.sourcePlaylistId;
-                            playlist = savedBranch.target_playlist.items || [];
-                            settings = savedBranch.target_playlist.settings || {};
-                            applySettings(settings);
-                            restoredLoopCount = savedState.loopCount || 0;
-                        }
-                    }
-                    initTriggerEngine(data.trigger_flow, sourceId, restoredLoopCount);
+                    initTriggerEngine(data.trigger_flow, data.trigger_flow.source_playlist_id, 0);
                     checkWebhookTriggers();
                 } else if (triggerFlow) {
                     teardownTriggerEngine();
@@ -1478,8 +1446,6 @@
         startTimeoutTriggers(branches);
         connectGpioBridge(branches);
         initWebhookTracking(branches);
-
-        saveTriggerState();
     }
 
     function teardownTriggerEngine() {
@@ -1601,7 +1567,6 @@
     function checkLoopCount() {
         if (!triggerFlow) return;
         loopCount++;
-        saveTriggerState();
 
         const branches = findBranchesForSource(currentSourcePlaylistId);
         const loopBranch = branches.find(b => b.trigger_type === 'loop_count');
@@ -1640,7 +1605,6 @@
         // Swap playlist and settings
         playlist = target.items || [];
         settings = target.settings || {};
-        playlistHash = playlistHash + '-trig' + Date.now();
         currentSourcePlaylistId = branch.target_playlist_id;
         currentIndex = 0;
         loopCount = 0;
@@ -1667,8 +1631,6 @@
         } else {
             disconnectGpioBridge();
         }
-
-        saveTriggerState();
     }
 
     // --- Webhook trigger tracking ---
@@ -1781,29 +1743,6 @@
                 }
             }
         }
-    }
-
-    // --- Trigger state persistence ---
-    function saveTriggerState() {
-        try {
-            if (triggerFlow) {
-                localStorage.setItem('tinysignage_trigger_state', JSON.stringify({
-                    flowId: triggerFlow.id,
-                    sourcePlaylistId: currentSourcePlaylistId,
-                    loopCount: loopCount,
-                }));
-            } else {
-                localStorage.removeItem('tinysignage_trigger_state');
-            }
-        } catch (e) { PlayerLog.warn('Failed to save trigger state: ' + e.message); }
-    }
-
-    function loadTriggerState() {
-        try {
-            const raw = localStorage.getItem('tinysignage_trigger_state');
-            if (raw) return JSON.parse(raw);
-        } catch (e) { PlayerLog.warn('Failed to load trigger state: ' + e.message); }
-        return null;
     }
 
     // --- Debug overlay (Ctrl+Shift+D) ---
