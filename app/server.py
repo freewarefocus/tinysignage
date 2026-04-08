@@ -48,6 +48,24 @@ def main() -> None:
         key_file = Path(https_cfg.get("key_file", "./certs/key.pem"))
         auto_gen = bool(https_cfg.get("auto_generate_self_signed", True))
 
+        # Pre-create the parent directory outside of ensure_cert()'s own
+        # mkdir so we can give a clearer error message when running under
+        # a systemd sandbox (ProtectSystem=strict) that doesn't list the
+        # cert directory in ReadWritePaths — the generic EROFS trace
+        # isn't actionable for a non-technical admin.
+        cert_dir = cert_file.parent
+        if auto_gen and not cert_dir.exists():
+            try:
+                cert_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                print(
+                    f"ERROR: cannot create certificate directory {cert_dir}: {e}\n"
+                    f"  If running under systemd, make sure the directory exists "
+                    f"before the service starts (re-run install.py --update).",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
         if auto_gen:
             try:
                 ensure_cert(cert_file, key_file)

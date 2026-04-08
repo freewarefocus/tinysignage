@@ -1036,8 +1036,8 @@ def install_deps(install_dir):
 
 
 def create_directories(install_dir):
-    """Create media/, db/, logs/ directories."""
-    for d in ["media", "media/thumbs", "db", "logs"]:
+    """Create media/, db/, logs/, certs/ directories."""
+    for d in ["media", "media/thumbs", "db", "logs", "certs"]:
         os.makedirs(os.path.join(install_dir, d), exist_ok=True)
 
 
@@ -1408,6 +1408,15 @@ def do_update(plat, install_dir):
         run_as_user(SERVICE_USER, [
             get_venv_python(install_dir), "-c", DB_INIT_SCRIPT,
         ], cwd=install_dir)
+
+        # Self-heal installs that pre-date HTTPS support: the systemd
+        # unit lists certs/ in ReadWritePaths, but older installs never
+        # created the directory, so enabling HTTPS via the setup wizard
+        # fails with EROFS under ProtectSystem=strict.
+        certs_dir = os.path.join(install_dir, "certs")
+        if not os.path.isdir(certs_dir):
+            run_as_user(SERVICE_USER, ["mkdir", "-p", certs_dir])
+            info("Created missing certs/ directory for HTTPS support")
 
         step(3, 3, "Restarting services...")
         for svc in ["signage-app", "signage-player"]:
@@ -1845,7 +1854,12 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
         ], cwd=install_dir)
 
         step(3, total, "Creating directories...")
-        for d in ["media", "media/thumbs", "db", "logs"]:
+        # certs/ must exist before signage-app.service starts so systemd's
+        # ReadWritePaths bind-mount lands on a real directory — otherwise
+        # ProtectSystem=strict leaves /opt/tinysignage read-only and the
+        # setup wizard's ensure_cert() fails with EROFS when the user
+        # enables HTTPS.
+        for d in ["media", "media/thumbs", "db", "logs", "certs"]:
             run_as_user(SERVICE_USER, [
                 "mkdir", "-p", os.path.join(install_dir, d),
             ])
