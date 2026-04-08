@@ -412,8 +412,34 @@
 
       <div v-if="canEdit" class="add-section">
         <h3>Add from Media Library</h3>
+
+        <div v-if="tags.length > 0" class="tag-filter-bar">
+          <button
+            class="tag-chip"
+            :class="{ active: !activeTagFilter }"
+            @click="activeTagFilter = null"
+            v-tooltip="'Show all media'"
+          >All</button>
+          <button
+            v-for="t in tags"
+            :key="t.id"
+            class="tag-chip"
+            :class="{ active: activeTagFilter === t.id }"
+            :style="activeTagFilter === t.id
+              ? { background: t.color + '33', borderColor: t.color, color: t.color }
+              : {}"
+            @click="activeTagFilter = t.id"
+            v-tooltip="`Show only media tagged '${t.name}'`"
+          >
+            <span class="tag-dot" :style="{ background: t.color }"></span>
+            {{ t.name }}
+            <span class="tag-count">{{ t.asset_count }}</span>
+          </button>
+        </div>
+
         <div v-if="availableAssets.length === 0" class="empty-hint">
-          No media available. Upload files in the Media Library first.
+          <span v-if="activeTagFilter">No media with this tag. Clear the filter or tag some media in the Media Library.</span>
+          <span v-else>No media available. Upload files in the Media Library first.</span>
         </div>
         <div v-else class="add-grid">
           <div
@@ -461,6 +487,8 @@ const canEdit = ['admin', 'editor'].includes(userRole)
 const playlist = ref(null)
 const items = ref([])
 const allAssets = ref([])
+const tags = ref([])
+const activeTagFilter = ref(null)
 const editingName = ref(false)
 const nameInput = ref('')
 const nameInputEl = ref(null)
@@ -589,7 +617,12 @@ async function loadPlaylist() {
 }
 
 async function loadAssets() {
-  allAssets.value = await api.get('/assets')
+  const params = activeTagFilter.value ? `?tag=${activeTagFilter.value}` : ''
+  allAssets.value = await api.get(`/assets${params}`)
+}
+
+async function loadTags() {
+  tags.value = await api.get('/tags')
 }
 
 function startEditName() {
@@ -869,8 +902,10 @@ watch(playlistId, () => {
   loadPlaylist()
 })
 
+watch(activeTagFilter, loadAssets)
+
 onMounted(async () => {
-  await Promise.all([loadPlaylist(), loadAssets(), loadAllPlaylists()])
+  await Promise.all([loadPlaylist(), loadAssets(), loadTags(), loadAllPlaylists()])
 })
 </script>
 
@@ -1185,6 +1220,50 @@ h3 { margin-bottom: 0.8rem; color: #ddd; font-size: 1rem; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.tag-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.tag-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  color: #aaa;
+  padding: 0.3rem 0.65rem;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.15s;
+}
+
+.tag-chip:hover {
+  border-color: #555;
+  color: #ddd;
+}
+
+.tag-chip.active {
+  background: #7c83ff22;
+  border-color: #7c83ff;
+  color: #7c83ff;
+}
+
+.tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tag-count {
+  font-size: 0.7rem;
+  opacity: 0.6;
 }
 
 /* Trigger panel */
