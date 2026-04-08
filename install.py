@@ -1878,7 +1878,7 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
             info("Generated config.env with SECRET_KEY")
 
         step(5, total, "Updating config.yaml...")
-        local_url = server_url or f"http://localhost:{port}"
+        local_url = server_url or f"https://localhost:{port}"
         update_config_yaml(install_dir, display_name=display_name, server_url=local_url)
         run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}",
                  os.path.join(install_dir, "config.yaml")])
@@ -1903,10 +1903,12 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
         print("    sudo reboot")
         print()
         print("  After reboot, open the CMS at either:")
-        print(f"    http://{hostname}.local:{port}/cms")
+        print(f"    https://{hostname}.local:{port}/cms")
         ip = _get_primary_ip()
         if ip:
-            print(f"    http://{ip}:{port}/cms   (use this if .local doesn't resolve)")
+            print(f"    https://{ip}:{port}/cms   (use this if .local doesn't resolve)")
+        print()
+        print("  Your browser will warn about the self-signed cert on first visit — click Advanced → Proceed.")
         print()
         print("  Point your player devices at this server during their install.")
     else:
@@ -1915,10 +1917,12 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
         print("    sudo reboot")
         print()
         print("  After reboot, open the CMS at either:")
-        print(f"    http://{hostname}.local:{port}/cms")
+        print(f"    https://{hostname}.local:{port}/cms")
         ip = _get_primary_ip()
         if ip:
-            print(f"    http://{ip}:{port}/cms   (use this if .local doesn't resolve)")
+            print(f"    https://{ip}:{port}/cms   (use this if .local doesn't resolve)")
+        print()
+        print("  Your browser will warn about the self-signed cert on first visit — click Advanced → Proceed.")
         print("  The player launches automatically on the display.")
     print("=" * 50)
 
@@ -1980,7 +1984,7 @@ def install_desktop(plat, install_dir, non_interactive, mode="both", server_url=
 
     # Set server_url so the player knows where to connect
     if mode == "both":
-        update_config_yaml(install_dir, server_url=f"http://localhost:{port}")
+        update_config_yaml(install_dir, server_url=f"https://localhost:{port}")
 
     print()
 
