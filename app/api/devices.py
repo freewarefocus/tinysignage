@@ -433,7 +433,7 @@ async def get_device_playlist(
     # Include trigger_flow when playlist has one (not during overrides)
     if playlist.trigger_flow_id:
         tf_payload = await _build_trigger_flow_payload(
-            playlist.trigger_flow_id, playlist.id, session, settings
+            playlist.trigger_flow_id, playlist.id, session, settings, visited=set()
         )
         if tf_payload:
             resp["trigger_flow"] = tf_payload
@@ -452,9 +452,23 @@ async def get_device_playlist(
 
 
 async def _build_trigger_flow_payload(
-    flow_id: str, source_playlist_id: str, session: AsyncSession, global_settings: Settings | None
+    flow_id: str,
+    source_playlist_id: str,
+    session: AsyncSession,
+    global_settings: Settings | None,
+    visited: set[str] | None = None,
 ) -> dict | None:
-    """Load a TriggerFlow with branches and pre-resolved target playlists."""
+    """Load a TriggerFlow with branches and pre-resolved target playlists.
+
+    `visited` is a set of trigger_flow ids already expanded in the current
+    recursion chain — used to prevent infinite loops when target playlists
+    point at flows that mutually reference each other (Default↔Christmas).
+    """
+    if visited is None:
+        visited = set()
+    if flow_id in visited:
+        return None
+
     result = await session.execute(
         select(TriggerFlow)
         .where(TriggerFlow.id == flow_id)
@@ -527,6 +541,20 @@ async def _build_trigger_flow_payload(
                 "effect": _tr("effect", "none"),
             },
         }
+
+        # If the target playlist has its own trigger flow, recursively embed
+        # it so the player can swap to it on trigger fire without waiting for
+        # the next poll. visited prevents infinite recursion through cycles.
+        if target_pl.trigger_flow_id and target_pl.trigger_flow_id not in visited:
+            sub_payload = await _build_trigger_flow_payload(
+                target_pl.trigger_flow_id,
+                target_pl.id,
+                session,
+                global_settings,
+                visited=visited | {flow_id},
+            )
+            if sub_payload:
+                branch_data["target_playlist"]["trigger_flow"] = sub_payload
 
         branches_out.append(branch_data)
 
@@ -611,15 +639,22 @@ async def _build_zones_payload(layout_id: str, session: AsyncSession) -> list[di
 
 
 def _trigger_flow_hash(tf_payload: dict) -> str:
-    """Compute a short hash for trigger flow branches, targets, and webhook fires."""
+    """Compute a short hash for trigger flow branches, targets, and webhook fires.
+
+    Recursively folds in any nested trigger_flow attached to a branch's
+    target_playlist so edits to a chained flow (e.g. Christmas's own
+    Christmas→Default flow) bump the parent hash and force a player refresh.
+    """
     branch_parts = []
     for b in tf_payload["branches"]:
         target_item_ids = "|".join(i["id"] for i in b["target_playlist"]["items"])
         wh = b.get("last_webhook_fire", "")
         cfg = json.dumps(b.get("trigger_config", {}), sort_keys=True)
+        nested = b["target_playlist"].get("trigger_flow")
+        nested_hash = _trigger_flow_hash(nested) if nested else ""
         branch_parts.append(
             f"{b['id']}:{b['trigger_type']}:{b.get('priority', 0)}:"
-            f"{b['target_playlist_id']}:{target_item_ids}:{cfg}:{wh}"
+            f"{b['target_playlist_id']}:{target_item_ids}:{cfg}:{wh}:{nested_hash}"
         )
     return hashlib.sha256(";".join(branch_parts).encode()).hexdigest()[:12]
 

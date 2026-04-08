@@ -1570,12 +1570,12 @@
 
         const branches = findBranchesForSource(currentSourcePlaylistId);
         const loopBranch = branches.find(b => b.trigger_type === 'loop_count');
+        const targetCount = loopBranch ? (loopBranch.trigger_config?.count || 3) : '?';
+        PlayerLog.info('Loop ' + loopCount + '/' + targetCount + ' on ' + currentSourcePlaylistId);
+
         if (!loopBranch) return;
 
-        const config = loopBranch.trigger_config || {};
-        const targetCount = config.count || 3;
-
-        if (loopCount >= targetCount) {
+        if (loopCount >= (loopBranch.trigger_config?.count || 3)) {
             PlayerLog.info('Loop count trigger fired after ' + loopCount + ' loops');
             fireTrigger(loopBranch);
         }
@@ -1588,6 +1588,9 @@
         }
 
         const target = branch.target_playlist;
+        const oldSource = currentSourcePlaylistId;
+        const newSource = branch.target_playlist_id;
+        PlayerLog.info('Trigger fired ' + branch.trigger_type + ' ' + oldSource + '→' + newSource);
         PlayerLog.info('Firing trigger → target playlist: ' + (target.name || target.id));
 
         // Teardown current triggers before swapping
@@ -1605,23 +1608,42 @@
         // Swap playlist and settings
         playlist = target.items || [];
         settings = target.settings || {};
-        currentSourcePlaylistId = branch.target_playlist_id;
+        currentSourcePlaylistId = newSource;
         currentIndex = 0;
         loopCount = 0;
         shuffleAdvanceCount = 0;
+
+        // If the target playlist carries its own trigger flow (chained flows),
+        // swap to it so its branches (e.g. loop_count back to source) become
+        // active. Without this swap, findBranchesForSource(newSource) below
+        // would return [] and the player would stay stuck on the new playlist.
+        if (target.trigger_flow) {
+            triggerFlow = target.trigger_flow;
+            PlayerLog.info('Swapped trigger flow → ' + target.trigger_flow.id);
+        }
 
         applySettings(settings);
         cancelPlayback();
 
         if (playlist.length > 0) {
-            playCurrentAsset();
+            // Prime the browser cache for slide 0 so loadAsset is nearly
+            // instant — otherwise the duration timer started inside
+            // playCurrentAsset can race ahead of the network fetch+fade
+            // and slide 0 visually flashes or is skipped on a Pi.
+            const firstAsset = playlist[0]?.asset;
+            if (firstAsset && firstAsset.asset_type === 'image' && firstAsset.uri) {
+                const primer = new Image();
+                primer.src = `${baseUrl}/media/${firstAsset.uri}`;
+            }
             preloadAssets();
+            playCurrentAsset();
         } else {
             showSplash();
         }
 
         // Re-register triggers for the new source playlist
         const newBranches = findBranchesForSource(currentSourcePlaylistId);
+        PlayerLog.info('Trigger flow now: ' + (triggerFlow?.id || 'none') + ' branches: ' + newBranches.length);
         if (newBranches.length > 0) {
             registerKeyboardTriggers(newBranches);
             createTouchZoneOverlays(newBranches);
