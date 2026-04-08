@@ -32,8 +32,8 @@
       <div class="upload-row">
         <UploadZone @uploaded="loadAssets" />
         <div class="action-side">
-          <button class="btn-html-add" @click="openHtmlEditor()" title="Create custom slides — clocks, weather, scrolling text &amp; more">
-            <i class="pi pi-code"></i> Add Custom Slide
+          <button class="btn-html-add" @click="$router.push('/designer')" title="Create custom slides — clocks, weather, scrolling text &amp; more">
+            <i class="pi pi-palette"></i> Add Custom Slide
           </button>
           <label class="auto-add-toggle" v-tooltip.bottom="'When on, uploads, custom slides, and duplicates are automatically added to your default playlist.'">
             <input type="checkbox" v-model="autoAdd" @change="saveAutoAdd" />
@@ -194,9 +194,13 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client.js'
 import UploadZone from '../components/UploadZone.vue'
 import AssetCard from '../components/AssetCard.vue'
+
+const router = useRouter()
+const route = useRoute()
 
 const userRole = (() => { try { return JSON.parse(localStorage.getItem('tinysignage_user') || '{}').role } catch { return 'viewer' } })()
 const canEdit = ['admin', 'editor'].includes(userRole)
@@ -320,6 +324,11 @@ async function doDelete() {
 
 // HTML editor actions
 async function openHtmlEditor(asset = null) {
+  // Route designer-aware slides to the visual designer; legacy slides fall through to the raw editor.
+  if (asset && asset.design_source) {
+    router.push(`/designer/${asset.id}`)
+    return
+  }
   htmlEditTarget.value = asset
   if (asset) {
     htmlName.value = asset.name
@@ -425,7 +434,27 @@ async function saveAutoAdd() {
   }
 }
 
-onMounted(() => { loadAll(); loadWidgets(); loadAutoAdd() })
+async function maybeAutoOpenLegacyEditor() {
+  const targetId = route.query.editHtml
+  if (!targetId) return
+  try {
+    const asset = await api.get(`/assets/${targetId}`)
+    // Strip the query param so a refresh doesn't reopen the dialog
+    router.replace({ path: '/media' })
+    // Force the legacy raw editor — we got here because design_source was missing
+    asset.design_source = null
+    openHtmlEditor(asset)
+  } catch (err) {
+    console.warn('[MediaLibrary] Failed to auto-open editor for asset:', targetId, err)
+  }
+}
+
+onMounted(async () => {
+  await loadAll()
+  loadWidgets()
+  loadAutoAdd()
+  maybeAutoOpenLegacyEditor()
+})
 </script>
 
 <style scoped>

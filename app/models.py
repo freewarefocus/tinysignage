@@ -39,6 +39,7 @@ class Asset(Base):
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     transition_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     transition_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
+    design_source: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON blob — designer round-trip metadata
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )

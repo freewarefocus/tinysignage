@@ -1,4 +1,5 @@
 import hashlib
+import json
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -82,6 +83,7 @@ async def create_asset(
     url: str = Form(None),
     content: str = Form(None),
     duration: int = Form(None),
+    design_source: str = Form(None),
     _admin: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -94,6 +96,12 @@ async def create_asset(
         # HTML snippet asset
         if len(content.encode("utf-8")) > MAX_HTML_SIZE:
             raise HTTPException(status_code=400, detail="HTML content exceeds 64 KB limit")
+
+        if design_source is not None:
+            try:
+                json.loads(design_source)
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail="design_source must be valid JSON")
 
         asset_id = str(uuid.uuid4())
         filename = f"{asset_id}.html"
@@ -114,6 +122,7 @@ async def create_asset(
             mimetype="text/html",
             file_size=file_size,
             content_hash=content_hash,
+            design_source=design_source,
         )
 
     elif file and file.filename:
@@ -253,8 +262,22 @@ async def update_asset(
         asset.file_size = filepath.stat().st_size
         asset.content_hash = hashlib.sha256(html_content.encode("utf-8")).hexdigest()
 
+    # Validate design_source JSON before applying as field
+    if "design_source" in body and body["design_source"] is not None:
+        ds = body["design_source"]
+        # Accept either a JSON string or a dict — normalize to string for storage
+        if isinstance(ds, (dict, list)):
+            body["design_source"] = json.dumps(ds)
+        elif isinstance(ds, str):
+            try:
+                json.loads(ds)
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail="design_source must be valid JSON")
+        else:
+            raise HTTPException(status_code=400, detail="design_source must be valid JSON")
+
     allowed = {"name", "duration", "is_enabled", "start_date", "end_date", "play_order",
-                "transition_type", "transition_duration"}
+                "transition_type", "transition_duration", "design_source"}
     # Normalize nullable transition fields: empty string or None clears the override
     for field in ("transition_type", "transition_duration"):
         if field in body and (body[field] is None or body[field] == ""):
@@ -499,6 +522,12 @@ async def reorder_assets(
 
 
 def _asset_to_dict(asset: Asset, tags: list[dict] | None = None) -> dict:
+    design_source = None
+    if asset.design_source:
+        try:
+            design_source = json.loads(asset.design_source)
+        except (ValueError, TypeError):
+            design_source = None
     return {
         "id": asset.id,
         "name": asset.name,
@@ -515,6 +544,7 @@ def _asset_to_dict(asset: Asset, tags: list[dict] | None = None) -> dict:
         "content_hash": asset.content_hash,
         "transition_type": asset.transition_type,
         "transition_duration": asset.transition_duration,
+        "design_source": design_source,
         "created_at": asset.created_at.isoformat() if asset.created_at else None,
         "updated_at": asset.updated_at.isoformat() if asset.updated_at else None,
         "tags": tags if tags is not None else [],

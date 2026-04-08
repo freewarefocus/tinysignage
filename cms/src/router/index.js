@@ -17,6 +17,11 @@ const routes = [
     component: () => import('../views/MediaLibrary.vue'),
   },
   {
+    path: '/designer/:assetId?',
+    name: 'designer',
+    component: () => import('../views/PageDesigner.vue'),
+  },
+  {
     path: '/playlists',
     name: 'playlists',
     component: () => import('../views/PlaylistList.vue'),

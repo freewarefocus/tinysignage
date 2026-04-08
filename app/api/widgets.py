@@ -531,5 +531,8 @@ async def list_widgets(_token: ApiToken = Depends(require_viewer)):
             "description": w["description"],
             "params": w["params"],
             "html": _render(w["id"]),
+            # Raw template with {{KEY}} placeholders so the page designer can do
+            # per-instance param substitution client-side.
+            "template": w["template"],
         })
     return result

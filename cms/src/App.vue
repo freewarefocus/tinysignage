@@ -25,6 +25,10 @@
           <i class="pi pi-images"></i>
           <span>Media</span>
         </router-link>
+        <router-link v-if="canEdit" to="/designer" class="nav-item" active-class="active" v-tooltip.right="'Visual designer for custom slides'">
+          <i class="pi pi-palette"></i>
+          <span>Designer</span>
+        </router-link>
         <router-link v-if="canEdit" to="/playlists" class="nav-item" active-class="active" v-tooltip.right="'Playlists'">
           <i class="pi pi-list"></i>
           <span>Playlists</span>
