@@ -54,6 +54,51 @@
 
     <hr class="section-divider" />
 
+    <h3>Network &amp; Security</h3>
+    <p class="section-desc">How the CMS and players connect to this server. To change these, edit <code>config.yaml</code> and restart.</p>
+
+    <div v-if="network" class="network-panel">
+      <div class="form-group">
+        <label>Protocol</label>
+        <div v-if="network.https_enabled" class="status-row status-ok">
+          <span class="dot"></span> HTTPS (encrypted)
+        </div>
+        <div v-else class="status-row status-warn">
+          <span class="dot"></span> HTTP (not encrypted)
+        </div>
+        <span v-if="!network.https_enabled" class="hint-text">
+          Re-run first-boot setup (or edit <code>config.yaml</code>) to enable HTTPS. See the docs for details.
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label>Listening on</label>
+        <div class="readonly-value">{{ network.host }}:{{ network.port }}</div>
+      </div>
+
+      <div v-if="network.server_url" class="form-group">
+        <label>Server URL</label>
+        <div class="readonly-value">{{ network.server_url }}</div>
+      </div>
+
+      <details v-if="network.https_enabled && network.cert_fingerprint_sha256" class="tech-details">
+        <summary>Technical details</summary>
+        <div class="form-group" style="margin-top: 0.8rem">
+          <label>Certificate file</label>
+          <div class="readonly-value">{{ network.cert_path }}</div>
+        </div>
+        <div class="form-group">
+          <label>SHA-256 fingerprint</label>
+          <input type="text" :value="network.cert_fingerprint_sha256" readonly @click="$event.target.select()" />
+          <span class="hint-text">
+            Verify with <code>openssl x509 -in {{ network.cert_path }} -noout -fingerprint -sha256</code>
+          </span>
+        </div>
+      </details>
+    </div>
+
+    <hr class="section-divider" />
+
     <h3>Backup & Restore</h3>
     <p class="section-desc">Export or import a complete backup of your database and media files.</p>
 
@@ -105,6 +150,7 @@ import { api } from '../api/client.js'
 
 const toast = useToast()
 const settings = ref(null)
+const network = ref(null)
 const saved = ref(false)
 const exporting = ref(false)
 const importing = ref(false)
@@ -113,6 +159,15 @@ const fileInput = ref(null)
 
 async function loadSettings() {
   settings.value = await api.get('/settings')
+}
+
+async function loadNetwork() {
+  try {
+    network.value = await api.get('/settings/network')
+  } catch (e) {
+    // Non-fatal — panel just stays hidden
+    network.value = null
+  }
 }
 
 async function saveSettings() {
@@ -221,6 +276,7 @@ function formatSize(bytes) {
 
 onMounted(() => {
   loadSettings()
+  loadNetwork()
 })
 </script>
 
@@ -308,6 +364,86 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
   border: none;
   border-top: 1px solid #2a2d3a;
   margin: 2rem 0;
+}
+
+.network-panel {
+  max-width: 500px;
+}
+
+.network-panel code {
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  font-size: 0.78rem;
+  color: #bbb;
+}
+
+.status-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.status-row .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-ok {
+  color: #4caf50;
+}
+
+.status-ok .dot {
+  background: #4caf50;
+}
+
+.status-warn {
+  color: #aaa;
+}
+
+.status-warn .dot {
+  background: #555;
+  border: 1px solid #777;
+}
+
+.readonly-value {
+  background: #1a1d27;
+  border: 1px solid #3a3a5a;
+  color: #ccc;
+  padding: 0.5rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  word-break: break-all;
+}
+
+.network-panel input[type="text"][readonly] {
+  width: 100%;
+  background: #1a1d27;
+  border: 1px solid #3a3a5a;
+  color: #ccc;
+  padding: 0.5rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+.tech-details {
+  margin-top: 0.5rem;
+}
+
+.tech-details summary {
+  color: #888;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.tech-details summary:hover {
+  color: #bbb;
 }
 
 .section-desc {

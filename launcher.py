@@ -4,8 +4,10 @@ import os
 import subprocess
 import platform
 import shutil
+import ssl
 import sys
 import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
 import yaml
@@ -101,6 +103,17 @@ def _ensure_pi_cache_dir() -> None:
         print(f"WARN: could not create {PI_DISK_CACHE_DIR}: {e}")
 
 
+def _insecure_ssl_context() -> ssl.SSLContext:
+    """Build an SSLContext that accepts self-signed certs.
+
+    Only used for local health checks — never for auth-bearing calls.
+    """
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 def _wait_for_url(url: str, timeout: int = 60) -> None:
     """Block until `url` responds, or `timeout` seconds elapse.
 
@@ -108,15 +121,59 @@ def _wait_for_url(url: str, timeout: int = 60) -> None:
     when the desktop autostart fires. Without this poll Chromium hits
     its connection-error page and (depending on cache state) may fail
     to recover before the wrapper's restart loop tears it down.
+
+    Tolerates self-signed certs on https:// URLs.
     """
+    is_https = url.lower().startswith("https://")
+    ctx = _insecure_ssl_context() if is_https else None
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=1):
-                return
+            if ctx is not None:
+                with urllib.request.urlopen(url, timeout=1, context=ctx):
+                    return
+            else:
+                with urllib.request.urlopen(url, timeout=1):
+                    return
         except Exception:
             time.sleep(1)
     print(f"WARN: {url} did not become ready within {timeout}s; launching anyway")
+
+
+def _compute_https_kiosk_flags(config: dict, server_url: str) -> list[str]:
+    """Return Chromium flags needed to accept the local self-signed cert.
+
+    If we can read the cert file locally (co-located player+CMS), compute
+    the SPKI hash and pass it via --ignore-certificate-errors-spki-list
+    which scopes the override to just this one cert.
+
+    Otherwise (remote CMS) fall back to --ignore-certificate-errors which
+    is blunter but still works in kiosk mode where --disable-infobars
+    hides the warning banner.
+    """
+    parsed = urllib.parse.urlparse(server_url)
+    if parsed.scheme.lower() != "https":
+        return []
+
+    https_cfg = (config.get("server", {}) or {}).get("https", {}) or {}
+    cert_file = https_cfg.get("cert_file", "./certs/cert.pem")
+    cert_path = Path(cert_file)
+    if not cert_path.is_absolute():
+        cert_path = SCRIPT_DIR / cert_path
+
+    if cert_path.exists():
+        try:
+            # Import lazily — launcher.py may run outside the venv on
+            # player-only installs where cryptography isn't available.
+            from app.tls import compute_spki_sha256
+            spki = compute_spki_sha256(cert_path)
+            return [f"--ignore-certificate-errors-spki-list={spki}"]
+        except Exception as e:
+            print(f"WARN: could not compute SPKI hash for {cert_path}: {e}")
+
+    # Fall back: accept all cert errors. Safe in kiosk mode because
+    # --disable-infobars + --kiosk hide the warning banner.
+    return ["--ignore-certificate-errors", "--test-type"]
 
 
 def launch(config_path: str | None = None):
@@ -141,7 +198,11 @@ def launch(config_path: str | None = None):
     port = config.get("server", {}).get("port", 8080)
     server_url = config.get("server_url", "").rstrip("/")
     if not server_url:
-        server_url = f"http://localhost:{port}"
+        https_enabled = bool(
+            ((config.get("server", {}) or {}).get("https", {}) or {}).get("enabled", False)
+        )
+        scheme = "https" if https_enabled else "http"
+        server_url = f"{scheme}://localhost:{port}"
     url = f"{server_url}/player"
     is_pi = Path("/proc/device-tree/model").exists()  # Rough Pi detection
 
@@ -151,6 +212,7 @@ def launch(config_path: str | None = None):
     args = [browser]
     if kiosk:
         args.extend(get_kiosk_flags(is_pi))
+    args.extend(_compute_https_kiosk_flags(config, server_url))
     args.append(f"--user-data-dir={BROWSER_PROFILE_DIR}")
     args.append(url)
 

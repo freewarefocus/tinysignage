@@ -23,6 +23,9 @@ db/*
 !db/.gitkeep
 *.db
 
+# TLS certificates (self-signed, auto-generated)
+certs/
+
 # Environment
 .env
 .env.*

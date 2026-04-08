@@ -11,12 +11,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY config.yaml .
 
-# media/ and db/ are mounted as volumes — create empty dirs
-RUN mkdir -p media media/thumbs db logs
+# media/, db/ and certs/ are mounted as volumes — create empty dirs
+RUN mkdir -p media media/thumbs db logs certs
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -kf https://localhost:8080/health || curl -f http://localhost:8080/health || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["python", "-m", "app.server"]

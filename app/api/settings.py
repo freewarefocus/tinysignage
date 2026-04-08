@@ -1,3 +1,7 @@
+import logging
+from pathlib import Path
+
+import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -5,6 +9,10 @@ from app.audit import record as audit
 from app.auth import require_admin, require_viewer
 from app.database import get_session
 from app.models import ApiToken, Settings
+
+log = logging.getLogger(__name__)
+
+_CONFIG_PATH = Path("config.yaml")
 
 router = APIRouter()
 
@@ -94,6 +102,46 @@ async def update_settings(
                 details={"changes": changes}, token=_admin, request=request)
     await session.commit()
     return {"status": "ok"}
+
+
+@router.get("/settings/network")
+async def get_network_settings(_viewer: ApiToken = Depends(require_viewer)):
+    """Read-only network/HTTPS configuration summary.
+
+    Reads directly from config.yaml — network settings live in YAML,
+    not the Settings singleton, because changing them requires a
+    server restart.
+    """
+    try:
+        config = yaml.safe_load(_CONFIG_PATH.read_text()) or {}
+    except Exception as e:
+        log.warning("Could not read config.yaml for /settings/network: %s", e)
+        config = {}
+
+    server_cfg = config.get("server", {}) or {}
+    https_cfg = server_cfg.get("https", {}) or {}
+
+    https_enabled = bool(https_cfg.get("enabled", False))
+    cert_path = https_cfg.get("cert_file", "./certs/cert.pem")
+    key_path = https_cfg.get("key_file", "./certs/key.pem")
+
+    fingerprint = None
+    if https_enabled and Path(cert_path).exists():
+        try:
+            from app.tls import compute_cert_fingerprint_sha256
+            fingerprint = compute_cert_fingerprint_sha256(cert_path)
+        except Exception as e:
+            log.warning("Could not compute cert fingerprint: %s", e)
+
+    return {
+        "https_enabled": https_enabled,
+        "host": server_cfg.get("host", "0.0.0.0"),
+        "port": int(server_cfg.get("port", 8080)),
+        "cert_path": cert_path if https_enabled else None,
+        "key_path": key_path if https_enabled else None,
+        "cert_fingerprint_sha256": fingerprint,
+        "server_url": config.get("server_url", ""),
+    }
 
 
 @router.get("/status")

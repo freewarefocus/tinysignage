@@ -63,6 +63,19 @@ details summary::marker { color: #666; }
     <label for="server_url">Server URL (for remote CMS)</label>
     <input type="text" id="server_url" value="{{SERVER_URL}}" placeholder="http://localhost:8080">
 
+    <details style="margin-bottom:1rem;border:1px solid #2a2d3a;border-radius:4px;padding:0.6rem 0.8rem">
+      <summary style="color:#888;font-size:0.85rem;cursor:pointer">Advanced: Enable HTTPS (optional)</summary>
+      <label style="display:flex;align-items:flex-start;gap:0.5rem;color:#ccc;margin-top:0.8rem;font-size:0.85rem;cursor:pointer">
+        <input type="checkbox" id="https_enabled" style="width:auto;margin-top:0.25rem;margin-bottom:0">
+        <span>Serve the CMS and player over HTTPS (encrypted)</span>
+      </label>
+      <p style="color:#888;font-size:0.78rem;margin-top:0.5rem;line-height:1.4">
+        TinySignage will generate a self-signed certificate. Your browser will show a
+        "not secure" warning the first time — click Advanced &rarr; Proceed. This protects
+        passwords and content when you access the CMS from another computer on your network.
+      </p>
+    </details>
+
     <div class="section-label">Admin Account</div>
     <label for="admin_username">Username</label>
     <input type="text" id="admin_username" value="admin" required minlength="3">
@@ -99,6 +112,7 @@ document.getElementById('setup-form').addEventListener('submit', async (e) => {
     server_url: document.getElementById('server_url').value,
     admin_username: document.getElementById('admin_username').value,
     admin_password: pw,
+    https_enabled: document.getElementById('https_enabled').checked,
   };
   const resp = await fetch('/api/setup', { method: 'POST',
     headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
@@ -110,6 +124,9 @@ document.getElementById('setup-form').addEventListener('submit', async (e) => {
   }
   const data = await resp.json();
   let html = '<div class="done"><h1>Setup Complete!</h1>';
+  if (data.https_enabled) {
+    html += '<p style="color:#4caf50;font-size:0.85rem;margin-top:0.5rem;line-height:1.4">HTTPS is enabled with a self-signed certificate. On first visit, your browser will warn you — that\\\'s expected. Click Advanced &rarr; Proceed to continue.</p>';
+  }
   if (data.device_token && data.device_id) {
     const playerBase = data.server_url || window.location.origin;
     const playerUrl = playerBase + '/player?device=' + data.device_id + '&token=' + data.device_token;
@@ -178,6 +195,7 @@ async def complete_setup(body: dict, session: AsyncSession = Depends(get_session
             pass
     admin_username = body.get("admin_username", "admin").strip()
     admin_password = body.get("admin_password", "")
+    https_enabled = bool(body.get("https_enabled", False))
 
     # Validate admin credentials
     if len(admin_username) < 3:
@@ -198,10 +216,35 @@ async def complete_setup(body: dict, session: AsyncSession = Depends(get_session
     if device:
         device.name = device_name
 
-    # Save server_url to config if provided
+    # Save server_url / HTTPS settings to config
+    config = yaml.safe_load(_config_path.read_text()) or {}
+    if https_enabled:
+        # Flip the https.enabled flag and generate the cert immediately
+        # so the success screen can show the correct URL.
+        server_cfg = config.setdefault("server", {})
+        https_cfg = server_cfg.setdefault("https", {})
+        https_cfg["enabled"] = True
+        https_cfg.setdefault("cert_file", "./certs/cert.pem")
+        https_cfg.setdefault("key_file", "./certs/key.pem")
+        https_cfg.setdefault("auto_generate_self_signed", True)
+        try:
+            from app.tls import ensure_cert
+            ensure_cert(https_cfg["cert_file"], https_cfg["key_file"])
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate self-signed certificate: {e}",
+            )
+        # Rewrite the scheme in server_url so the meta tag injection in
+        # app/main.py sends players to https://...
+        if server_url:
+            if server_url.startswith("http://"):
+                server_url = "https://" + server_url[len("http://"):]
+            elif not server_url.startswith("https://"):
+                server_url = "https://" + server_url
     if server_url:
-        config = yaml.safe_load(_config_path.read_text())
         config["server_url"] = server_url
+    if https_enabled or server_url:
         _config_path.write_text(yaml.dump(config, default_flow_style=False, sort_keys=False))
 
     # Create admin user account
@@ -251,4 +294,5 @@ async def complete_setup(body: dict, session: AsyncSession = Depends(get_session
         "admin_token": admin_plaintext,
         "device_token": device_plaintext,
         "server_url": server_url,
+        "https_enabled": https_enabled,
     }

@@ -21,6 +21,7 @@ import struct
 import subprocess
 import sys
 import textwrap
+import ssl
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -54,7 +55,7 @@ After=network.target
 Type=simple
 User={user}
 WorkingDirectory={install_dir}
-ExecStart={install_dir}/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port {port}
+ExecStart={install_dir}/venv/bin/python -m app.server
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
@@ -63,7 +64,7 @@ Environment=PYTHONUNBUFFERED=1
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths={install_dir}/media {install_dir}/db {install_dir}/logs {install_dir}/config.yaml {install_dir}/config.env
+ReadWritePaths={install_dir}/media {install_dir}/db {install_dir}/logs {install_dir}/certs {install_dir}/config.yaml {install_dir}/config.env
 MemoryMax=512M
 
 [Install]
@@ -156,7 +157,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory={install_dir}
-ExecStart={install_dir}/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port {port}
+ExecStart={install_dir}/venv/bin/python -m app.server
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
@@ -178,12 +179,9 @@ LAUNCHD_PLIST = """\
     <string>{install_dir}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{install_dir}/venv/bin/uvicorn</string>
-        <string>app.main:app</string>
-        <string>--host</string>
-        <string>0.0.0.0</string>
-        <string>--port</string>
-        <string>{port}</string>
+        <string>{install_dir}/venv/bin/python</string>
+        <string>-m</string>
+        <string>app.server</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -203,7 +201,7 @@ WINDOWS_BAT = """\
 @echo off
 cd /d "{install_dir}"
 call "{install_dir}\\venv\\Scripts\\activate"
-uvicorn app.main:app --host 0.0.0.0 --port {port}
+python -m app.server
 """
 
 # --- Xcursor constants ---------------------------------------------------
@@ -641,6 +639,21 @@ def prompt_server_url():
     return url
 
 
+def _urlopen_tolerant(url, timeout=5):
+    """urlopen wrapper that accepts self-signed certs on https:// URLs.
+
+    These are health checks, not auth-bearing calls, so disabling cert
+    verification is safe. Returns the response object.
+    """
+    req = urllib.request.Request(url, method="GET")
+    if url.lower().startswith("https://"):
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
 def validate_server_url(url):
     """Check if the CMS server is reachable. Warns but does not block."""
     parsed = urllib.parse.urlparse(url)
@@ -649,8 +662,7 @@ def validate_server_url(url):
         info("Expected format: http://192.168.1.50:8080 or http://hostname.local:8080")
         return
     try:
-        req = urllib.request.Request(f"{url}/health", method="GET")
-        resp = urllib.request.urlopen(req, timeout=5)
+        resp = _urlopen_tolerant(f"{url}/health", timeout=5)
         if resp.status == 200:
             info(f"CMS server at {url} is reachable")
             return
@@ -1055,36 +1067,143 @@ def _yaml_quote(value):
     return "'" + s.replace("'", "''") + "'"
 
 
-def _update_yaml_file(config_path, **updates):
-    """Update top-level scalar keys in a YAML file (stdlib only).
+def _indent_of(line):
+    return len(line) - len(line.lstrip(" "))
 
-    Replaces existing keys in place; appends new keys at the end.
-    Safe for simple config values — does not require PyYAML.
+
+def _update_yaml_file(config_path, **updates):
+    """Update YAML keys in a file (stdlib only).
+
+    Top-level scalar keys are passed as ``key=value``. Nested keys use
+    dot notation, e.g. ``server__https__enabled=True`` is written as::
+
+        server:
+          https:
+            enabled: 'True'
+
+    (Python keyword args can't contain dots, so we use ``__`` as the
+    separator.) Existing keys are replaced in place; missing keys are
+    appended to the appropriate parent block, creating parent blocks
+    if needed.
     """
     lines = []
     if os.path.isfile(config_path):
         with open(config_path) as f:
             lines = f.readlines()
 
-    remaining = dict(updates)
+    # Split updates into top-level (no "__") and nested (one or more "__")
+    top_level = {}
+    nested = []  # list of (path_parts, value)
+    for key, value in updates.items():
+        if "__" in key:
+            nested.append((key.split("__"), value))
+        else:
+            top_level[key] = value
+
+    # --- pass 1: top-level scalar replace-in-place ----------------------
+    remaining_top = dict(top_level)
     new_lines = []
     for line in lines:
         replaced = False
-        if not line.lstrip().startswith('#'):
-            for key in list(remaining):
-                if re.match(rf'^{re.escape(key)}\s*:', line):
-                    new_lines.append(f"{key}: {_yaml_quote(remaining.pop(key))}\n")
+        if not line.lstrip().startswith("#") and _indent_of(line) == 0:
+            for key in list(remaining_top):
+                if re.match(rf"^{re.escape(key)}\s*:", line):
+                    new_lines.append(f"{key}: {_yaml_quote(remaining_top.pop(key))}\n")
                     replaced = True
                     break
         if not replaced:
             new_lines.append(line)
 
-    # Append any keys not already in the file
-    for key, value in remaining.items():
+    # Append any top-level keys not already in the file
+    for key, value in remaining_top.items():
         new_lines.append(f"{key}: {_yaml_quote(value)}\n")
+
+    # --- pass 2: nested keys --------------------------------------------
+    # For each nested path, walk the file, locate (or create) each
+    # parent block, and replace or append the leaf scalar.
+    for path_parts, value in nested:
+        new_lines = _apply_nested_update(new_lines, path_parts, value)
 
     with open(config_path, "w") as f:
         f.writelines(new_lines)
+
+
+def _apply_nested_update(lines, path_parts, value):
+    """Apply a single nested-key update to a list of YAML lines.
+
+    Walks down the indentation tree looking for each path component.
+    If a component doesn't exist, it's appended to its parent block.
+    """
+    leaf_key = path_parts[-1]
+    parents = path_parts[:-1]
+
+    # Locate the insertion region for the parent chain.
+    # start, end: line range [start, end) that is "inside" the parent
+    # (end points to the first line at parent_indent or less, or len(lines))
+    start = 0
+    end = len(lines)
+    parent_indent = -2  # pretend virtual root
+    for idx, parent in enumerate(parents):
+        child_indent = parent_indent + 2
+        found = -1
+        i = start
+        while i < end:
+            line = lines[i]
+            if (
+                not line.lstrip().startswith("#")
+                and line.strip()
+                and _indent_of(line) == child_indent
+                and re.match(rf"^{' ' * child_indent}{re.escape(parent)}\s*:", line)
+            ):
+                found = i
+                break
+            i += 1
+        if found == -1:
+            # Parent doesn't exist — append the whole remaining chain
+            # at the end of the current region.
+            insert_at = end
+            new_chunks = []
+            chain = parents[idx:] + [leaf_key]
+            for depth, comp in enumerate(chain):
+                indent = " " * (child_indent + depth * 2)
+                if comp == leaf_key:
+                    new_chunks.append(f"{indent}{comp}: {_yaml_quote(value)}\n")
+                else:
+                    new_chunks.append(f"{indent}{comp}:\n")
+            return lines[:insert_at] + new_chunks + lines[insert_at:]
+
+        # Parent exists — descend into its block
+        start = found + 1
+        # Find end of this parent's block: first line whose indent is
+        # <= child_indent (and is non-blank non-comment)
+        new_end = end
+        j = start
+        while j < end:
+            line = lines[j]
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#") and _indent_of(line) <= child_indent:
+                new_end = j
+                break
+            j += 1
+        end = new_end
+        parent_indent = child_indent
+
+    # Now look for the leaf key within [start, end)
+    leaf_indent = parent_indent + 2
+    for i in range(start, end):
+        line = lines[i]
+        if (
+            not line.lstrip().startswith("#")
+            and _indent_of(line) == leaf_indent
+            and re.match(rf"^{' ' * leaf_indent}{re.escape(leaf_key)}\s*:", line)
+        ):
+            lines = lines[:i] + [f"{' ' * leaf_indent}{leaf_key}: {_yaml_quote(value)}\n"] + lines[i + 1:]
+            return lines
+
+    # Leaf not found — append at the end of the parent block
+    insert_at = end
+    new_line = f"{' ' * leaf_indent}{leaf_key}: {_yaml_quote(value)}\n"
+    return lines[:insert_at] + [new_line] + lines[insert_at:]
 
 
 def update_config_yaml(install_dir, display_name=None, server_url=None):
