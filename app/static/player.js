@@ -1339,6 +1339,10 @@
                 player_time: new Date().toISOString(),
                 player_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                 player_version: PLAYER_VERSION,
+                player_type: /BrightSign/i.test(navigator.userAgent) ? 'brightsign'
+                           : /TinySignageApp/i.test(navigator.userAgent) ? 'android'
+                           : /WPE/i.test(navigator.userAgent) ? 'wpe'
+                           : 'browser',
                 uptime_seconds: Math.round((Date.now() - startTime) / 1000),
                 dom_responsive: rafResponsive,
             };

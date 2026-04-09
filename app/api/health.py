@@ -123,6 +123,8 @@ async def player_heartbeat(
 
     if "player_version" in body:
         device.player_version = body["player_version"]
+    if "player_type" in body:
+        device.player_type = body["player_type"]
     if "player_timezone" in body:
         device.player_timezone = body["player_timezone"]
     if "storage_free_mb" in body:
