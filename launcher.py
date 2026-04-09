@@ -94,9 +94,13 @@ def _cog_platform() -> str:
     return "drm"
 
 
-def get_cog_args(url: str) -> list[str]:
+def get_cog_args(url: str, https: bool = False) -> list[str]:
     """Build the cog command line with the correct platform backend."""
-    return ["cog", f"--platform={_cog_platform()}", url]
+    args = ["cog", f"--platform={_cog_platform()}"]
+    if https:
+        args.append("--ignore-tls-errors")
+    args.append(url)
+    return args
 
 
 def get_kiosk_flags(is_pi: bool = False) -> list[str]:
@@ -230,19 +234,13 @@ def _compute_https_kiosk_flags(config: dict, server_url: str) -> list[str]:
     return ["--ignore-certificate-errors", "--test-type"]
 
 
-def _build_cog_env(config: dict, server_url: str) -> dict[str, str]:
+def _build_cog_env() -> dict[str, str]:
     """Build environment variables for cog/WPE launch."""
     env = os.environ.copy()
     env["XDG_DATA_HOME"] = str(WPE_PROFILE_DIR)
     env["XDG_CACHE_HOME"] = PI_DISK_CACHE_DIR
     env["COG_PLATFORM_DRM_CURSOR_DISABLED"] = "1"
     env["WPE_WEBKIT_DISABLE_SANDBOX"] = "1"
-
-    # Accept self-signed certs when HTTPS is in use
-    parsed = urllib.parse.urlparse(server_url)
-    if parsed.scheme.lower() == "https":
-        env["WEBKIT_TLS_ERRORS_POLICY"] = "ignore"
-
     return env
 
 
@@ -284,8 +282,9 @@ def launch(config_path: str | None = None):
         # WPE WebKit via cog — does its own DRM/KMS compositing
         os.makedirs(WPE_PROFILE_DIR, exist_ok=True)
         os.makedirs(PI_DISK_CACHE_DIR, exist_ok=True)
-        env = _build_cog_env(config, server_url)
-        args = get_cog_args(url)
+        is_https = server_url.lower().startswith("https://")
+        env = _build_cog_env()
+        args = get_cog_args(url, https=is_https)
         print(f"Launching (cog/WPE): {' '.join(args)}")
         os.execvpe(args[0], args, env)
     else:
