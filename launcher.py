@@ -242,6 +242,11 @@ def _build_cog_env() -> dict[str, str]:
     env["COG_PLATFORM_DRM_CURSOR_DISABLED"] = "1"
     env["COG_PLATFORM_WL_VIEW_FULLSCREEN"] = "1"
     env["WPE_WEBKIT_DISABLE_SANDBOX"] = "1"
+    # Use the transparent cursor theme installed by install.py.
+    # Set explicitly — labwc's environment file may not be inherited
+    # when launched via systemd or XDG autostart.
+    env["XCURSOR_THEME"] = "hidden"
+    env["XCURSOR_SIZE"] = "1"
     return env
 
 
