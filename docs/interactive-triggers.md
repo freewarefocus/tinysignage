@@ -83,7 +83,7 @@ Tracks how many times the playlist has looped. When the count reaches the target
 Requires the [GPIO Bridge](gpio-bridge.md) running on a Raspberry Pi. Matches a GPIO pin and edge (falling or rising).
 
 ```json
-{ "pin": 17, "edge": "falling", "debounce_ms": 200 }
+{ "pin": 17, "edge": "falling" }
 ```
 
 ### Webhook

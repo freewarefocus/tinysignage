@@ -13,7 +13,7 @@ export const TRIGGER_PRESETS = [
     branches: [
       {
         trigger_type: 'gpio',
-        trigger_config: { pin: 17, edge: 'falling', debounce_ms: 200 },
+        trigger_config: { pin: 17, edge: 'falling' },
         label: 'Button → Exhibit',
       },
     ],

@@ -350,10 +350,6 @@
                     <option value="rising">Rising</option>
                   </select>
                 </div>
-                <div class="setting-field">
-                  <label>Debounce (ms)</label>
-                  <input type="number" v-model.number="branchForm.trigger_config.debounce_ms" min="0" max="2000" class="setting-number" />
-                </div>
               </div>
 
               <!-- Webhook -->
@@ -541,7 +537,7 @@ function getDefaultConfigForType(type) {
     case 'touch_zone': return { x_percent: 0, y_percent: 0, width_percent: 100, height_percent: 100 }
     case 'timeout': return { seconds: 30 }
     case 'loop_count': return { count: 3 }
-    case 'gpio': return { pin: 17, edge: 'falling', debounce_ms: 200 }
+    case 'gpio': return { pin: 17, edge: 'falling' }
     case 'webhook': return { token: generateToken() }
     default: return {}
   }
