@@ -107,11 +107,12 @@ Same URLs. Data lives in `./media` and `./db` next to the compose file.
 
 ```bash
 cd /path/to/tinysignage
-git pull
 python3 install.py --update
 ```
 
-This reinstalls dependencies and runs database migrations. If using the Launch Agent with `KeepAlive`, the app restarts automatically.
+`--update` pulls the latest code, reinstalls dependencies, runs database migrations, and restarts the Launch Agent (if installed with `KeepAlive`).
+
+If the automatic `git pull` fails (for example, offline or a diverged branch), `--update` prints the git error and continues with the dependency/database/restart steps. To skip git entirely: `python3 install.py --update --no-pull`.
 
 ## Resetting the player
 

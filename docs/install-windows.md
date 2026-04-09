@@ -97,11 +97,12 @@ Same URLs. Data lives in `./media` and `./db` next to the compose file.
 
 ```powershell
 cd path\to\tinysignage
-git pull
 python install.py --update
 ```
 
-This reinstalls dependencies and runs database migrations. Restart the application afterward.
+`--update` pulls the latest code, reinstalls dependencies, and runs database migrations. Restart the application afterward.
+
+If the automatic `git pull` fails (for example, offline or a diverged branch), `--update` prints the git error and continues with the dependency/database steps. To skip git entirely: `python install.py --update --no-pull`.
 
 ## Resetting the player
 

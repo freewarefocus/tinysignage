@@ -3,8 +3,15 @@
 
 Usage:
     python3 install.py              # Interactive install
-    python3 install.py --update     # Update existing install
+    python3 install.py --update     # Update (git pull + deps + db + restart)
+    python3 install.py --update --no-pull  # Update without git pull
     python3 install.py --non-interactive --display-name "Lobby TV"  # Scripted Pi
+
+--update does a 'git pull --ff-only' in the install directory as its first
+step. If the pull fails (offline, dirty tree, SSH without keys, diverged
+branch, ...) the installer prints the git error and continues with the
+dependency/database/restart steps because those are still valuable self-heals.
+Pass --no-pull to skip git entirely.
 
 Requires Python 3.9+. Uses only the standard library (runs before venv exists).
 """
@@ -553,9 +560,12 @@ def run_cmd(cmd, cwd=None, check=True, capture=False, env=None):
     return result
 
 
-def run_as_user(user, cmd, cwd=None):
+def run_as_user(user, cmd, cwd=None, check=True, capture=False):
     """Run a command as a different user via runuser (Linux only)."""
-    return run_cmd(["runuser", "-u", user, "--"] + list(cmd), cwd=cwd)
+    return run_cmd(
+        ["runuser", "-u", user, "--"] + list(cmd),
+        cwd=cwd, check=check, capture=capture,
+    )
 
 
 def sanitize_hostname(name):
@@ -1370,55 +1380,162 @@ def _detect_installed_mode(install_dir, plat):
     return "player"
 
 
-def do_update(plat, install_dir):
-    """Update an existing installation: deps, migrations, restart."""
+def git_pull_install_dir(install_dir, runner):
+    """Run 'git pull --ff-only' in install_dir. Returns True on success.
+
+    Never calls error_exit — caller must continue on failure so that
+    deps/migrations/restart still run (they're useful self-heals even
+    when the code itself can't be updated, e.g. offline or SSH auth).
+
+    `runner` is a callable matching run_cmd's signature so we can route
+    git through `runuser -u tinysignage` on Pi and plain subprocess on
+    desktop/macOS without branching inside this helper.
+    """
+    git_marker = os.path.join(install_dir, ".git")
+    if not os.path.exists(git_marker):  # may be a file (worktree), not a dir
+        warn("Not a git working tree — skipping code update.")
+        return False
+
+    if not shutil.which("git"):
+        warn("git not found in PATH — skipping code update.")
+        return False
+
+    # Detect remote URL first so we can tailor the failure hint if pull fails.
+    r = runner(["git", "remote", "get-url", "origin"],
+               cwd=install_dir, capture=True, check=False)
+    remote_url = (r.stdout.strip() if r and r.returncode == 0 else "")
+    is_ssh = remote_url.startswith("git@") or remote_url.startswith("ssh://")
+
+    # Refuse to clobber local modifications.
+    r = runner(["git", "status", "--porcelain"],
+               cwd=install_dir, capture=True, check=False)
+    if r and r.returncode == 0 and r.stdout.strip():
+        warn("Local modifications present in install directory — "
+             "skipping git pull. Run 'git status' in the install dir to inspect.")
+        return False
+
+    # Capture HEAD before.
+    r = runner(["git", "rev-parse", "--short", "HEAD"],
+               cwd=install_dir, capture=True, check=False)
+    head_before = r.stdout.strip() if r and r.returncode == 0 else ""
+
+    # The pull itself.
+    r = runner(["git", "pull", "--ff-only"],
+               cwd=install_dir, capture=True, check=False)
+    if not r or r.returncode != 0:
+        err = (r.stderr.strip() if r and r.stderr else "") or "(no output)"
+        warn(f"git pull failed — continuing without code update:\n{err}")
+        if is_ssh:
+            warn(
+                "This clone uses SSH (git@github.com:...). The service user "
+                "has no SSH keys. Switch the remote to HTTPS:\n"
+                f"  sudo -u {SERVICE_USER} git -C {install_dir} remote set-url origin \\\n"
+                "    https://github.com/<owner>/<repo>.git\n"
+                "Then re-run the update."
+            )
+        return False
+
+    # Capture HEAD after.
+    r = runner(["git", "rev-parse", "--short", "HEAD"],
+               cwd=install_dir, capture=True, check=False)
+    head_after = r.stdout.strip() if r and r.returncode == 0 else ""
+
+    if head_before and head_after and head_before == head_after:
+        info("Already up to date.")
+    elif head_before and head_after:
+        r = runner(["git", "rev-list", "--count", f"{head_before}..{head_after}"],
+                   cwd=install_dir, capture=True, check=False)
+        n = r.stdout.strip() if r and r.returncode == 0 else "?"
+        plural = "commit" if n == "1" else "commits"
+        info(f"Updated {head_before} → {head_after} ({n} new {plural})")
+    else:
+        info("git pull completed.")
+    return True
+
+
+def _no_venv_error(plat, install_dir):
+    """Exit with an actionable hint when --update can't find a venv."""
+    msg = f"No venv found at {os.path.join(install_dir, 'venv')}."
+    if plat == "pi" and os.path.isdir(os.path.join(TARGET_DIR, "venv")) \
+            and os.path.realpath(install_dir) != os.path.realpath(TARGET_DIR):
+        msg += (
+            f"\n\nYour TinySignage is installed at {TARGET_DIR}, but you're "
+            f"running --update from {install_dir}.\n\n"
+            f"To update, run:\n"
+            f"  cd {TARGET_DIR}\n"
+            f"  sudo python3 install.py --update"
+        )
+    else:
+        msg += (
+            "\n\nRun --update from the directory where TinySignage was "
+            "originally installed (the one containing 'venv/').\n\n"
+            "For a fresh install instead, run install.py without --update."
+        )
+    error_exit(msg)
+
+
+def do_update(plat, install_dir, skip_pull=False):
+    """Update an existing installation: pull, deps, migrations, restart."""
     print("=== TinySignage Update ===\n")
 
     mode = _detect_installed_mode(install_dir, plat)
     info(f"Detected install mode: {mode}")
+    info(f"Install directory: {install_dir}")
     print()
 
     has_venv = os.path.isdir(os.path.join(install_dir, "venv"))
 
-    if mode == "player" and not has_venv:
-        # Player-only installs have no venv or database to update
-        info("Player-only install — nothing to update.")
-        info("To change the CMS server address, re-run install.py --mode player --server-url <url>")
-        print("\nUpdate complete!")
-        return
+    if not has_venv and mode != "player":
+        _no_venv_error(plat, install_dir)
 
-    if not has_venv:
-        error_exit(
-            f"No venv found at {os.path.join(install_dir, 'venv')}.\n"
-            "Run install.py without --update for a fresh install."
-        )
-
+    # Pick a runner so git (and anything else) goes through the right
+    # user context on Pi without branching inside helpers.
     if plat == "pi":
         if os.geteuid() != 0:
             error_exit("Pi update requires root. Run: sudo python3 install.py --update")
+        runner = lambda cmd, **kw: run_as_user(SERVICE_USER, cmd, **kw)
+    else:
+        runner = run_cmd
 
-        step(1, 3, "Updating Python dependencies...")
-        pip = get_venv_pip(install_dir)
-        run_as_user(SERVICE_USER, [
-            pip, "install", "--quiet",
-            "-r", os.path.join(install_dir, "requirements.txt"),
-        ], cwd=install_dir)
+    # total_steps: pull + (deps + migrations) + restart for CMS installs;
+    #              pull + reboot-hint for player-only Pi installs.
+    total_steps = 4 if has_venv else 2
+    step_num = 1
 
-        step(2, 3, "Running database migrations...")
-        run_as_user(SERVICE_USER, [
-            get_venv_python(install_dir), "-c", DB_INIT_SCRIPT,
-        ], cwd=install_dir)
+    # --- Step 1: git pull ------------------------------------------------
+    if skip_pull:
+        step(step_num, total_steps, "Skipping git pull (--no-pull)")
+    else:
+        step(step_num, total_steps, "Pulling latest code...")
+        git_pull_install_dir(install_dir, runner)
+    step_num += 1
 
-        # Self-heal installs that pre-date HTTPS support: the systemd
-        # unit lists certs/ in ReadWritePaths, but older installs never
-        # created the directory, so enabling HTTPS via the setup wizard
-        # fails with EROFS under ProtectSystem=strict.
-        certs_dir = os.path.join(install_dir, "certs")
-        if not os.path.isdir(certs_dir):
-            run_as_user(SERVICE_USER, ["mkdir", "-p", certs_dir])
-            info("Created missing certs/ directory for HTTPS support")
+    if plat == "pi":
+        if has_venv:
+            step(step_num, total_steps, "Updating Python dependencies...")
+            pip = get_venv_pip(install_dir)
+            run_as_user(SERVICE_USER, [
+                pip, "install", "--quiet",
+                "-r", os.path.join(install_dir, "requirements.txt"),
+            ], cwd=install_dir)
+            step_num += 1
 
-        step(3, 3, "Restarting services...")
+            step(step_num, total_steps, "Running database migrations...")
+            run_as_user(SERVICE_USER, [
+                get_venv_python(install_dir), "-c", DB_INIT_SCRIPT,
+            ], cwd=install_dir)
+            step_num += 1
+
+            # Self-heal installs that pre-date HTTPS support: the systemd
+            # unit lists certs/ in ReadWritePaths, but older installs never
+            # created the directory, so enabling HTTPS via the setup wizard
+            # fails with EROFS under ProtectSystem=strict.
+            certs_dir = os.path.join(install_dir, "certs")
+            if not os.path.isdir(certs_dir):
+                run_as_user(SERVICE_USER, ["mkdir", "-p", certs_dir])
+                info("Created missing certs/ directory for HTTPS support")
+
+        step(step_num, total_steps, "Restarting services...")
         for svc in ["signage-app", "signage-player"]:
             if os.path.isfile(f"/etc/systemd/system/{svc}.service"):
                 run_cmd(["systemctl", "restart", svc])
@@ -1459,13 +1576,15 @@ def do_update(plat, install_dir):
             pass
 
     else:
-        step(1, 3, "Updating Python dependencies...")
+        step(step_num, total_steps, "Updating Python dependencies...")
         install_deps(install_dir)
+        step_num += 1
 
-        step(2, 3, "Running database migrations...")
+        step(step_num, total_steps, "Running database migrations...")
         init_database(install_dir)
+        step_num += 1
 
-        step(3, 3, "Restarting services...")
+        step(step_num, total_steps, "Restarting services...")
         if plat == "macos":
             plist = os.path.expanduser(
                 "~/Library/LaunchAgents/com.tinysignage.app.plist"
@@ -2038,7 +2157,11 @@ def main():
     )
     parser.add_argument(
         "--update", action="store_true",
-        help="update existing install (pip deps + db migrations + restart)",
+        help="update existing install (git pull + pip deps + db migrations + restart)",
+    )
+    parser.add_argument(
+        "--no-pull", action="store_true",
+        help="with --update, skip the automatic 'git pull' step",
     )
     parser.add_argument(
         "--uninstall", action="store_true",
@@ -2082,7 +2205,7 @@ def main():
         return
 
     if args.update:
-        do_update(plat, install_dir)
+        do_update(plat, install_dir, skip_pull=args.no_pull)
         return
 
     # Determine install mode

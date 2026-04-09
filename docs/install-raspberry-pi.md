@@ -106,12 +106,16 @@ Systemd units for the CMS backend include security hardening: `NoNewPrivileges`,
 ## Updating
 
 ```bash
-cd /opt/tinysignage
-sudo -u tinysignage git pull
-sudo python3 install.py --update
+sudo python3 /opt/tinysignage/install.py --update
 ```
 
-This reinstalls dependencies, runs database migrations, and restarts services. The player reconnects automatically within 30 seconds.
+`--update` pulls the latest code, reinstalls dependencies, runs database migrations, and restarts services. The player reconnects automatically within 30 seconds.
+
+If the automatic `git pull` fails (for example, the clone uses SSH and the service user has no keys), `--update` prints the git error and continues with the dependency/database/restart steps. To skip git entirely:
+
+```bash
+sudo python3 /opt/tinysignage/install.py --update --no-pull
+```
 
 ## Resetting the player
 
