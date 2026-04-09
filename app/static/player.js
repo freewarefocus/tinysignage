@@ -19,6 +19,10 @@
     const PRELOAD_AHEAD = 1;          // Number of assets to preload ahead
     const PLAYER_VERSION = '0.9.0';
     const CAPABILITY_REPORT_INTERVAL = 3600000; // 60 min
+    const HEALTH_CHECK_INTERVAL = 30000;        // 30s between health checks
+    const RAF_STALE_THRESHOLD = 10000;           // 10s = DOM frozen
+    const MEMORY_GRACE_PERIOD = 300000;          // 5 min after reload, skip memory checks
+    const MIN_UPTIME_FOR_SCHEDULED_RESTART = 3600000; // 1hr
 
     // --- Persistent Player Log (ring buffer in localStorage) ---
     const LOG_STORAGE_KEY = 'tinysignage_player_log';
@@ -155,6 +159,13 @@
     let gpioReconnectTimer = null;    // Auto-reconnect timer
     let activeGpioBranches = [];      // Current GPIO branches for onmessage matching
     const GPIO_BRIDGE_URL = 'ws://localhost:8765';
+
+    // --- Health monitor state ---
+    let healthCheckTimer = null;
+    let lastRafTime = Date.now();
+    let rafResponsive = true;
+    let serverRestartHour = null;
+    let serverMemoryLimitMb = 200;
 
     // --- Webhook trigger state ---
     let lastSeenWebhookFires = {};    // { branchId: isoTimestamp } — tracks last processed webhook fire
@@ -385,6 +396,7 @@
         schedulePoll();
         scheduleHeartbeat();
         scheduleCapabilityReport();
+        startHealthMonitor();
 
         if (playlist.length > 0) {
             currentIndex = 0;
@@ -1244,6 +1256,74 @@
         document.getElementById('splash').classList.add('hidden');
     }
 
+    // --- Health Monitor ---
+    function startRafProbe() {
+        function tick() {
+            lastRafTime = Date.now();
+            rafResponsive = true;
+            requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+    }
+
+    function startHealthMonitor() {
+        // Load cached health settings from localStorage
+        try {
+            const cachedHour = localStorage.getItem('tinysignage_restart_hour');
+            if (cachedHour !== null) serverRestartHour = cachedHour === 'null' ? null : parseInt(cachedHour, 10);
+            const cachedLimit = localStorage.getItem('tinysignage_memory_limit_mb');
+            if (cachedLimit !== null) serverMemoryLimitMb = parseInt(cachedLimit, 10) || 200;
+        } catch { /* ok */ }
+
+        startRafProbe();
+
+        if (healthCheckTimer) clearInterval(healthCheckTimer);
+        healthCheckTimer = setInterval(runHealthCheck, HEALTH_CHECK_INTERVAL);
+    }
+
+    function runHealthCheck() {
+        const uptimeMs = Date.now() - startTime;
+
+        // Memory check
+        if (performance.memory && uptimeMs > MEMORY_GRACE_PERIOD) {
+            const usedMb = Math.round(performance.memory.usedJSHeapSize / (1024 * 1024));
+            if (usedMb > serverMemoryLimitMb) {
+                PlayerLog.warn('Health: JS heap ' + usedMb + ' MB exceeds limit ' + serverMemoryLimitMb + ' MB');
+                gracefulReload('memory');
+                return;
+            }
+        }
+
+        // Responsiveness check
+        if (Date.now() - lastRafTime > RAF_STALE_THRESHOLD) {
+            rafResponsive = false;
+            PlayerLog.warn('Health: rAF stale for ' + Math.round((Date.now() - lastRafTime) / 1000) + 's');
+            gracefulReload('unresponsive');
+            return;
+        }
+
+        // Scheduled restart
+        if (serverRestartHour !== null && uptimeMs > MIN_UPTIME_FOR_SCHEDULED_RESTART) {
+            const currentHour = new Date().getHours();
+            if (currentHour === serverRestartHour) {
+                PlayerLog.info('Health: scheduled restart (hour=' + serverRestartHour + ')');
+                gracefulReload('scheduled');
+                return;
+            }
+        }
+    }
+
+    function gracefulReload(reason, retries) {
+        if (retries === undefined) retries = 0;
+        // Check if a crossfade is in flight
+        if (Object.keys(layerTxCleanup).length > 0 && retries < 5) {
+            setTimeout(function () { gracefulReload(reason, retries + 1); }, 1000);
+            return;
+        }
+        PlayerLog.info('Reloading player: ' + reason + (retries > 0 ? ' (waited ' + retries + 's for crossfade)' : ''));
+        location.reload();
+    }
+
     // --- Heartbeat ---
     function scheduleHeartbeat() {
         if (heartbeatTimer) clearInterval(heartbeatTimer);
@@ -1254,17 +1334,49 @@
     async function sendHeartbeat() {
         if (!deviceId) return;
         try {
-            await authFetch(apiUrl('/api/player/heartbeat'), {
+            const payload = {
+                device_id: deviceId,
+                player_time: new Date().toISOString(),
+                player_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                player_version: PLAYER_VERSION,
+                uptime_seconds: Math.round((Date.now() - startTime) / 1000),
+                dom_responsive: rafResponsive,
+            };
+
+            // Include memory telemetry if available
+            if (performance.memory) {
+                payload.js_heap_used_mb = Math.round(performance.memory.usedJSHeapSize / (1024 * 1024));
+                payload.js_heap_total_mb = Math.round(performance.memory.totalJSHeapSize / (1024 * 1024));
+            }
+
+            const resp = await authFetch(apiUrl('/api/player/heartbeat'), {
                 method: 'POST',
                 headers: authHeaders(),
-                body: JSON.stringify({
-                    device_id: deviceId,
-                    player_time: new Date().toISOString(),
-                    player_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                    player_version: PLAYER_VERSION,
-                    uptime_seconds: Math.round((Date.now() - startTime) / 1000),
-                }),
+                body: JSON.stringify(payload),
             });
+
+            // Process heartbeat response
+            if (resp.ok) {
+                const data = await resp.json();
+
+                // Server-requested restart
+                if (data.restart === true) {
+                    PlayerLog.info('Server requested player restart');
+                    gracefulReload('server-requested');
+                    return;
+                }
+
+                // Cache health settings
+                if (data.restart_hour !== undefined) {
+                    serverRestartHour = data.restart_hour;
+                    try { localStorage.setItem('tinysignage_restart_hour', String(data.restart_hour)); } catch { /* ok */ }
+                }
+                if (data.memory_limit_mb !== undefined && data.memory_limit_mb !== null) {
+                    serverMemoryLimitMb = data.memory_limit_mb;
+                    try { localStorage.setItem('tinysignage_memory_limit_mb', String(data.memory_limit_mb)); } catch { /* ok */ }
+                }
+            }
+
             // Upload player log alongside heartbeat (fire-and-forget)
             uploadPlayerLog();
         } catch (e) {

@@ -35,17 +35,39 @@ async def get_settings(
         "object_fit": settings.object_fit,
         "effect": settings.effect,
         "auto_add_to_playlist": settings.auto_add_to_playlist,
+        "player_restart_hour": settings.player_restart_hour,
+        "player_memory_limit_mb": settings.player_memory_limit_mb if settings.player_memory_limit_mb is not None else 200,
     }
 
 
 def _validate_settings(data: dict) -> dict:
     """Validate and coerce settings values. Returns cleaned dict."""
-    allowed = {"transition_duration", "transition_type", "default_duration", "shuffle", "object_fit", "effect", "auto_add_to_playlist"}
+    allowed = {"transition_duration", "transition_type", "default_duration", "shuffle", "object_fit", "effect", "auto_add_to_playlist", "player_restart_hour", "player_memory_limit_mb"}
     changes = {}
     for key, value in data.items():
         if key not in allowed:
             continue
-        if key == "effect":
+        if key == "player_restart_hour":
+            if value is not None:
+                try:
+                    value = int(value)
+                except (TypeError, ValueError):
+                    raise HTTPException(status_code=400, detail="player_restart_hour must be an integer 0-23 or null")
+                if value < 0 or value > 23:
+                    raise HTTPException(status_code=400, detail="player_restart_hour must be 0-23")
+            changes[key] = value
+            continue
+        elif key == "player_memory_limit_mb":
+            if value is not None:
+                try:
+                    value = int(value)
+                except (TypeError, ValueError):
+                    raise HTTPException(status_code=400, detail="player_memory_limit_mb must be a positive integer")
+                if value < 50:
+                    raise HTTPException(status_code=400, detail="player_memory_limit_mb must be at least 50")
+            changes[key] = value
+            continue
+        elif key == "effect":
             if not isinstance(value, str) or value not in VALID_EFFECTS:
                 raise HTTPException(
                     status_code=400,

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import generate_token, hash_token, require_admin, require_device, require_viewer
 from app.database import get_session
-from app.models import ApiToken, Device
+from app.models import ApiToken, Device, Settings
 
 router = APIRouter()
 
@@ -125,6 +125,14 @@ async def player_heartbeat(
         device.player_timezone = body["player_timezone"]
     if "storage_free_mb" in body:
         device.storage_free_mb = body["storage_free_mb"]
+    if "uptime_seconds" in body:
+        device.uptime_seconds = body["uptime_seconds"]
+    if "js_heap_used_mb" in body:
+        device.js_heap_used_mb = body["js_heap_used_mb"]
+    if "js_heap_total_mb" in body:
+        device.js_heap_total_mb = body["js_heap_total_mb"]
+    if "dom_responsive" in body:
+        device.dom_responsive = body["dom_responsive"]
 
     # Compute clock drift
     player_time_str = body.get("player_time")
@@ -138,8 +146,26 @@ async def player_heartbeat(
         except (ValueError, TypeError):
             pass
 
+    # Build response with restart flag and health settings
+    resp = {"status": "ok", "server_time": now.isoformat()}
+
+    if device.restart_requested:
+        resp["restart"] = True
+        device.restart_requested = False
+    else:
+        resp["restart"] = False
+
+    # Include player health settings from global Settings
+    settings = await session.get(Settings, 1)
+    if settings:
+        resp["restart_hour"] = settings.player_restart_hour
+        resp["memory_limit_mb"] = settings.player_memory_limit_mb if settings.player_memory_limit_mb is not None else 200
+    else:
+        resp["restart_hour"] = None
+        resp["memory_limit_mb"] = 200
+
     await session.commit()
-    return {"status": "ok", "server_time": now.isoformat()}
+    return resp
 
 
 @router.post("/devices/{device_id}/player-log")
@@ -306,6 +332,10 @@ async def health_dashboard(
             "ram_mb": d.ram_mb,
             "storage_total_mb": d.storage_total_mb,
             "storage_free_mb": d.storage_free_mb,
+            "js_heap_used_mb": d.js_heap_used_mb,
+            "js_heap_total_mb": d.js_heap_total_mb,
+            "dom_responsive": d.dom_responsive,
+            "uptime_seconds": d.uptime_seconds,
             "capabilities_updated_at": d.capabilities_updated_at.isoformat() if d.capabilities_updated_at else None,
             "warnings": warnings,
         }
@@ -372,5 +402,27 @@ def _compute_signals(device: Device, now: datetime) -> dict:
             signals["ram"] = {"level": "yellow", "message": f"Low RAM: {device.ram_mb} MB"}
     else:
         signals["ram"] = {"level": "yellow", "message": "RAM unknown"}
+
+    # JS Heap signal (memory_limit_mb defaults to 200 if not set)
+    memory_limit = 200
+    if device.js_heap_used_mb is not None:
+        pct = device.js_heap_used_mb / memory_limit if memory_limit > 0 else 0
+        if pct > 1.0:
+            signals["js_heap"] = {"level": "red", "message": f"JS heap {device.js_heap_used_mb} MB exceeds {memory_limit} MB limit"}
+        elif pct > 0.7:
+            signals["js_heap"] = {"level": "yellow", "message": f"JS heap {device.js_heap_used_mb} MB ({pct:.0%} of limit)"}
+        else:
+            signals["js_heap"] = {"level": "green", "message": ""}
+    else:
+        signals["js_heap"] = {"level": "yellow", "message": "JS heap unknown"}
+
+    # DOM responsiveness signal
+    if device.dom_responsive is not None:
+        if device.dom_responsive:
+            signals["responsiveness"] = {"level": "green", "message": ""}
+        else:
+            signals["responsiveness"] = {"level": "red", "message": "Player DOM unresponsive"}
+    else:
+        signals["responsiveness"] = {"level": "yellow", "message": "Responsiveness unknown"}
 
     return signals

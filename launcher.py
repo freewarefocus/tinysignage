@@ -56,6 +56,7 @@ def get_kiosk_flags(is_pi: bool = False) -> list[str]:
         "--disable-translate",
         "--disable-features=TranslateUI",
         "--autoplay-policy=no-user-gesture-required",
+        "--enable-precise-memory-info",
     ]
 
     if is_pi:

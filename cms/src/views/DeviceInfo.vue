@@ -177,11 +177,39 @@
                 {{ deviceHealth.clock_drift_seconds != null ? deviceHealth.clock_drift_seconds + 's' : '—' }}
               </span>
             </div>
+            <div class="health-item">
+              <span class="health-label">JS Heap</span>
+              <span :class="signalColor('js_heap')">
+                <template v-if="deviceHealth.js_heap_used_mb != null">
+                  {{ deviceHealth.js_heap_used_mb }} MB{{ deviceHealth.js_heap_total_mb != null ? ' / ' + deviceHealth.js_heap_total_mb + ' MB' : '' }}
+                </template>
+                <template v-else>—</template>
+              </span>
+            </div>
+            <div class="health-item">
+              <span class="health-label">Player Uptime</span>
+              <span>{{ formatUptime(deviceHealth.uptime_seconds) }}</span>
+            </div>
+            <div class="health-item">
+              <span class="health-label">DOM Responsive</span>
+              <span :class="signalColor('responsiveness')">
+                {{ deviceHealth.dom_responsive === true ? 'Yes' : deviceHealth.dom_responsive === false ? 'No' : '—' }}
+              </span>
+            </div>
             <div v-if="deviceHealth.warnings?.length" class="health-item full-width">
               <span class="health-label">Warnings</span>
               <span class="health-warnings">{{ deviceHealth.warnings.join(', ') }}</span>
             </div>
           </div>
+        </div>
+
+        <!-- Restart player -->
+        <div v-if="selectedDevice.status !== 'pending'" class="detail-section">
+          <button class="btn-restart" @click="restartPlayer" :disabled="restarting">
+            <i class="pi pi-refresh"></i>
+            {{ restarting ? 'Restart queued...' : 'Restart Player' }}
+          </button>
+          <span class="hint-text">Reloads the player browser on next heartbeat (up to 60s)</span>
         </div>
 
         <!-- Delete -->
@@ -314,14 +342,17 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { useToast } from 'primevue/usetoast'
 import { api } from '../api/client.js'
 import { relativeTime, parseUTC } from '../utils/date.js'
 
+const toast = useToast()
 const devices = ref([])
 const playlists = ref([])
 const layouts = ref([])
 const loading = ref(true)
 const lastRefresh = ref(null)
+const restarting = ref(false)
 let refreshInterval = null
 
 // Health dashboard data
@@ -559,6 +590,27 @@ async function downloadBrightSignBundle() {
   } catch (err) {
     console.error('[DeviceInfo] BrightSign bundle download failed:', err)
   }
+}
+
+async function restartPlayer() {
+  if (!selectedDevice.value) return
+  restarting.value = true
+  try {
+    await api.post(`/devices/${selectedDevice.value.id}/restart`)
+    toast.add({ severity: 'success', summary: 'Restart Queued', detail: 'Player will restart on next heartbeat (up to 60s).', life: 5000 })
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Restart Failed', detail: err.message, life: 5000 })
+  } finally {
+    setTimeout(() => { restarting.value = false }, 3000)
+  }
+}
+
+function formatUptime(seconds) {
+  if (seconds == null) return '—'
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (h > 0) return h + 'h ' + m + 'm'
+  return m + 'm'
 }
 
 async function assignLayout() {
@@ -978,6 +1030,31 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
   font-size: 0.75rem;
   min-width: 60px;
   color: #888;
+}
+
+/* Restart */
+.btn-restart {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #2a3a5a;
+  color: #8ac;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s;
+}
+
+.btn-restart:hover { background: #3a4a6a; }
+.btn-restart:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.hint-text {
+  display: block;
+  font-size: 0.75rem;
+  color: #777;
+  margin-top: 0.3rem;
 }
 
 /* Delete */

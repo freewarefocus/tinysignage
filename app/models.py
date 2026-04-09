@@ -66,6 +66,8 @@ class Settings(Base):
     object_fit: Mapped[str] = mapped_column(String(20), default="contain", server_default="contain")
     auto_add_to_playlist: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     effect: Mapped[str] = mapped_column(String(20), default="none", server_default="none")
+    player_restart_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    player_memory_limit_mb: Mapped[int | None] = mapped_column(Integer, nullable=True, server_default="200")
 
 
 class Layout(Base):
@@ -151,6 +153,11 @@ class Device(Base):
     capabilities_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     player_log: Mapped[str | None] = mapped_column(Text, nullable=True)
     player_log_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    uptime_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    js_heap_used_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    js_heap_total_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    dom_responsive: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    restart_requested: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     registration_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     registration_expires: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

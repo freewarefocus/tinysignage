@@ -242,6 +242,25 @@ async def reject_device(
     return {"ok": True}
 
 
+@router.post("/devices/{device_id}/restart")
+async def restart_device(
+    device_id: str,
+    request: Request,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    """Admin-only: queue a remote restart for a device's player."""
+    device = await session.get(Device, device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    device.restart_requested = True
+    await audit(session, action="restart", entity_type="device", entity_id=device_id,
+                details={"name": device.name}, token=_admin, request=request)
+    await session.commit()
+    return {"ok": True, "message": "Restart queued — takes effect on next heartbeat (up to 60s)"}
+
+
 @router.get("/devices/{device_id}/playlist")
 async def get_device_playlist(
     device_id: str,

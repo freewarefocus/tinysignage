@@ -54,6 +54,27 @@
 
     <hr class="section-divider" />
 
+    <h3>Player Health</h3>
+    <p class="section-desc">Automatic recovery settings for player devices. Changes apply on the next heartbeat.</p>
+
+    <div v-if="settings" class="settings-form">
+      <div class="form-group">
+        <label>Scheduled Daily Restart</label>
+        <select v-model="settings.player_restart_hour" @change="saveSettings">
+          <option :value="null">Disabled</option>
+          <option v-for="h in 24" :key="h - 1" :value="h - 1">{{ (h - 1).toString().padStart(2, '0') }}:00</option>
+        </select>
+        <span class="hint-text">Restart all players once a day at this hour to reclaim memory. Requires at least 1 hour uptime.</span>
+      </div>
+      <div class="form-group">
+        <label>Memory Limit (MB)</label>
+        <input type="number" v-model.number="settings.player_memory_limit_mb" min="50" step="50" @change="saveSettings" />
+        <span class="hint-text">When a player's JavaScript heap exceeds this, it automatically reloads. Default: 200 MB.</span>
+      </div>
+    </div>
+
+    <hr class="section-divider" />
+
     <h3>Network &amp; Security</h3>
     <p class="section-desc">How the CMS and players connect to this server. To change these, edit <code>config.yaml</code> and restart.</p>
 
