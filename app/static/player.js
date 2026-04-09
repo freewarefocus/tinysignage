@@ -1513,7 +1513,9 @@
             reported_at: new Date().toISOString(),
             software: {
                 player_version: PLAYER_VERSION,
-                player_type: /BrightSign/i.test(navigator.userAgent) ? 'brightsign' : 'browser',
+                player_type: /BrightSign/i.test(navigator.userAgent) ? 'brightsign'
+                           : /TinySignageApp/i.test(navigator.userAgent) ? 'android'
+                           : 'browser',
                 user_agent: navigator.userAgent,
             },
             display: {
