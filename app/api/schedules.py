@@ -300,7 +300,7 @@ async def preview_schedule_timeline(
         except ValueError:
             raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
     else:
-        target_date = datetime.now(timezone.utc).replace(tzinfo=None)
+        target_date = datetime.now()
     target_date = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Get device's group memberships
@@ -562,12 +562,12 @@ async def evaluate_schedule_for_device(
     Returns (playlist_id, transition_playlist_id) from the winning schedule,
     or (None, None) if no schedule applies.
 
-    NOTE: Time-of-day checks use UTC. This is correct for single-timezone
-    deployments where the server and admin share the same timezone. For
-    multi-timezone support, each schedule would need a timezone field and
-    conversion logic — deferred to a future session.
+    NOTE: Time-of-day checks use server local time, matching the times
+    admins enter in the CMS (which has no timezone handling). This is correct
+    for single-timezone deployments. For multi-timezone support, each schedule
+    would need a timezone field and conversion logic — deferred to a future session.
     """
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now()
     current_time = now.strftime("%H:%M")
     current_day = str(now.weekday())  # 0=Mon..6=Sun
 
