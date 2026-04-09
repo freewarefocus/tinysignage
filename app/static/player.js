@@ -110,6 +110,11 @@
     // --- State ---
     let currentLayer = 'a';
     let currentTransitionType = 'fade';
+    // Per-layer in-flight transition cleanup state — lets cleanupLayer()
+    // cancel a pending transitionend listener + fallback timer when a new
+    // loadAsset() is called on a layer that is still mid-fade (e.g. because
+    // a trigger fired mid-transition). Keys are layer element ids.
+    const layerTxCleanup = {};  // { 'layer-a': { el, listener, fallbackTimer }, ... }
     let playlist = [];                // Active playlist items (main/fallback)
     let playlistHash = '';
     let currentIndex = -1;
@@ -1131,7 +1136,15 @@
                 cleanupLayer(outLayer);
             };
             outLayer.addEventListener('transitionend', cleanSlide);
-            setTimeout(cleanSlide, (duration + 0.5) * 1000);
+            const slideFallbackTimer = setTimeout(() => {
+                cleanSlide();
+                delete layerTxCleanup[outLayer.id];
+            }, (duration + 0.5) * 1000);
+            layerTxCleanup[outLayer.id] = {
+                el: outLayer,
+                listener: cleanSlide,
+                fallbackTimer: slideFallbackTimer,
+            };
         } else {
             if (txDuration != null) {
                 inLayer.style.transitionDuration = txDuration + 's';
@@ -1153,12 +1166,18 @@
                     getComputedStyle(document.documentElement)
                         .getPropertyValue('--transition-duration')
                 ) || 1);
-            setTimeout(() => {
+            const fadeFallbackTimer = setTimeout(() => {
                 outLayer.removeEventListener('transitionend', onTransitionEnd);
                 cleanupLayer(outLayer);
                 inLayer.style.transitionDuration = '';
                 outLayer.style.transitionDuration = '';
+                delete layerTxCleanup[outLayer.id];
             }, (duration + 0.5) * 1000);
+            layerTxCleanup[outLayer.id] = {
+                el: outLayer,
+                listener: onTransitionEnd,
+                fallbackTimer: fadeFallbackTimer,
+            };
         }
 
         currentLayer = newCurrentId;
@@ -1184,6 +1203,23 @@
         if (iframe) {
             iframe.onload = null;
         }
+        // Cancel any in-flight transition cleanup on this layer so a stale
+        // transitionend (or fallback timer) from a previous crossfade cannot
+        // fire after we have appended the next slide's element — the race
+        // that caused blank-first-slide when a trigger fired mid-fade.
+        const pending = layerTxCleanup[layer.id];
+        if (pending) {
+            layer.removeEventListener('transitionend', pending.listener);
+            clearTimeout(pending.fallbackTimer);
+            delete layerTxCleanup[layer.id];
+        }
+        // Reset inline transition state so a follow-up doTransition starts clean.
+        // .active is intentionally NOT stripped — doTransition owns that class
+        // and removing it here would visually blink the current content.
+        layer.style.transitionDuration = '';
+        layer.style.removeProperty('--transition-duration');
+        layer.style.transform = '';
+        layer.classList.remove('slide-transition', 'slide-in', 'slide-out', 'slide-ready');
         layer.innerHTML = '';
     }
 
@@ -1626,15 +1662,6 @@
         cancelPlayback();
 
         if (playlist.length > 0) {
-            // Prime the browser cache for slide 0 so loadAsset is nearly
-            // instant — otherwise the duration timer started inside
-            // playCurrentAsset can race ahead of the network fetch+fade
-            // and slide 0 visually flashes or is skipped on a Pi.
-            const firstAsset = playlist[0]?.asset;
-            if (firstAsset && firstAsset.asset_type === 'image' && firstAsset.uri) {
-                const primer = new Image();
-                primer.src = `${baseUrl}/media/${firstAsset.uri}`;
-            }
             preloadAssets();
             playCurrentAsset();
         } else {
