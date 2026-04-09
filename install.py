@@ -122,7 +122,7 @@ def _build_player_unit(lite, standalone, install_dir, user):
             ExecStartPre=/bin/sleep 5
             ExecStart=/usr/bin/cage -d -s -- {python_bin} {install_dir}/launcher.py
             WatchdogSec=120
-            MemoryMax=768M
+            MemoryMax=1024M
             Restart=on-failure
             RestartSec=10
 
@@ -148,7 +148,7 @@ def _build_player_unit(lite, standalone, install_dir, user):
             Environment=XCURSOR_SIZE=1
             ExecStartPre=/bin/sleep 5
             ExecStart={python_bin} {install_dir}/launcher.py
-            MemoryMax=768M
+            MemoryMax=1024M
             Restart=on-failure
             RestartSec=10
 
