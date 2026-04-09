@@ -24,6 +24,7 @@
       <div v-for="u in uploads" :key="u.name" class="upload-item">
         <span class="upload-name">{{ u.name }}</span>
         <div v-if="u.error" class="upload-error">{{ u.error }}</div>
+        <div v-else-if="u.status === 'processing'" class="upload-processing">Processing...</div>
         <div v-else class="upload-bar">
           <div class="upload-progress" :style="{ width: u.progress + '%' }"></div>
         </div>
@@ -33,7 +34,7 @@
 </template>
 
 <script setup>
-import { ref, toRaw } from 'vue'
+import { ref } from 'vue'
 
 const emit = defineEmits(['uploaded'])
 const dragover = ref(false)
@@ -55,8 +56,8 @@ function onFileSelect(e) {
 
 async function uploadFiles(files) {
   for (const file of files) {
-    const entry = { name: file.name, progress: 0, error: null }
-    uploads.value.push(entry)
+    uploads.value.push({ name: file.name, progress: 0, error: null, status: 'uploading' })
+    const entry = uploads.value[uploads.value.length - 1]
 
     const formData = new FormData()
     formData.append('file', file)
@@ -66,11 +67,14 @@ async function uploadFiles(files) {
       const xhr = new XMLHttpRequest()
       await new Promise((resolve, reject) => {
         xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) entry.progress = Math.round((e.loaded / e.total) * 100)
+          if (e.lengthComputable) {
+            entry.progress = Math.round((e.loaded / e.total) * 100)
+            if (entry.progress >= 100) entry.status = 'processing'
+          }
         })
         xhr.addEventListener('load', () => {
           if (xhr.status >= 200 && xhr.status < 300) {
-            entry.progress = 100
+            entry.status = 'done'
             resolve()
           } else {
             let detail = ''
@@ -91,7 +95,7 @@ async function uploadFiles(files) {
 
     // Keep failed entries visible longer so the user sees the error
     setTimeout(() => {
-      uploads.value = uploads.value.filter((u) => toRaw(u) !== entry)
+      uploads.value = uploads.value.filter((u) => u !== entry)
     }, entry.error ? 5000 : 1500)
   }
   emit('uploaded')
@@ -157,6 +161,18 @@ async function uploadFiles(files) {
   height: 100%;
   background: #7c83ff;
   transition: width 0.2s;
+}
+
+.upload-processing {
+  font-size: 0.8rem;
+  color: #7c83ff;
+  margin-top: 3px;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .upload-error {
