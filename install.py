@@ -1073,6 +1073,10 @@ def generate_config_env(install_dir):
     info("Generated config.env with SECRET_KEY")
 
 
+_GIT_SAFE_MODIFIED = {"config.yaml"}
+_INSTANCE_CONFIG_KEYS = ("device_id", "server_url", "display_name")
+
+
 def _yaml_quote(value):
     """Quote a value for safe YAML serialization (stdlib only)."""
     s = str(value)
@@ -1081,6 +1085,49 @@ def _yaml_quote(value):
 
 def _indent_of(line):
     return len(line) - len(line.lstrip(" "))
+
+
+def _read_yaml_values(config_path, keys):
+    """Read top-level scalar values from a YAML file (stdlib only).
+
+    Returns {key: value} for only the keys present in *keys* that exist
+    in the file.  Handles bare, single-quoted, and double-quoted values.
+    """
+    result = {}
+    try:
+        with open(config_path) as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                # Only top-level keys (no leading whitespace).
+                if line[0] in (" ", "\t"):
+                    continue
+                colon = stripped.find(":")
+                if colon < 0:
+                    continue
+                key = stripped[:colon].strip()
+                if key not in keys:
+                    continue
+                raw = stripped[colon + 1:].strip()
+                # Strip inline comments (outside quotes).
+                if raw.startswith("'"):
+                    end = raw.find("'", 1)
+                    if end > 0:
+                        raw = raw[1:end].replace("''", "'")
+                elif raw.startswith('"'):
+                    end = raw.find('"', 1)
+                    if end > 0:
+                        raw = raw[1:end]
+                else:
+                    # Bare value — strip inline comment.
+                    if " #" in raw:
+                        raw = raw[:raw.index(" #")].rstrip()
+                if raw:
+                    result[key] = raw
+    except FileNotFoundError:
+        pass
+    return result
 
 
 def _update_yaml_file(config_path, **updates):
@@ -1408,13 +1455,35 @@ def git_pull_install_dir(install_dir, runner):
     remote_url = (r.stdout.strip() if r and r.returncode == 0 else "")
     is_ssh = remote_url.startswith("git@") or remote_url.startswith("ssh://")
 
-    # Refuse to clobber local modifications.
+    # Check for local modifications — save/restore known-safe files.
+    saved_values = {}
+    config_path = os.path.join(install_dir, "config.yaml")
     r = runner(["git", "status", "--porcelain"],
                cwd=install_dir, capture=True, check=False)
     if r and r.returncode == 0 and r.stdout.strip():
-        warn("Local modifications present in install directory — "
-             "skipping git pull. Run 'git status' in the install dir to inspect.")
-        return False
+        # Parse modified filenames from porcelain output (e.g. " M config.yaml").
+        modified = set()
+        for line in r.stdout.strip().splitlines():
+            # Porcelain format: XY <space> filename
+            fname = line[3:].strip()
+            modified.add(fname)
+        safe = modified & _GIT_SAFE_MODIFIED
+        unexpected = modified - _GIT_SAFE_MODIFIED
+        if unexpected:
+            flist = ", ".join(sorted(unexpected))
+            warn(f"Unexpected local modifications — skipping git pull: {flist}\n"
+                 "Commit or stash these changes, then re-run the update.")
+            return False
+        # Only safe files modified — save instance values, then checkout.
+        if "config.yaml" in safe:
+            saved_values = _read_yaml_values(config_path, _INSTANCE_CONFIG_KEYS)
+            r = runner(["git", "checkout", "--", "config.yaml"],
+                       cwd=install_dir, capture=True, check=False)
+            if not r or r.returncode != 0:
+                warn("Could not reset config.yaml — skipping git pull.")
+                if saved_values:
+                    _update_yaml_file(config_path, **saved_values)
+                return False
 
     # Capture HEAD before.
     r = runner(["git", "rev-parse", "--short", "HEAD"],
@@ -1435,7 +1504,13 @@ def git_pull_install_dir(install_dir, runner):
                 "    https://github.com/<owner>/<repo>.git\n"
                 "Then re-run the update."
             )
+        if saved_values:
+            _update_yaml_file(config_path, **saved_values)
         return False
+
+    # Restore instance-specific config values after successful pull.
+    if saved_values:
+        _update_yaml_file(config_path, **saved_values)
 
     # Capture HEAD after.
     r = runner(["git", "rev-parse", "--short", "HEAD"],
