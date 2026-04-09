@@ -33,11 +33,11 @@ cd android
 
 # Debug build (for testing)
 ./gradlew assembleDebug
-# Output: app/build/outputs/apk/debug/app-debug.apk
+# Output: app/build/outputs/apk/debug/tinysignage.apk
 
 # Release build (unsigned)
 ./gradlew assembleRelease
-# Output: app/build/outputs/apk/release/app-release-unsigned.apk
+# Output: app/build/outputs/apk/release/tinysignage.apk
 ```
 
 ## Sign a release APK
@@ -49,14 +49,14 @@ keytool -genkey -v -keystore tinysignage.keystore -alias tinysignage \
 
 # Sign the APK
 apksigner sign --ks tinysignage.keystore --ks-key-alias tinysignage \
-  app/build/outputs/apk/release/app-release-unsigned.apk
+  app/build/outputs/apk/release/tinysignage.apk
 ```
 
 ## Install on device
 
 ```bash
 # Via USB with ADB
-adb install app/build/outputs/apk/debug/app-debug.apk
+adb install app/build/outputs/apk/debug/tinysignage.apk
 
 # Or transfer the APK file to the device and open it
 ```
@@ -81,10 +81,4 @@ The WebView is configured with:
 
 ## Optional: Full kiosk lockdown
 
-For unattended displays, you can set the app as device owner to prevent users from exiting:
-
-```bash
-adb shell dpm set-device-owner com.tinysignage.player/.BootReceiver
-```
-
-This is optional and not needed for basic operation.
+For unattended displays, you can use Android's screen pinning (Settings → Security → Screen pinning) to lock the device to TinySignage. For enterprise deployments, consider an MDM solution or a dedicated kiosk launcher app.

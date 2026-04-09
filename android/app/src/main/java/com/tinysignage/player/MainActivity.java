@@ -120,7 +120,8 @@ public class MainActivity extends AppCompatActivity {
             int width = getWindow().getDecorView().getWidth();
 
             // Check if tap is in top-right corner
-            if (x > width * (1 - TAP_ZONE_FRACTION) && y < width * TAP_ZONE_FRACTION) {
+            int height = getWindow().getDecorView().getHeight();
+            if (x > width * (1 - TAP_ZONE_FRACTION) && y < height * TAP_ZONE_FRACTION) {
                 long now = System.currentTimeMillis();
                 if (now - lastTapTime > TAP_WINDOW_MS) {
                     tapCount = 0;

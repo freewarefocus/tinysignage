@@ -1,5 +1,6 @@
 package com.tinysignage.player;
 
+import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -16,6 +17,14 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
+
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * First-run setup screen. User enters their TinySignage server URL,
@@ -93,6 +102,28 @@ public class SetupActivity extends AppCompatActivity {
         validateServer(url);
     }
 
+    /**
+     * Returns an SSLSocketFactory that accepts all certificates,
+     * needed for validating self-signed TinySignage servers during setup.
+     */
+    @SuppressLint("TrustAllX509TrustManager")
+    private SSLSocketFactory getTrustAllSocketFactory() {
+        try {
+            TrustManager[] trustAll = new TrustManager[]{
+                    new X509TrustManager() {
+                        public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                        public void checkClientTrusted(X509Certificate[] certs, String authType) {}
+                        public void checkServerTrusted(X509Certificate[] certs, String authType) {}
+                    }
+            };
+            SSLContext sc = SSLContext.getInstance("TLS");
+            sc.init(null, trustAll, new SecureRandom());
+            return sc.getSocketFactory();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private void validateServer(String baseUrl) {
         setLoading(true);
         hideError();
@@ -102,6 +133,17 @@ public class SetupActivity extends AppCompatActivity {
         new Thread(() -> {
             try {
                 HttpURLConnection conn = (HttpURLConnection) new URL(healthUrl).openConnection();
+
+                // Accept self-signed certs for HTTPS servers
+                if (conn instanceof HttpsURLConnection) {
+                    HttpsURLConnection httpsConn = (HttpsURLConnection) conn;
+                    SSLSocketFactory sf = getTrustAllSocketFactory();
+                    if (sf != null) {
+                        httpsConn.setSSLSocketFactory(sf);
+                        httpsConn.setHostnameVerifier((hostname, session) -> true);
+                    }
+                }
+
                 conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
                 conn.setReadTimeout(READ_TIMEOUT_MS);
                 conn.setRequestMethod("GET");
