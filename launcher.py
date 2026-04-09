@@ -76,9 +76,27 @@ def find_browser_engine(browser_config: str) -> tuple[str | None, str]:
     return (browser, "chromium") if browser else (None, "chromium")
 
 
+def _cog_platform() -> str:
+    """Pick the right cog platform backend for the current session.
+
+    - Lite (no display server): DRM/KMS — cog composites directly on the GPU.
+    - Desktop with Wayland compositor (labwc, wayfire): wl — cog runs as a
+      Wayland client inside the existing session.
+    - Desktop with X11: gtk4 — cog runs as an X11/GTK window.  (Rare on
+      modern Pi OS, but possible.)
+    - Unknown / no session type: DRM as a safe default (works headless too).
+    """
+    session = os.environ.get("XDG_SESSION_TYPE", "").lower()
+    if session == "wayland":
+        return "wl"
+    if session == "x11":
+        return "gtk4"
+    return "drm"
+
+
 def get_cog_args(url: str) -> list[str]:
-    """Build the cog command line. cog does its own DRM/KMS compositing."""
-    return ["cog", "--platform=drm", url]
+    """Build the cog command line with the correct platform backend."""
+    return ["cog", f"--platform={_cog_platform()}", url]
 
 
 def get_kiosk_flags(is_pi: bool = False) -> list[str]:
