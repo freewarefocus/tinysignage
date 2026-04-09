@@ -240,6 +240,7 @@ def _build_cog_env() -> dict[str, str]:
     env["XDG_DATA_HOME"] = str(WPE_PROFILE_DIR)
     env["XDG_CACHE_HOME"] = PI_DISK_CACHE_DIR
     env["COG_PLATFORM_DRM_CURSOR_DISABLED"] = "1"
+    env["COG_PLATFORM_WL_VIEW_FULLSCREEN"] = "1"
     env["WPE_WEBKIT_DISABLE_SANDBOX"] = "1"
     return env
 
