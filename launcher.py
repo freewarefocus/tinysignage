@@ -14,9 +14,10 @@ import yaml
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 BROWSER_PROFILE_DIR = SCRIPT_DIR / "data" / "browser-profile"
-# Real, writable tmpfs path for Chromium's disk cache on Pi.
+WPE_PROFILE_DIR = SCRIPT_DIR / "data" / "wpe-profile"
+# Real, writable tmpfs path for browser disk cache on Pi.
 # /tmp is tmpfs on Pi OS, so this still avoids SD-card wear, but unlike
-# /dev/null it is an actual directory Chromium can mkdir into.
+# /dev/null it is an actual directory the browser can mkdir into.
 PI_DISK_CACHE_DIR = "/tmp/tinysignage-cache"
 
 
@@ -44,6 +45,40 @@ def find_browser() -> str | None:
         if Path(candidate).exists() or shutil.which(candidate):
             return candidate
     return None
+
+
+def find_browser_engine(browser_config: str) -> tuple[str | None, str]:
+    """Return (binary, engine_type) based on config and what's installed.
+
+    browser_config values:
+      "auto"     — prefer cog on Linux, fall back to chromium
+      "cog"      — force cog (error if missing)
+      "chromium" — force chromium (existing behavior)
+      "/path"    — explicit binary path (treated as chromium engine)
+    """
+    if browser_config == "cog":
+        cog = shutil.which("cog")
+        if cog:
+            return (cog, "cog")
+        return (None, "cog")
+
+    if browser_config == "auto" and platform.system() == "Linux":
+        cog = shutil.which("cog")
+        if cog:
+            return (cog, "cog")
+
+    # Fall through to chromium detection
+    if browser_config not in ("auto", "chromium", "cog"):
+        # Explicit path — treat as chromium engine
+        return (browser_config, "chromium")
+
+    browser = find_browser()
+    return (browser, "chromium") if browser else (None, "chromium")
+
+
+def get_cog_args(url: str) -> list[str]:
+    """Build the cog command line. cog does its own DRM/KMS compositing."""
+    return ["cog", "--platform=drm", url]
 
 
 def get_kiosk_flags(is_pi: bool = False) -> list[str]:
@@ -177,6 +212,22 @@ def _compute_https_kiosk_flags(config: dict, server_url: str) -> list[str]:
     return ["--ignore-certificate-errors", "--test-type"]
 
 
+def _build_cog_env(config: dict, server_url: str) -> dict[str, str]:
+    """Build environment variables for cog/WPE launch."""
+    env = os.environ.copy()
+    env["XDG_DATA_HOME"] = str(WPE_PROFILE_DIR)
+    env["XDG_CACHE_HOME"] = PI_DISK_CACHE_DIR
+    env["COG_PLATFORM_DRM_CURSOR_DISABLED"] = "1"
+    env["WPE_WEBKIT_DISABLE_SANDBOX"] = "1"
+
+    # Accept self-signed certs when HTTPS is in use
+    parsed = urllib.parse.urlparse(server_url)
+    if parsed.scheme.lower() == "https":
+        env["WEBKIT_TLS_ERRORS_POLICY"] = "ignore"
+
+    return env
+
+
 def launch(config_path: str | None = None):
     # Resolve config.yaml relative to this script so the launcher works
     # regardless of the caller's cwd. XDG autostart fires with cwd=$HOME,
@@ -186,13 +237,11 @@ def launch(config_path: str | None = None):
     browser_config = config.get("player", {}).get("browser", "auto")
     kiosk = config.get("player", {}).get("kiosk", True)
 
-    if browser_config != "auto":
-        browser = browser_config
-    else:
-        browser = find_browser()
+    browser, engine = find_browser_engine(browser_config)
 
     if not browser:
-        print("ERROR: No Chromium-based browser found.")
+        engine_label = "cog (WPE WebKit)" if engine == "cog" else "Chromium-based browser"
+        print(f"ERROR: No {engine_label} found.")
         return
 
     # Use server_url if set, otherwise fall back to localhost
@@ -207,42 +256,58 @@ def launch(config_path: str | None = None):
     url = f"{server_url}/player"
     is_pi = Path("/proc/device-tree/model").exists()  # Rough Pi detection
 
-    if is_pi:
-        _ensure_pi_cache_dir()
-
-    args = [browser]
-    if kiosk:
-        args.extend(get_kiosk_flags(is_pi))
-    args.extend(_compute_https_kiosk_flags(config, server_url))
-    args.append(f"--user-data-dir={BROWSER_PROFILE_DIR}")
-    args.append(url)
-
     # Wait for the backend to be reachable before launching the kiosk.
-    # Avoids the cold-boot race where chromium loads its connection-error
+    # Avoids the cold-boot race where the browser loads its connection-error
     # page because signage-app.service hasn't bound :8080 yet.
     print(f"Waiting for {url} to become ready...")
     _wait_for_url(url)
 
-    print(f"Launching: {' '.join(args)}")
-
-    if platform.system() == "Linux":
-        # Replace this process with the browser — lets systemd (and cage)
-        # track the browser directly for restart/lifecycle management
-        os.execvp(args[0], args)
+    if engine == "cog":
+        # WPE WebKit via cog — does its own DRM/KMS compositing
+        os.makedirs(WPE_PROFILE_DIR, exist_ok=True)
+        os.makedirs(PI_DISK_CACHE_DIR, exist_ok=True)
+        env = _build_cog_env(config, server_url)
+        args = get_cog_args(url)
+        print(f"Launching (cog/WPE): {' '.join(args)}")
+        os.execvpe(args[0], args, env)
     else:
-        subprocess.Popen(args)
+        # Chromium path — existing behavior
+        if is_pi:
+            _ensure_pi_cache_dir()
+
+        args = [browser]
+        if kiosk:
+            args.extend(get_kiosk_flags(is_pi))
+        args.extend(_compute_https_kiosk_flags(config, server_url))
+        args.append(f"--user-data-dir={BROWSER_PROFILE_DIR}")
+        args.append(url)
+
+        print(f"Launching: {' '.join(args)}")
+
+        if platform.system() == "Linux":
+            # Replace this process with the browser — lets systemd (and cage)
+            # track the browser directly for restart/lifecycle management
+            os.execvp(args[0], args)
+        else:
+            subprocess.Popen(args)
 
 
 def reset_browser_profile():
-    """Delete the browser profile to force re-registration."""
-    if BROWSER_PROFILE_DIR.exists():
-        try:
-            shutil.rmtree(BROWSER_PROFILE_DIR)
-        except PermissionError:
-            print(f"ERROR: Could not delete {BROWSER_PROFILE_DIR}")
-            print("Close the browser first, then try again.")
-            sys.exit(1)
-        print(f"Player registration cleared: {BROWSER_PROFILE_DIR}")
+    """Delete browser profiles (Chromium and WPE) to force re-registration."""
+    cleared = False
+    for profile_dir in (BROWSER_PROFILE_DIR, WPE_PROFILE_DIR):
+        if profile_dir.exists():
+            try:
+                shutil.rmtree(profile_dir)
+            except PermissionError:
+                print(f"ERROR: Could not delete {profile_dir}")
+                print("Close the browser first, then try again.")
+                sys.exit(1)
+            print(f"Cleared: {profile_dir}")
+            cleared = True
+
+    if cleared:
+        print("Player registration cleared.")
         print("The player will show the registration screen on next launch.")
     else:
         print("No browser profile found. Nothing to reset.")

@@ -1515,6 +1515,7 @@
                 player_version: PLAYER_VERSION,
                 player_type: /BrightSign/i.test(navigator.userAgent) ? 'brightsign'
                            : /TinySignageApp/i.test(navigator.userAgent) ? 'android'
+                           : /WPE/i.test(navigator.userAgent) ? 'wpe'
                            : 'browser',
                 user_agent: navigator.userAgent,
             },
