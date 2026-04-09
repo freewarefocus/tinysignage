@@ -1541,11 +1541,29 @@
                 const est = await navigator.storage.estimate();
                 const quotaMb = Math.round((est.quota || 0) / (1024 * 1024));
                 const usageMb = Math.round((est.usage || 0) / (1024 * 1024));
-                payload.hardware.storage_total_mb = quotaMb;
-                payload.hardware.storage_free_mb = quotaMb - usageMb;
-                payload.hardware.browser_storage_quota_mb = quotaMb;
-                payload.hardware.browser_storage_usage_mb = usageMb;
+                if (quotaMb > 0) {
+                    payload.hardware.storage_total_mb = quotaMb;
+                    payload.hardware.storage_free_mb = quotaMb - usageMb;
+                    payload.hardware.browser_storage_quota_mb = quotaMb;
+                    payload.hardware.browser_storage_usage_mb = usageMb;
+                }
             } catch (e) { PlayerLog.warn('Storage quota check failed: ' + e.message); }
+        }
+
+        // Server-side hardware fallback for WPE and other non-Chromium browsers
+        if (payload.hardware.ram_mb == null || payload.hardware.storage_total_mb == null) {
+            try {
+                const hwResp = await authFetch(apiUrl('/api/player/hardware'));
+                if (hwResp.ok) {
+                    const hw = await hwResp.json();
+                    if (payload.hardware.ram_mb == null && hw.ram_total_mb != null)
+                        payload.hardware.ram_mb = hw.ram_total_mb;
+                    if (payload.hardware.storage_total_mb == null && hw.disk_total_mb != null) {
+                        payload.hardware.storage_total_mb = hw.disk_total_mb;
+                        payload.hardware.storage_free_mb = hw.disk_free_mb;
+                    }
+                }
+            } catch (e) { PlayerLog.warn('Server hardware fallback failed: ' + e.message); }
         }
 
         return payload;

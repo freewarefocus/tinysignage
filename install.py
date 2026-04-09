@@ -1039,6 +1039,16 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
         except (ImportError, KeyError):
             pass
 
+    # Configure labwc rc.xml for cursor hiding (higher authority than env vars)
+    if mode in ("both", "player") and not lite and shutil.which("labwc"):
+        try:
+            import pwd
+            desktop_user = detect_desktop_user()
+            pw = pwd.getpwnam(desktop_user)
+            _configure_labwc_rc_xml(pw.pw_dir, pw.pw_uid, pw.pw_gid)
+        except (ImportError, KeyError):
+            pass
+
     # --- [6] Boot config (GPU memory + hardware watchdog) ---
     step(6, total, "Configuring boot settings...")
     config_file = find_boot_config()
@@ -1704,6 +1714,16 @@ def do_update(plat, install_dir, skip_pull=False):
         except (ImportError, KeyError):
             pass
 
+        # Self-heal: apply labwc rc.xml cursor config to existing installs
+        if shutil.which("labwc"):
+            try:
+                import pwd
+                du = detect_desktop_user()
+                pw = pwd.getpwnam(du)
+                _configure_labwc_rc_xml(pw.pw_dir, pw.pw_uid, pw.pw_gid)
+            except (ImportError, KeyError):
+                pass
+
         # Pi OS Desktop player is launched via XDG autostart, so there is
         # no "service" to restart — killing chromium mid-session would
         # briefly flash the desktop. Tell the user to reboot instead.
@@ -1786,6 +1806,91 @@ def _stop_and_remove_system_unit(name):
     run_cmd(["systemctl", "disable", name], check=False)
     _remove_path(unit_file, label=f"{name}.service")
     return True
+
+
+def _configure_labwc_rc_xml(home_dir, uid, gid):
+    """Configure labwc rc.xml to hide the cursor via <cursor> element.
+
+    labwc reads cursor theme config from rc.xml with higher authority than
+    environment variables.  This creates or updates the <cursor> block so
+    the Wayland cursor is truly hidden when running cog/WPE.
+    """
+    import xml.etree.ElementTree as ET
+
+    labwc_dir = os.path.join(home_dir, ".config", "labwc")
+    rc_path = os.path.join(labwc_dir, "rc.xml")
+
+    try:
+        os.makedirs(labwc_dir, exist_ok=True)
+        if os.path.isfile(rc_path):
+            try:
+                tree = ET.parse(rc_path)
+                root = tree.getroot()
+            except ET.ParseError as e:
+                warn(f"Could not parse {rc_path}: {e} — skipping rc.xml cursor config")
+                return
+        else:
+            root = ET.Element("labwc_config")
+            tree = ET.ElementTree(root)
+
+        # Find or create <cursor> child of root
+        cursor_el = root.find("cursor")
+        if cursor_el is None:
+            cursor_el = ET.SubElement(root, "cursor")
+
+        # Set <theme> and <size> sub-elements
+        theme_el = cursor_el.find("theme")
+        if theme_el is None:
+            theme_el = ET.SubElement(cursor_el, "theme")
+        theme_el.text = "hidden"
+
+        size_el = cursor_el.find("size")
+        if size_el is None:
+            size_el = ET.SubElement(cursor_el, "size")
+        size_el.text = "1"
+
+        ET.indent(tree, space="  ")
+        tree.write(rc_path, xml_declaration=True, encoding="UTF-8")
+
+        try:
+            os.chown(labwc_dir, uid, gid)
+        except OSError:
+            pass
+        try:
+            os.chown(rc_path, uid, gid)
+        except OSError:
+            pass
+        info("labwc rc.xml cursor hiding configured")
+    except Exception as e:
+        warn(f"Could not configure labwc rc.xml: {e}")
+
+
+def _strip_labwc_cursor_from_rc_xml(home_dir):
+    """Remove the <cursor> element we added to labwc rc.xml during install.
+
+    Deletes the file if it becomes effectively empty (root with no children).
+    """
+    import xml.etree.ElementTree as ET
+
+    rc_path = os.path.join(home_dir, ".config", "labwc", "rc.xml")
+    if not os.path.isfile(rc_path):
+        return
+    try:
+        tree = ET.parse(rc_path)
+        root = tree.getroot()
+        cursor_el = root.find("cursor")
+        if cursor_el is None:
+            return
+        root.remove(cursor_el)
+        if len(root) == 0:
+            os.remove(rc_path)
+            info(f"Removed empty {rc_path}")
+        else:
+            ET.indent(tree, space="  ")
+            tree.write(rc_path, xml_declaration=True, encoding="UTF-8")
+            info(f"Removed <cursor> element from {rc_path}")
+    except Exception as e:
+        warn(f"Could not clean labwc rc.xml: {e}")
 
 
 def _strip_labwc_cursor_lines(home_dir):
@@ -1937,6 +2042,7 @@ def _uninstall_pi(install_dir, keep_data):
             )
             _remove_legacy_player_user_unit(desktop_user)
             _strip_labwc_cursor_lines(home)
+            _strip_labwc_cursor_from_rc_xml(home)
         except (ImportError, KeyError):
             pass
     # The pre-fix installer wrote the labwc env file under the SERVICE_USER
@@ -1945,6 +2051,7 @@ def _uninstall_pi(install_dir, keep_data):
         import pwd
         su_home = pwd.getpwnam(SERVICE_USER).pw_dir
         _strip_labwc_cursor_lines(su_home)
+        _strip_labwc_cursor_from_rc_xml(su_home)
     except (ImportError, KeyError):
         pass
 

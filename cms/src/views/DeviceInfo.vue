@@ -183,6 +183,7 @@
                 <template v-if="deviceHealth.js_heap_used_mb != null">
                   {{ deviceHealth.js_heap_used_mb }} MB{{ deviceHealth.js_heap_total_mb != null ? ' / ' + deviceHealth.js_heap_total_mb + ' MB' : '' }}
                 </template>
+                <template v-else-if="deviceHealth.player_type === 'wpe'">N/A (WPE)</template>
                 <template v-else>—</template>
               </span>
             </div>

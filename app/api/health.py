@@ -1,4 +1,6 @@
 import json
+import platform
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -285,6 +287,42 @@ async def report_capabilities(
     return {"status": "ok"}
 
 
+@router.get("/player/hardware")
+async def player_hardware(
+    _token: ApiToken = Depends(require_device),
+):
+    """Return server-side hardware stats (RAM, disk) for WPE/non-Chromium players."""
+    ram_total_mb = None
+    if platform.system() == "Linux":
+        try:
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        kb = int(line.split()[1])
+                        ram_total_mb = round(kb / 1024)
+                        break
+        except (OSError, ValueError):
+            pass
+
+    disk_total_mb = None
+    disk_free_mb = None
+    media_dir = Path("media")
+    if media_dir.is_dir():
+        try:
+            usage = shutil.disk_usage(media_dir.resolve())
+            disk_total_mb = round(usage.total / (1024 * 1024))
+            disk_free_mb = round(usage.free / (1024 * 1024))
+        except OSError:
+            pass
+
+    return {
+        "ram_total_mb": ram_total_mb,
+        "disk_total_mb": disk_total_mb,
+        "disk_free_mb": disk_free_mb,
+        "source": "server",
+    }
+
+
 @router.get("/health/dashboard")
 async def health_dashboard(
     _admin: ApiToken = Depends(require_viewer),
@@ -413,6 +451,8 @@ def _compute_signals(device: Device, now: datetime) -> dict:
             signals["js_heap"] = {"level": "yellow", "message": f"JS heap {device.js_heap_used_mb} MB ({pct:.0%} of limit)"}
         else:
             signals["js_heap"] = {"level": "green", "message": ""}
+    elif device.player_type == 'wpe':
+        signals["js_heap"] = {"level": "green", "message": "N/A (WPE browser)"}
     else:
         signals["js_heap"] = {"level": "yellow", "message": "JS heap unknown"}
 
