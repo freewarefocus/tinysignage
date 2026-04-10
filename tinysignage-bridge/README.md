@@ -54,12 +54,13 @@ sudo udevadm control --reload-rules
 
 ## Installation
 
+After running the main TinySignage installer, the bridge is located at `/opt/tinysignage/tinysignage-bridge/`. A single script handles the full setup — Python venv, udev rules, input group, and systemd service:
+
 ```bash
-cd tinysignage-bridge
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-pip install -r requirements.txt
+sudo bash /opt/tinysignage/tinysignage-bridge/install.sh
 ```
+
+Edit `config.yaml` **before** running the installer if you want to enable joystick support or change pin assignments.
 
 Note: `evdev` is Linux-only. On non-Linux systems, joystick support is unavailable but GPIO mock mode still works.
 
@@ -138,31 +139,12 @@ j0b0
 
 ### Running as a Service (systemd)
 
-Create `/etc/systemd/system/tinysignage-bridge.service`:
-
-```ini
-[Unit]
-Description=TinySignage GPIO Bridge
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/tinysignage-bridge
-ExecStart=/home/pi/tinysignage-bridge/venv/bin/python bridge.py
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then:
+The install script (`install.sh`) creates and enables the service automatically. To manage it manually:
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable tinysignage-bridge
-sudo systemctl start tinysignage-bridge
+sudo systemctl status tinysignage-bridge   # check status
+sudo systemctl restart tinysignage-bridge  # restart after config changes
+journalctl -u tinysignage-bridge -f        # follow logs
 ```
 
 ## WebSocket Event Format

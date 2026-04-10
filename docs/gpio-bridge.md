@@ -46,20 +46,21 @@ The bridge configures internal pull-up resistors by default, so no external resi
 
 ## Installation
 
+After running the main TinySignage installer, the bridge is located at `/opt/tinysignage/tinysignage-bridge/`. The install script sets up the Python venv, udev rules for joystick access, and a systemd service:
+
 ```bash
-cd tinysignage-bridge
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+sudo bash /opt/tinysignage/tinysignage-bridge/install.sh
 ```
 
-Dependencies: `gpiozero`, `websockets`, `pyyaml`.
+This installs dependencies (`gpiozero`, `websockets`, `pyyaml`, `evdev`), adds the `tinysignage` user to the `input` group, creates the udev rule for `/dev/input/event*` access, and enables the `tinysignage-bridge` systemd service.
+
+Edit the configuration **before** running the installer if you want to enable joystick support or change pin assignments.
 
 ---
 
 ## Configuration
 
-Edit `tinysignage-bridge/config.yaml`:
+Edit `/opt/tinysignage/tinysignage-bridge/config.yaml`:
 
 ```yaml
 websocket_port: 8765
@@ -120,30 +121,12 @@ $ python bridge.py
 
 ## Running as a systemd service
 
-Create `/etc/systemd/system/tinysignage-bridge.service`:
-
-```ini
-[Unit]
-Description=TinySignage GPIO Bridge
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/tinysignage-bridge
-ExecStart=/home/pi/tinysignage-bridge/venv/bin/python bridge.py
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start:
+The install script (`install.sh`) creates and enables the service automatically. To manage it manually:
 
 ```bash
-sudo systemctl enable tinysignage-bridge
-sudo systemctl start tinysignage-bridge
+sudo systemctl status tinysignage-bridge   # check status
+sudo systemctl restart tinysignage-bridge  # restart after config changes
+journalctl -u tinysignage-bridge -f        # follow logs
 ```
 
 ---
