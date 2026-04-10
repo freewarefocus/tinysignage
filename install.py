@@ -1557,7 +1557,7 @@ def git_pull_install_dir(install_dir, runner):
         tracked_modified = set()
         for line in r.stdout.strip().splitlines():
             status = line[:2]
-            fname = line[3:].strip()
+            fname = line[2:].strip()
             if status == "??":
                 # Untracked files — git pull won't touch them, safe to ignore.
                 continue
@@ -1585,7 +1585,7 @@ def git_pull_install_dir(install_dir, runner):
             if r and r.returncode == 0 and r.stdout.strip():
                 for line in r.stdout.strip().splitlines():
                     status = line[:2]
-                    fname = line[3:].strip()
+                    fname = line[2:].strip()
                     if status == "??":
                         continue
                     tracked_modified.add(fname)
