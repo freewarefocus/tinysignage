@@ -1566,10 +1566,37 @@ def git_pull_install_dir(install_dir, runner):
         managed = tracked_modified & _GIT_MANAGED_CONFIGS
         unexpected = tracked_modified - _GIT_MANAGED_CONFIGS
         if unexpected:
-            flist = ", ".join(sorted(unexpected))
-            warn(f"Unexpected local modifications — skipping git pull: {flist}\n"
-                 "Commit or stash these changes, then re-run the update.")
-            return False
+            # Try to auto-reset unexpected modifications so they don't
+            # block the update (e.g. media/.gitkeep touched by media ops,
+            # or phantom index entries from SD card filesystem corruption).
+            for fname in sorted(unexpected):
+                info(f"Auto-resetting unexpected modification: {fname}")
+                rc = runner(["git", "checkout", "HEAD", "--", fname],
+                            cwd=install_dir, capture=True, check=False)
+                if not rc or rc.returncode != 0:
+                    # File not in HEAD (corrupt index entry) — clear it.
+                    runner(["git", "reset", "HEAD", "--", fname],
+                           cwd=install_dir, capture=True, check=False)
+
+            # Re-check status after cleanup.
+            r = runner(["git", "status", "--porcelain"],
+                       cwd=install_dir, capture=True, check=False)
+            tracked_modified = set()
+            if r and r.returncode == 0 and r.stdout.strip():
+                for line in r.stdout.strip().splitlines():
+                    status = line[:2]
+                    fname = line[3:].strip()
+                    if status == "??":
+                        continue
+                    tracked_modified.add(fname)
+            managed = tracked_modified & _GIT_MANAGED_CONFIGS
+            unexpected = tracked_modified - _GIT_MANAGED_CONFIGS
+
+            if unexpected:
+                flist = ", ".join(sorted(unexpected))
+                warn(f"Unexpected local modifications — skipping git pull: {flist}\n"
+                     "Commit or stash these changes, then re-run the update.")
+                return False
 
         # Stash managed config files so git pull sees a clean tree.
         if managed:
