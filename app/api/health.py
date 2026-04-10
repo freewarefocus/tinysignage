@@ -453,10 +453,11 @@ def _compute_signals(device: Device, now: datetime) -> dict:
             signals["js_heap"] = {"level": "yellow", "message": f"JS heap {device.js_heap_used_mb} MB ({pct:.0%} of limit)"}
         else:
             signals["js_heap"] = {"level": "green", "message": ""}
-    elif device.player_type == 'wpe':
-        signals["js_heap"] = {"level": "green", "message": "N/A (WPE browser)"}
+    elif device.last_heartbeat is not None:
+        # Device is checking in but browser doesn't expose performance.memory
+        signals["js_heap"] = {"level": "green", "message": "N/A (unsupported by browser)"}
     else:
-        signals["js_heap"] = {"level": "yellow", "message": "JS heap unknown"}
+        signals["js_heap"] = {"level": "grey", "message": "Waiting for first heartbeat"}
 
     # DOM responsiveness signal
     if device.dom_responsive is not None:

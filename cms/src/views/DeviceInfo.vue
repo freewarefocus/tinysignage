@@ -183,7 +183,7 @@
                 <template v-if="deviceHealth.js_heap_used_mb != null">
                   {{ deviceHealth.js_heap_used_mb }} MB{{ deviceHealth.js_heap_total_mb != null ? ' / ' + deviceHealth.js_heap_total_mb + ' MB' : '' }}
                 </template>
-                <template v-else-if="deviceHealth.player_type === 'wpe'">N/A (WPE)</template>
+                <template v-else-if="deviceHealth.last_heartbeat">N/A</template>
                 <template v-else>—</template>
               </span>
             </div>
@@ -795,6 +795,7 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 .signal-green { background: #4caf50; }
 .signal-yellow { background: #f0ad4e; }
 .signal-red { background: #f44336; }
+.signal-grey { background: #9e9e9e; }
 .signal-unknown { background: #666; }
 
 .card-body {
