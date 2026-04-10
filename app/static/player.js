@@ -159,7 +159,7 @@
     let gpioReconnectTimer = null;    // Auto-reconnect timer
     let activeGpioBranches = [];      // Current GPIO branches for onmessage matching
     let activeJoystickBranches = [];  // Current joystick branches for onmessage matching
-    const GPIO_BRIDGE_URL = 'ws://localhost:8765';
+    const GPIO_BRIDGE_URL = (location.protocol === 'https:' ? 'wss' : 'ws') + '://localhost:8765';
 
     // --- Health monitor state ---
     let healthCheckTimer = null;

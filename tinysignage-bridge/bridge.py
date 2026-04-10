@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import re
+import ssl
 import sys
 import time
 from pathlib import Path
@@ -373,8 +374,22 @@ async def main():
     elif joy_enabled and MOCK_MODE:
         log.info("Joystick mock commands enabled (j0b0, j0a0+, j0a0-)")
 
-    async with websockets.serve(handler, "0.0.0.0", port):
-        log.info("WebSocket server listening on ws://0.0.0.0:%d", port)
+    # --- TLS / WSS support ---
+    tls_config = config.get("tls", {})
+    ssl_context = None
+    if tls_config.get("enabled", False):
+        cert_file = tls_config.get("cert_file", "/opt/tinysignage/certs/cert.pem")
+        key_file = tls_config.get("key_file", "/opt/tinysignage/certs/key.pem")
+        if Path(cert_file).exists() and Path(key_file).exists():
+            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ssl_context.load_cert_chain(cert_file, key_file)
+            log.info("TLS enabled — serving wss:// with cert %s", cert_file)
+        else:
+            log.warning("TLS enabled but cert/key not found (%s, %s) — falling back to ws://", cert_file, key_file)
+
+    proto = "wss" if ssl_context else "ws"
+    async with websockets.serve(handler, "0.0.0.0", port, ssl=ssl_context):
+        log.info("WebSocket server listening on %s://0.0.0.0:%d", proto, port)
         if MOCK_MODE:
             await mock_gpio_loop(config)
         else:

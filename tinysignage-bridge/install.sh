@@ -70,6 +70,27 @@ else
     echo "  '$SERVICE_USER' already in 'input' group."
 fi
 
+# --- TLS cert access for WSS support ----------------------------------------
+
+CERT_DIR="/opt/tinysignage/certs"
+if [ -d "$CERT_DIR" ]; then
+    # Ensure tinysignage user can read cert files
+    chown "$SERVICE_USER":"$SERVICE_USER" "$CERT_DIR"/*.pem 2>/dev/null || true
+    chmod 644 "$CERT_DIR/cert.pem" 2>/dev/null || true
+    chmod 600 "$CERT_DIR/key.pem" 2>/dev/null || true
+    echo "  Cert access verified for bridge TLS."
+fi
+
+# Enable TLS in bridge config if main server uses HTTPS
+MAIN_CONFIG="/opt/tinysignage/config.yaml"
+BRIDGE_CONFIG="$BRIDGE_DIR/config.yaml"
+if [ -f "$MAIN_CONFIG" ] && grep -q 'enabled: true' "$MAIN_CONFIG" 2>/dev/null; then
+    if grep -q 'tls:' "$BRIDGE_CONFIG" 2>/dev/null; then
+        sed -i '/^tls:/{n;s/^  enabled: false/  enabled: true/}' "$BRIDGE_CONFIG"
+        echo "  TLS enabled in bridge config (matching main server HTTPS)."
+    fi
+fi
+
 # --- udev rule for /dev/input/event* access ---------------------------------
 
 UDEV_LINE='KERNEL=="event*", SUBSYSTEM=="input", MODE="0664", GROUP="input"'
