@@ -1152,8 +1152,15 @@ def generate_config_env(install_dir):
     info("Generated config.env with SECRET_KEY")
 
 
-_GIT_SAFE_MODIFIED = {"config.yaml"}
-_INSTANCE_CONFIG_KEYS = ("device_id", "server_url", "display_name")
+# Tracked files the installer/user modifies on deployed systems.
+# Stashed before git pull and restored after.
+_GIT_MANAGED_CONFIGS = {
+    "config.yaml",
+    "tinysignage-bridge/config.yaml",
+}
+
+# Minimum keys that MUST survive even a failed stash pop (fallback).
+_CONFIG_YAML_CRITICAL_KEYS = ("device_id", "server_url", "display_name")
 
 
 def _yaml_quote(value):
@@ -1520,6 +1527,9 @@ def git_pull_install_dir(install_dir, runner):
     `runner` is a callable matching run_cmd's signature so we can route
     git through `runuser -u tinysignage` on Pi and plain subprocess on
     desktop/macOS without branching inside this helper.
+
+    Handles user-modified config files via git stash push/pop so that
+    upstream changes are merged cleanly with local values preserved.
     """
     git_marker = os.path.join(install_dir, ".git")
     if not os.path.exists(git_marker):  # may be a file (worktree), not a dir
@@ -1536,45 +1546,58 @@ def git_pull_install_dir(install_dir, runner):
     remote_url = (r.stdout.strip() if r and r.returncode == 0 else "")
     is_ssh = remote_url.startswith("git@") or remote_url.startswith("ssh://")
 
-    # Check for local modifications — save/restore known-safe files.
-    saved_values = {}
+    # --- Classify porcelain output ----------------------------------------
     config_path = os.path.join(install_dir, "config.yaml")
+    did_stash = False
+    saved_values = {}
+
     r = runner(["git", "status", "--porcelain"],
                cwd=install_dir, capture=True, check=False)
     if r and r.returncode == 0 and r.stdout.strip():
-        # Parse modified filenames from porcelain output (e.g. " M config.yaml").
-        modified = set()
+        tracked_modified = set()
         for line in r.stdout.strip().splitlines():
-            # Porcelain format: XY <space> filename
+            status = line[:2]
             fname = line[3:].strip()
-            modified.add(fname)
-        safe = modified & _GIT_SAFE_MODIFIED
-        unexpected = modified - _GIT_SAFE_MODIFIED
+            if status == "??":
+                # Untracked files — git pull won't touch them, safe to ignore.
+                continue
+            tracked_modified.add(fname)
+
+        managed = tracked_modified & _GIT_MANAGED_CONFIGS
+        unexpected = tracked_modified - _GIT_MANAGED_CONFIGS
         if unexpected:
             flist = ", ".join(sorted(unexpected))
             warn(f"Unexpected local modifications — skipping git pull: {flist}\n"
                  "Commit or stash these changes, then re-run the update.")
             return False
-        # Only safe files modified — save instance values, then checkout.
-        if "config.yaml" in safe:
-            saved_values = _read_yaml_values(config_path, _INSTANCE_CONFIG_KEYS)
-            r = runner(["git", "checkout", "--", "config.yaml"],
-                       cwd=install_dir, capture=True, check=False)
-            if not r or r.returncode != 0:
-                warn("Could not reset config.yaml — skipping git pull.")
-                if saved_values:
-                    _update_yaml_file(config_path, **saved_values)
+
+        # Stash managed config files so git pull sees a clean tree.
+        if managed:
+            # Save critical keys as last-resort fallback before any git ops.
+            saved_values = _read_yaml_values(
+                config_path, _CONFIG_YAML_CRITICAL_KEYS)
+
+            r = runner(
+                ["git", "stash", "push", "-m", "tinysignage-update"] +
+                ["--", *sorted(managed)],
+                cwd=install_dir, capture=True, check=False)
+            if r and r.returncode == 0:
+                did_stash = True
+            else:
+                warn("Could not stash config files — skipping git pull.")
                 return False
 
-    # Capture HEAD before.
+    # --- Capture HEAD before ----------------------------------------------
     r = runner(["git", "rev-parse", "--short", "HEAD"],
                cwd=install_dir, capture=True, check=False)
     head_before = r.stdout.strip() if r and r.returncode == 0 else ""
 
-    # The pull itself.
+    # --- The pull itself --------------------------------------------------
     r = runner(["git", "pull", "--ff-only"],
                cwd=install_dir, capture=True, check=False)
-    if not r or r.returncode != 0:
+    pull_ok = r and r.returncode == 0
+
+    if not pull_ok:
         err = (r.stderr.strip() if r and r.stderr else "") or "(no output)"
         warn(f"git pull failed — continuing without code update:\n{err}")
         if is_ssh:
@@ -1585,15 +1608,29 @@ def git_pull_install_dir(install_dir, runner):
                 "    https://github.com/<owner>/<repo>.git\n"
                 "Then re-run the update."
             )
-        if saved_values:
-            _update_yaml_file(config_path, **saved_values)
-        return False
 
-    # Restore instance-specific config values after successful pull.
-    if saved_values:
+    # --- Restore stashed config -------------------------------------------
+    if did_stash:
+        r = runner(["git", "stash", "pop"],
+                   cwd=install_dir, capture=True, check=False)
+        if not r or r.returncode != 0:
+            # Conflict — accept upstream version and overlay critical keys.
+            warn("Stash pop had conflicts — accepting upstream config "
+                 "and restoring critical values.")
+            runner(["git", "checkout", "--theirs", "."],
+                   cwd=install_dir, capture=True, check=False)
+            runner(["git", "reset", "HEAD"],
+                   cwd=install_dir, capture=True, check=False)
+            if saved_values:
+                _update_yaml_file(config_path, **saved_values)
+    elif not pull_ok and saved_values:
+        # Stash wasn't attempted but we saved values — restore them.
         _update_yaml_file(config_path, **saved_values)
 
-    # Capture HEAD after.
+    if not pull_ok:
+        return False
+
+    # --- Capture HEAD after -----------------------------------------------
     r = runner(["git", "rev-parse", "--short", "HEAD"],
                cwd=install_dir, capture=True, check=False)
     head_after = r.stdout.strip() if r and r.returncode == 0 else ""
