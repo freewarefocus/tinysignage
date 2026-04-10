@@ -52,7 +52,7 @@ After running the main TinySignage installer, the bridge is located at `/opt/tin
 sudo bash /opt/tinysignage/tinysignage-bridge/install.sh
 ```
 
-This installs dependencies (`gpiozero`, `websockets`, `pyyaml`, `evdev`), adds the `tinysignage` user to the `input` group, creates the udev rule for `/dev/input/event*` access, and enables the `tinysignage-bridge` systemd service.
+This installs system packages (`python3-lgpio` for Pi 5 GPIO access), Python dependencies (`gpiozero`, `websockets`, `pyyaml`, `evdev`), adds the `tinysignage` user to the `gpio` and `input` groups, creates the udev rule for `/dev/input/event*` access, and enables the `tinysignage-bridge` systemd service.
 
 Edit the configuration **before** running the installer if you want to enable joystick support or change pin assignments.
 

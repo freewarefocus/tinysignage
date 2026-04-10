@@ -262,6 +262,7 @@ Press Ctrl+C to exit when done.
 ## Troubleshooting
 
 - **"gpiozero not available"**: Install gpiozero (`pip install gpiozero`) or run on a Raspberry Pi
+- **"BadPinFactory" on Pi 5**: Install `python3-lgpio` via apt (`sudo apt install python3-lgpio`) and ensure the venv uses `--system-site-packages`. The `tinysignage` user must also be in the `gpio` group (`sudo usermod -aG gpio tinysignage`). The install script handles all of this automatically.
 - **"evdev not installed"**: Install evdev (`pip install evdev`) — Linux only
 - **No joystick detected**: Check `input` group membership (`groups` command), verify device with `evtest`
 - **No WebSocket connections**: Check firewall rules; ensure the player and bridge are on the same host/network

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TinySignage GPIO Bridge — installer
-# Sets up the Python venv, udev rules, input group, and systemd service.
+# Sets up apt packages, Python venv, udev rules, groups, and systemd service.
 # Run with: sudo bash /opt/tinysignage/tinysignage-bridge/install.sh
 
 set -euo pipefail
@@ -31,15 +31,33 @@ fi
 
 echo "Installing TinySignage GPIO Bridge..."
 
+# --- System packages -------------------------------------------------------
+
+echo "Installing system packages..."
+apt-get install -y -qq python3-lgpio > /dev/null 2>&1
+echo "  python3-lgpio installed (GPIO pin factory for Pi 5)."
+
 # --- Python venv + dependencies --------------------------------------------
 
 echo "Setting up Python venv..."
-sudo -u "$SERVICE_USER" python3 -m venv "$BRIDGE_DIR/venv"
-sudo -u "$SERVICE_USER" "$BRIDGE_DIR/venv/bin/pip" install --quiet -r "$BRIDGE_DIR/requirements.txt"
+sudo -u "$SERVICE_USER" python3 -m venv --system-site-packages "$BRIDGE_DIR/venv"
+sudo -u "$SERVICE_USER" "$BRIDGE_DIR/venv/bin/pip" install --quiet \
+    gpiozero websockets pyyaml evdev
 echo "  Dependencies installed."
 
-# --- Input group for joystick/gamepad access --------------------------------
+# --- Groups for hardware access ---------------------------------------------
 
+# gpio group — required for /dev/gpiochip* access (GPIO pins)
+if getent group gpio &>/dev/null; then
+    if ! id -nG "$SERVICE_USER" | grep -qw gpio; then
+        usermod -aG gpio "$SERVICE_USER"
+        echo "  Added '$SERVICE_USER' to 'gpio' group."
+    else
+        echo "  '$SERVICE_USER' already in 'gpio' group."
+    fi
+fi
+
+# input group — required for /dev/input/event* access (joysticks/gamepads)
 if ! getent group input &>/dev/null; then
     groupadd input
     echo "  Created 'input' group."
