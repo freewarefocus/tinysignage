@@ -257,19 +257,30 @@ async def _process_import(
                     status_code=500, detail="Database restore failed"
                 )
 
-            # Replace media files
+            # Replace media files.
+            # Clear contents without removing the directory itself —
+            # under systemd ProtectSystem=strict or Docker volume
+            # mounts, the media dir is a mount point and rmtree fails.
             extracted_media = tmpdir_path / "media"
             if extracted_media.exists():
                 if _media_dir.exists():
-                    shutil.rmtree(_media_dir)
-                _media_dir.mkdir(parents=True, exist_ok=True)
+                    for child in list(_media_dir.iterdir()):
+                        if child.is_dir():
+                            shutil.rmtree(child)
+                        else:
+                            child.unlink()
+                else:
+                    _media_dir.mkdir(parents=True, exist_ok=True)
                 (_media_dir / "thumbs").mkdir(parents=True, exist_ok=True)
 
+                copied = 0
                 for item in extracted_media.rglob("*"):
                     if item.is_file():
                         dest = _media_dir / item.relative_to(extracted_media)
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(item, dest)
+                        copied += 1
+                log.info("Restored %d media files", copied)
 
             log.info("Backup restored from %s", filename)
 
