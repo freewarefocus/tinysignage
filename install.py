@@ -864,6 +864,139 @@ def pi_move_to_opt(source_dir, non_interactive=False):
     return TARGET_DIR
 
 
+def _configure_labwc_rc_xml(home_dir, uid, gid):
+    """Configure labwc rc.xml to hide the cursor.
+
+    Two mechanisms (defense-in-depth):
+    1. <cursor><theme>hidden</theme><size>1</size></cursor> — makes the
+       desktop cursor transparent (works for labwc itself, but Wayland
+       clients like cog can override with their own cursor).
+    2. <keyboard><keybind key="A-W-h"><action name="HideCursor"/>
+       </keybind></keyboard> — compositor-level action that hides the
+       cursor regardless of what the client sets. Triggered from labwc
+       autostart via wtype (see _configure_labwc_autostart).
+    """
+    import xml.etree.ElementTree as ET
+
+    labwc_dir = os.path.join(home_dir, ".config", "labwc")
+    rc_path = os.path.join(labwc_dir, "rc.xml")
+
+    try:
+        os.makedirs(labwc_dir, exist_ok=True)
+        if os.path.isfile(rc_path):
+            try:
+                tree = ET.parse(rc_path)
+                root = tree.getroot()
+            except ET.ParseError as e:
+                warn(f"Could not parse {rc_path}: {e} — skipping rc.xml cursor config")
+                return
+        else:
+            root = ET.Element("labwc_config")
+            tree = ET.ElementTree(root)
+
+        # --- <cursor> theme (defense layer 1) ---
+        cursor_el = root.find("cursor")
+        if cursor_el is None:
+            cursor_el = ET.SubElement(root, "cursor")
+
+        theme_el = cursor_el.find("theme")
+        if theme_el is None:
+            theme_el = ET.SubElement(cursor_el, "theme")
+        theme_el.text = "hidden"
+
+        size_el = cursor_el.find("size")
+        if size_el is None:
+            size_el = ET.SubElement(cursor_el, "size")
+        size_el.text = "1"
+
+        # --- <keyboard> keybind for HideCursor action (defense layer 2) ---
+        keyboard_el = root.find("keyboard")
+        if keyboard_el is None:
+            keyboard_el = ET.SubElement(root, "keyboard")
+
+        # Check if we already added the HideCursor keybind
+        hide_cursor_exists = False
+        for kb in keyboard_el.findall("keybind"):
+            if kb.get("key") == "A-W-h":
+                for action in kb.findall("action"):
+                    if action.get("name") == "HideCursor":
+                        hide_cursor_exists = True
+                        break
+            if hide_cursor_exists:
+                break
+
+        if not hide_cursor_exists:
+            kb_el = ET.SubElement(keyboard_el, "keybind")
+            kb_el.set("key", "A-W-h")
+            action_el = ET.SubElement(kb_el, "action")
+            action_el.set("name", "HideCursor")
+
+        ET.indent(tree, space="  ")
+        tree.write(rc_path, xml_declaration=True, encoding="UTF-8")
+
+        try:
+            os.chown(labwc_dir, uid, gid)
+        except OSError:
+            pass
+        try:
+            os.chown(rc_path, uid, gid)
+        except OSError:
+            pass
+        info("labwc rc.xml cursor hiding configured")
+    except Exception as e:
+        warn(f"Could not configure labwc rc.xml: {e}")
+
+
+# Marker comments used to identify lines we add to labwc autostart
+_LABWC_AUTOSTART_MARKER = "# TinySignage cursor hide"
+
+
+def _configure_labwc_autostart(home_dir, uid, gid):
+    """Add cursor-hiding commands to labwc autostart.
+
+    Uses wtype to trigger the HideCursor keybind defined in rc.xml, and
+    swayidle to re-trigger it after any mouse movement (1s timeout).
+    This hides cog/WPE's own cursor which ignores XCURSOR_THEME.
+    """
+    labwc_dir = os.path.join(home_dir, ".config", "labwc")
+    autostart_path = os.path.join(labwc_dir, "autostart")
+
+    # The commands we want in autostart
+    lines_to_add = [
+        f"{_LABWC_AUTOSTART_MARKER}\n",
+        "sleep 1 && wtype -M alt -M logo -P h &\n",
+        "swayidle -w timeout 1 'wtype -M alt -M logo -P h' &\n",
+    ]
+
+    try:
+        os.makedirs(labwc_dir, exist_ok=True)
+
+        existing = ""
+        if os.path.isfile(autostart_path):
+            with open(autostart_path) as f:
+                existing = f.read()
+
+        if _LABWC_AUTOSTART_MARKER in existing:
+            return  # already configured
+
+        with open(autostart_path, "a") as f:
+            if existing and not existing.endswith("\n"):
+                f.write("\n")
+            f.writelines(lines_to_add)
+
+        try:
+            os.chown(labwc_dir, uid, gid)
+        except OSError:
+            pass
+        try:
+            os.chown(autostart_path, uid, gid)
+        except OSError:
+            pass
+        info("labwc autostart cursor hiding configured")
+    except Exception as e:
+        warn(f"Could not configure labwc autostart: {e}")
+
+
 def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port=DEFAULT_PORT):
     """All Pi system-level steps (requires root)."""
     total = 6
@@ -1874,139 +2007,6 @@ def _stop_and_remove_system_unit(name):
     run_cmd(["systemctl", "disable", name], check=False)
     _remove_path(unit_file, label=f"{name}.service")
     return True
-
-
-def _configure_labwc_rc_xml(home_dir, uid, gid):
-    """Configure labwc rc.xml to hide the cursor.
-
-    Two mechanisms (defense-in-depth):
-    1. <cursor><theme>hidden</theme><size>1</size></cursor> — makes the
-       desktop cursor transparent (works for labwc itself, but Wayland
-       clients like cog can override with their own cursor).
-    2. <keyboard><keybind key="A-W-h"><action name="HideCursor"/>
-       </keybind></keyboard> — compositor-level action that hides the
-       cursor regardless of what the client sets. Triggered from labwc
-       autostart via wtype (see _configure_labwc_autostart).
-    """
-    import xml.etree.ElementTree as ET
-
-    labwc_dir = os.path.join(home_dir, ".config", "labwc")
-    rc_path = os.path.join(labwc_dir, "rc.xml")
-
-    try:
-        os.makedirs(labwc_dir, exist_ok=True)
-        if os.path.isfile(rc_path):
-            try:
-                tree = ET.parse(rc_path)
-                root = tree.getroot()
-            except ET.ParseError as e:
-                warn(f"Could not parse {rc_path}: {e} — skipping rc.xml cursor config")
-                return
-        else:
-            root = ET.Element("labwc_config")
-            tree = ET.ElementTree(root)
-
-        # --- <cursor> theme (defense layer 1) ---
-        cursor_el = root.find("cursor")
-        if cursor_el is None:
-            cursor_el = ET.SubElement(root, "cursor")
-
-        theme_el = cursor_el.find("theme")
-        if theme_el is None:
-            theme_el = ET.SubElement(cursor_el, "theme")
-        theme_el.text = "hidden"
-
-        size_el = cursor_el.find("size")
-        if size_el is None:
-            size_el = ET.SubElement(cursor_el, "size")
-        size_el.text = "1"
-
-        # --- <keyboard> keybind for HideCursor action (defense layer 2) ---
-        keyboard_el = root.find("keyboard")
-        if keyboard_el is None:
-            keyboard_el = ET.SubElement(root, "keyboard")
-
-        # Check if we already added the HideCursor keybind
-        hide_cursor_exists = False
-        for kb in keyboard_el.findall("keybind"):
-            if kb.get("key") == "A-W-h":
-                for action in kb.findall("action"):
-                    if action.get("name") == "HideCursor":
-                        hide_cursor_exists = True
-                        break
-            if hide_cursor_exists:
-                break
-
-        if not hide_cursor_exists:
-            kb_el = ET.SubElement(keyboard_el, "keybind")
-            kb_el.set("key", "A-W-h")
-            action_el = ET.SubElement(kb_el, "action")
-            action_el.set("name", "HideCursor")
-
-        ET.indent(tree, space="  ")
-        tree.write(rc_path, xml_declaration=True, encoding="UTF-8")
-
-        try:
-            os.chown(labwc_dir, uid, gid)
-        except OSError:
-            pass
-        try:
-            os.chown(rc_path, uid, gid)
-        except OSError:
-            pass
-        info("labwc rc.xml cursor hiding configured")
-    except Exception as e:
-        warn(f"Could not configure labwc rc.xml: {e}")
-
-
-# Marker comments used to identify lines we add to labwc autostart
-_LABWC_AUTOSTART_MARKER = "# TinySignage cursor hide"
-
-
-def _configure_labwc_autostart(home_dir, uid, gid):
-    """Add cursor-hiding commands to labwc autostart.
-
-    Uses wtype to trigger the HideCursor keybind defined in rc.xml, and
-    swayidle to re-trigger it after any mouse movement (1s timeout).
-    This hides cog/WPE's own cursor which ignores XCURSOR_THEME.
-    """
-    labwc_dir = os.path.join(home_dir, ".config", "labwc")
-    autostart_path = os.path.join(labwc_dir, "autostart")
-
-    # The commands we want in autostart
-    lines_to_add = [
-        f"{_LABWC_AUTOSTART_MARKER}\n",
-        "sleep 1 && wtype -M alt -M logo -P h &\n",
-        "swayidle -w timeout 1 'wtype -M alt -M logo -P h' &\n",
-    ]
-
-    try:
-        os.makedirs(labwc_dir, exist_ok=True)
-
-        existing = ""
-        if os.path.isfile(autostart_path):
-            with open(autostart_path) as f:
-                existing = f.read()
-
-        if _LABWC_AUTOSTART_MARKER in existing:
-            return  # already configured
-
-        with open(autostart_path, "a") as f:
-            if existing and not existing.endswith("\n"):
-                f.write("\n")
-            f.writelines(lines_to_add)
-
-        try:
-            os.chown(labwc_dir, uid, gid)
-        except OSError:
-            pass
-        try:
-            os.chown(autostart_path, uid, gid)
-        except OSError:
-            pass
-        info("labwc autostart cursor hiding configured")
-    except Exception as e:
-        warn(f"Could not configure labwc autostart: {e}")
 
 
 def _strip_labwc_autostart_cursor(home_dir):
