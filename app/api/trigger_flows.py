@@ -14,7 +14,7 @@ from app.models import ApiToken, Playlist, TriggerBranch, TriggerFlow
 
 router = APIRouter()
 
-VALID_TRIGGER_TYPES = {"keyboard", "touch_zone", "gpio", "webhook", "timeout", "loop_count"}
+VALID_TRIGGER_TYPES = {"keyboard", "touch_zone", "gpio", "joystick", "webhook", "timeout", "loop_count"}
 
 
 def _flow_summary(flow: TriggerFlow, branch_count: int) -> dict:

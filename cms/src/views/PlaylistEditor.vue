@@ -258,6 +258,7 @@
                   <option value="timeout">Timeout</option>
                   <option value="loop_count">Loop Count</option>
                   <option value="gpio">GPIO</option>
+                  <option value="joystick">Joystick / Gamepad</option>
                   <option value="webhook">Webhook</option>
                 </select>
               </div>
@@ -349,6 +350,50 @@
                     <option value="falling">Falling (button press)</option>
                     <option value="rising">Rising</option>
                   </select>
+                </div>
+              </div>
+
+              <!-- Joystick / Gamepad -->
+              <div v-if="branchForm.trigger_type === 'joystick'" class="config-grid">
+                <div class="setting-field">
+                  <label>Input Type</label>
+                  <select v-model="branchForm.trigger_config.input" class="setting-select" @change="onJoystickInputChange">
+                    <option value="button">Button</option>
+                    <option value="axis">Axis (stick / D-pad)</option>
+                  </select>
+                </div>
+                <template v-if="branchForm.trigger_config.input === 'button'">
+                  <div class="setting-field">
+                    <label>Button Number</label>
+                    <input type="number" v-model.number="branchForm.trigger_config.button" min="0" max="999" class="setting-number" />
+                    <span class="config-hint">Raw evdev code. Common: 288–304 depending on gamepad.</span>
+                  </div>
+                  <div class="setting-field">
+                    <label>Trigger On</label>
+                    <select v-model.number="branchForm.trigger_config.value" class="setting-select">
+                      <option :value="1">Press</option>
+                      <option :value="0">Release</option>
+                    </select>
+                  </div>
+                </template>
+                <template v-if="branchForm.trigger_config.input === 'axis'">
+                  <div class="setting-field">
+                    <label>Axis Number</label>
+                    <input type="number" v-model.number="branchForm.trigger_config.axis" min="0" max="63" class="setting-number" />
+                    <span class="config-hint">0 = left stick X, 1 = left stick Y (typical).</span>
+                  </div>
+                  <div class="setting-field">
+                    <label>Direction</label>
+                    <select v-model="branchForm.trigger_config.direction" class="setting-select">
+                      <option value="positive">Positive (right / down)</option>
+                      <option value="negative">Negative (left / up)</option>
+                    </select>
+                  </div>
+                </template>
+                <div class="setting-field">
+                  <label>Device Filter</label>
+                  <input type="number" v-model.number="branchForm.trigger_config.device" min="0" max="15" class="setting-number" placeholder="Any" />
+                  <span class="config-hint">Leave empty to match any connected joystick.</span>
                 </div>
               </div>
 
@@ -538,6 +583,7 @@ function getDefaultConfigForType(type) {
     case 'timeout': return { seconds: 30 }
     case 'loop_count': return { count: 3 }
     case 'gpio': return { pin: 17, edge: 'falling' }
+    case 'joystick': return { input: 'button', button: 0, value: 1, device: null }
     case 'webhook': return { token: generateToken() }
     default: return {}
   }
@@ -556,6 +602,7 @@ function triggerIcon(type) {
     case 'timeout': return 'pi pi-clock'
     case 'loop_count': return 'pi pi-replay'
     case 'gpio': return 'pi pi-microchip'
+    case 'joystick': return 'pi pi-sliders-h'
     case 'webhook': return 'pi pi-globe'
     default: return 'pi pi-question'
   }
@@ -568,6 +615,10 @@ function triggerLabel(type, config) {
     case 'timeout': return `${config?.seconds ?? 0}s timeout`
     case 'loop_count': return `After ${config?.count ?? 0} loops`
     case 'gpio': return `Pin ${config?.pin ?? '?'} (${config?.edge || 'falling'})`
+    case 'joystick': {
+      if (config?.input === 'axis') return `Axis ${config?.axis ?? '?'} ${config?.direction || 'positive'}`
+      return `Button ${config?.button ?? '?'}`
+    }
     case 'webhook': return 'Webhook'
     default: return type
   }
@@ -728,6 +779,16 @@ async function applyPreset(preset) {
 function onTriggerTypeChange() {
   branchForm.value.trigger_config = getDefaultConfigForType(branchForm.value.trigger_type)
   keyModifiers.value = { shift: false, ctrl: false, alt: false }
+}
+
+function onJoystickInputChange() {
+  const input = branchForm.value.trigger_config.input
+  const device = branchForm.value.trigger_config.device
+  if (input === 'button') {
+    branchForm.value.trigger_config = { input: 'button', button: 0, value: 1, device }
+  } else {
+    branchForm.value.trigger_config = { input: 'axis', axis: 0, direction: 'positive', device }
+  }
 }
 
 function startAddBranch() {

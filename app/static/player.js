@@ -154,10 +154,11 @@
     let triggerTimeoutTimer = null;   // Timeout trigger timer
     let triggerKeydownHandler = null; // Reference to keydown handler for cleanup
 
-    // --- GPIO bridge state ---
+    // --- GPIO / Joystick bridge state ---
     let gpioWebSocket = null;         // WebSocket connection to GPIO bridge
     let gpioReconnectTimer = null;    // Auto-reconnect timer
     let activeGpioBranches = [];      // Current GPIO branches for onmessage matching
+    let activeJoystickBranches = [];  // Current joystick branches for onmessage matching
     const GPIO_BRIDGE_URL = 'ws://localhost:8765';
 
     // --- Health monitor state ---
@@ -1617,7 +1618,7 @@
         registerKeyboardTriggers(branches);
         createTouchZoneOverlays(branches);
         startTimeoutTriggers(branches);
-        connectGpioBridge(branches);
+        connectBridge(branches);
         initWebhookTracking(branches);
     }
 
@@ -1638,7 +1639,7 @@
             triggerTimeoutTimer = null;
         }
 
-        // Disconnect GPIO bridge
+        // Disconnect GPIO/joystick bridge
         disconnectGpioBridge();
 
         triggerFlow = null;
@@ -1812,7 +1813,7 @@
             registerKeyboardTriggers(newBranches);
             createTouchZoneOverlays(newBranches);
             startTimeoutTriggers(newBranches);
-            connectGpioBridge(newBranches);
+            connectBridge(newBranches);
             initWebhookTracking(newBranches);
         } else {
             disconnectGpioBridge();
@@ -1847,47 +1848,55 @@
         }
     }
 
-    // --- GPIO WebSocket client ---
-    function connectGpioBridge(branches) {
+    // --- GPIO / Joystick WebSocket client ---
+    function connectBridge(branches) {
         const gpioBranches = branches.filter(b => b.trigger_type === 'gpio');
-        if (gpioBranches.length === 0) {
+        const joystickBranches = branches.filter(b => b.trigger_type === 'joystick');
+
+        if (gpioBranches.length === 0 && joystickBranches.length === 0) {
             disconnectGpioBridge();
             return;
         }
 
-        // Always update the branch set so onmessage uses current branches
+        // Always update the branch sets so onmessage uses current branches
         activeGpioBranches = gpioBranches;
+        activeJoystickBranches = joystickBranches;
 
-        // Already connected — branch set updated above, no reconnect needed
+        // Already connected — branch sets updated above, no reconnect needed
         if (gpioWebSocket && gpioWebSocket.readyState === WebSocket.OPEN) return;
 
         disconnectGpioBridge();
-        activeGpioBranches = gpioBranches; // restore after disconnectGpioBridge clears it
+        activeGpioBranches = gpioBranches; // restore after disconnectGpioBridge clears
+        activeJoystickBranches = joystickBranches;
 
         try {
             gpioWebSocket = new WebSocket(GPIO_BRIDGE_URL);
 
             gpioWebSocket.onopen = function () {
-                PlayerLog.info('GPIO bridge connected');
+                PlayerLog.info('Bridge connected (GPIO + joystick)');
             };
 
             gpioWebSocket.onmessage = function (event) {
                 try {
                     const data = JSON.parse(event.data);
-                    handleGpioEvent(data, activeGpioBranches);
+                    if (data.type === 'gpio') {
+                        handleGpioEvent(data, activeGpioBranches);
+                    } else if (data.type === 'joystick') {
+                        handleJoystickEvent(data, activeJoystickBranches);
+                    }
                 } catch (e) {
-                    PlayerLog.warn('GPIO message parse error: ' + e.message);
+                    PlayerLog.warn('Bridge message parse error: ' + e.message);
                 }
             };
 
             gpioWebSocket.onclose = function () {
-                PlayerLog.info('GPIO bridge disconnected');
+                PlayerLog.info('Bridge disconnected');
                 gpioWebSocket = null;
-                // Auto-reconnect after 5s if GPIO branches still exist
+                // Auto-reconnect after 5s if branches still exist
                 if (triggerFlow) {
                     gpioReconnectTimer = setTimeout(() => {
                         const currentBranches = findBranchesForSource(currentSourcePlaylistId);
-                        connectGpioBridge(currentBranches);
+                        connectBridge(currentBranches);
                     }, 5000);
                 }
             };
@@ -1896,7 +1905,7 @@
                 // onclose will fire after this, handling reconnect
             };
         } catch (e) {
-            PlayerLog.warn('GPIO bridge connect failed: ' + e.message);
+            PlayerLog.warn('Bridge connect failed: ' + e.message);
         }
     }
 
@@ -1911,6 +1920,7 @@
             gpioWebSocket = null;
         }
         activeGpioBranches = [];
+        activeJoystickBranches = [];
     }
 
     function handleGpioEvent(data, gpioBranches) {
@@ -1924,6 +1934,35 @@
                 const expectedEdge = config.edge || 'falling';
                 if (data.edge === expectedEdge) {
                     PlayerLog.info('GPIO trigger fired: pin ' + data.pin);
+                    fireTrigger(branch);
+                    return;
+                }
+            }
+        }
+    }
+
+    function handleJoystickEvent(data, joystickBranches) {
+        if (activeOverride) return;
+        if (data.type !== 'joystick') return;
+
+        for (const branch of joystickBranches) {
+            const config = branch.trigger_config || {};
+
+            // Optional device filter (null/undefined = match any)
+            if (config.device != null && config.device !== data.device) continue;
+
+            if (config.input === 'button' && data.event === 'button') {
+                if (config.button === data.button) {
+                    const expectedValue = config.value != null ? config.value : 1;
+                    if (data.value === expectedValue) {
+                        PlayerLog.info('Joystick trigger fired: button ' + data.button);
+                        fireTrigger(branch);
+                        return;
+                    }
+                }
+            } else if (config.input === 'axis' && data.event === 'axis') {
+                if (config.axis === data.axis && config.direction === data.direction) {
+                    PlayerLog.info('Joystick trigger fired: axis ' + data.axis + ' ' + data.direction);
                     fireTrigger(branch);
                     return;
                 }

@@ -89,6 +89,29 @@ export const TRIGGER_PRESETS = [
     return_branch: null,
   },
   {
+    id: 'arcade-joystick',
+    name: 'Arcade Joystick',
+    icon: 'pi pi-sliders-h',
+    description: 'Idle screen with joystick/gamepad buttons branching to content playlists. Timeout returns to idle.',
+    branches: [
+      {
+        trigger_type: 'joystick',
+        trigger_config: { input: 'button', button: 288, value: 1, device: null },
+        label: 'Button 1 → Content A',
+      },
+      {
+        trigger_type: 'joystick',
+        trigger_config: { input: 'button', button: 289, value: 1, device: null },
+        label: 'Button 2 → Content B',
+      },
+    ],
+    return_branch: {
+      trigger_type: 'timeout',
+      trigger_config: { seconds: 30 },
+      label: 'Return to idle after 30s',
+    },
+  },
+  {
     id: 'scheduled-interrupt',
     name: 'Scheduled Interrupt',
     icon: 'pi pi-clock',
