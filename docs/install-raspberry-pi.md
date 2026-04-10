@@ -13,7 +13,7 @@ Dedicated kiosk display -- boots straight into fullscreen playback, managed via 
 - Network connection (Ethernet or WiFi)
 - HDMI display (not needed for CMS-only installs)
 
-> **Why Lite?** Pi OS Lite has no desktop environment, which means faster boot times, lower memory usage, and fewer unnecessary services — ideal for a single-purpose signage display. The installer sets up a minimal kiosk compositor (`cage`) that runs Chromium fullscreen without a full desktop.
+> **Why Lite?** Pi OS Lite has no desktop environment, which means faster boot times, lower memory usage, and fewer unnecessary services — ideal for a single-purpose signage display. The installer sets up `cog` (WPE WebKit), a lightweight kiosk browser that composites directly on the GPU without a full desktop.
 >
 > Pi OS with Desktop also works — the installer detects which variant you're running and adjusts automatically.
 
@@ -91,8 +91,7 @@ What the installer sets up depends on the mode:
 | Python venv + pip dependencies | Yes | Yes | No |
 | SQLite database | Yes | Yes | No |
 | ffmpeg (video thumbnails) | Yes | Yes | No |
-| Chromium browser | Yes | No | Yes |
-| Kiosk compositor (cage, Lite only) | Yes | No | Yes |
+| Kiosk browser (cog/WPE preferred, Chromium fallback) | Yes | No | Yes |
 | Transparent cursor theme | Yes | No | Yes |
 | `signage-app` systemd service | Yes | Yes | No |
 | `signage-player` systemd service | Yes | No | Yes |
