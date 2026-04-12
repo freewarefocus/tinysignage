@@ -34,7 +34,6 @@ from app.database import engine, init_db
 from app.error_handlers import register_error_handlers
 from app.logging_config import setup_logging
 from app.scheduler import scheduler
-from app.cog_monitor import cog_monitor
 from app.watchdog import watchdog
 
 _config_path = Path("config.yaml")
@@ -59,10 +58,8 @@ async def lifespan(app: FastAPI):
     await init_db()
     scheduler.start()
     watchdog.start()
-    cog_monitor.start()
     log.info("TinySignage ready — http://localhost:%s", _config["server"]["port"])
     yield
-    await cog_monitor.stop()
     await watchdog.stop()
     await scheduler.stop()
     await engine.dispose()

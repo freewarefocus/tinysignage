@@ -24,5 +24,14 @@ cors:
 logging:
   level: INFO
   log_dir: ./logs
+watchdog:
+  enabled: true
+  check_interval: 30
+  startup_grace: 60
+  mode: auto
+  cms_fail_threshold: 3
+  browser_memory_limit_mb: 1024
+  browser_fail_threshold: 2
+  log_file: ./logs/watchdog.log
 device_id: 9659bdba-1b72-408d-9cad-21716ba4c285
-server_url: https://127.0.0.1:8080
+server_url: http://127.0.0.1:18080

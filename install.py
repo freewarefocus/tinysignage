@@ -248,6 +248,70 @@ call "{install_dir}\\venv\\Scripts\\activate"
 python -m app.server
 """
 
+# --- Watchdog service templates ------------------------------------------
+
+SYSTEMD_WATCHDOG = """\
+[Unit]
+Description=TinySignage Process Watchdog
+After=network.target
+
+[Service]
+Type=simple
+User={user}
+WorkingDirectory={install_dir}
+ExecStart={python} {install_dir}/watchdog_process.py
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths={install_dir}/logs
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+SYSTEMD_USER_WATCHDOG = """\
+[Unit]
+Description=TinySignage Process Watchdog
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory={install_dir}
+ExecStart={install_dir}/venv/bin/python {install_dir}/watchdog_process.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+"""
+
+LAUNCHD_WATCHDOG_PLIST = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.tinysignage.watchdog</string>
+    <key>WorkingDirectory</key>
+    <string>{install_dir}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{install_dir}/venv/bin/python</string>
+        <string>{install_dir}/watchdog_process.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{install_dir}/logs/watchdog.log</string>
+    <key>StandardErrorPath</key>
+    <string>{install_dir}/logs/watchdog.err</string>
+</dict>
+</plist>
+"""
+
 # --- Xcursor constants ---------------------------------------------------
 
 XCURSOR_MAGIC = 0x72756358      # "Xcur" little-endian
@@ -1129,6 +1193,14 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
         # Make sure the Pi actually boots into a session at all.
         _enable_pi_autologin(lite)
 
+    # Watchdog service — monitors CMS and/or player externally
+    venv_python = f"{install_dir}/venv/bin/python"
+    with open("/etc/systemd/system/signage-watchdog.service", "w") as f:
+        f.write(SYSTEMD_WATCHDOG.format(
+            install_dir=install_dir, user=SERVICE_USER, python=venv_python,
+        ))
+    services.append("signage-watchdog")
+
     run_cmd(["systemctl", "daemon-reload"])
     if services:
         run_cmd(["systemctl", "enable"] + services)
@@ -1558,8 +1630,15 @@ def macos_post_install(install_dir, non_interactive, port=DEFAULT_PORT):
             f.write(LAUNCHD_PLIST.format(install_dir=install_dir, port=port))
         info(f"Created {plist_path}")
 
+        # Watchdog plist
+        wd_plist_path = os.path.join(plist_dir, "com.tinysignage.watchdog.plist")
+        with open(wd_plist_path, "w") as f:
+            f.write(LAUNCHD_WATCHDOG_PLIST.format(install_dir=install_dir))
+        info(f"Created {wd_plist_path}")
+
         if not non_interactive and prompt_yn("Load it now (start TinySignage)?"):
             run_cmd(["launchctl", "load", plist_path])
+            run_cmd(["launchctl", "load", wd_plist_path])
             info("TinySignage started via launchd")
     else:
         info("Skipped launchd setup")
@@ -1589,6 +1668,18 @@ def windows_post_install(install_dir, non_interactive, port=DEFAULT_PORT):
                         f'Chr(34) & "{safe_path}" & Chr(34), 0, False\n'
                     )
                 info(f"Created startup shortcut: {shortcut}")
+
+                # Watchdog startup shortcut
+                wd_shortcut = os.path.join(startup, "tinysignage-watchdog.vbs")
+                pythonw = os.path.join(install_dir, "venv", "Scripts", "pythonw.exe")
+                wd_script = os.path.join(install_dir, "watchdog_process.py")
+                with open(wd_shortcut, "w") as f:
+                    f.write(
+                        'CreateObject("WScript.Shell").Run '
+                        f'Chr(34) & "{pythonw}" & Chr(34) & " " & '
+                        f'Chr(34) & "{wd_script}" & Chr(34), 0, False\n'
+                    )
+                info(f"Created watchdog startup shortcut: {wd_shortcut}")
             else:
                 warn(f"Startup folder not found: {startup}")
     else:
@@ -1604,8 +1695,15 @@ def linux_post_install(install_dir, non_interactive, port=DEFAULT_PORT):
         with open(service_path, "w") as f:
             f.write(SYSTEMD_USER.format(install_dir=install_dir, port=port))
         info(f"Created {service_path}")
-        info("To start: systemctl --user start tinysignage")
-        info("To enable on login: systemctl --user enable tinysignage")
+
+        # Watchdog user unit
+        wd_path = os.path.join(service_dir, "tinysignage-watchdog.service")
+        with open(wd_path, "w") as f:
+            f.write(SYSTEMD_USER_WATCHDOG.format(install_dir=install_dir))
+        info(f"Created {wd_path}")
+
+        info("To start: systemctl --user start tinysignage tinysignage-watchdog")
+        info("To enable on login: systemctl --user enable tinysignage tinysignage-watchdog")
     else:
         info("Skipped systemd user service setup")
         info("To run manually:")
@@ -1890,8 +1988,20 @@ def do_update(plat, install_dir, skip_pull=False):
                 run_as_user(SERVICE_USER, ["mkdir", "-p", certs_dir])
                 info("Created missing certs/ directory for HTTPS support")
 
+        # Self-heal: install watchdog service if missing
+        wd_unit = "/etc/systemd/system/signage-watchdog.service"
+        if not os.path.isfile(wd_unit):
+            venv_python = get_venv_python(install_dir)
+            with open(wd_unit, "w") as f:
+                f.write(SYSTEMD_WATCHDOG.format(
+                    install_dir=install_dir, user=SERVICE_USER, python=venv_python,
+                ))
+            run_cmd(["systemctl", "daemon-reload"])
+            run_cmd(["systemctl", "enable", "signage-watchdog"])
+            info("Installed signage-watchdog service (new in this update)")
+
         step(step_num, total_steps, "Restarting services...")
-        for svc in ["signage-app", "signage-player"]:
+        for svc in ["signage-app", "signage-player", "signage-watchdog"]:
             if os.path.isfile(f"/etc/systemd/system/{svc}.service"):
                 run_cmd(["systemctl", "restart", svc])
                 info(f"Restarted {svc}")
@@ -1961,6 +2071,14 @@ def do_update(plat, install_dir, skip_pull=False):
                 info("launchd service restarted")
             else:
                 info("No launchd plist found — restart manually")
+            # Watchdog plist
+            wd_plist = os.path.expanduser(
+                "~/Library/LaunchAgents/com.tinysignage.watchdog.plist"
+            )
+            if os.path.isfile(wd_plist):
+                run_cmd(["launchctl", "unload", wd_plist], check=False)
+                run_cmd(["launchctl", "load", wd_plist])
+                info("Watchdog launchd service restarted")
         else:
             service_path = os.path.expanduser(
                 "~/.config/systemd/user/tinysignage.service"
@@ -1970,6 +2088,13 @@ def do_update(plat, install_dir, skip_pull=False):
                 info("systemd user service restarted")
             else:
                 info("Restart the application manually")
+            # Watchdog user unit
+            wd_service = os.path.expanduser(
+                "~/.config/systemd/user/tinysignage-watchdog.service"
+            )
+            if os.path.isfile(wd_service):
+                run_cmd(["systemctl", "--user", "restart", "tinysignage-watchdog"], check=False)
+                info("Watchdog systemd user service restarted")
 
     print("\nUpdate complete!")
 
@@ -2215,6 +2340,7 @@ def _uninstall_pi(install_dir, keep_data):
     step(1, total, "Stopping and removing system services...")
     _stop_and_remove_system_unit("signage-app")
     lite_player_removed = _stop_and_remove_system_unit("signage-player")
+    _stop_and_remove_system_unit("signage-watchdog")
     run_cmd(["systemctl", "daemon-reload"], check=False)
 
     # --- [2] Remove desktop player artifacts ---
@@ -2310,6 +2436,13 @@ def _uninstall_desktop(plat, install_dir, keep_data):
             _remove_path(plist, label="launchd plist")
         else:
             info("No launchd plist found")
+        # Watchdog plist
+        wd_plist = os.path.expanduser(
+            "~/Library/LaunchAgents/com.tinysignage.watchdog.plist"
+        )
+        if os.path.isfile(wd_plist):
+            run_cmd(["launchctl", "unload", wd_plist], check=False)
+            _remove_path(wd_plist, label="watchdog launchd plist")
     elif plat == "linux":
         service = os.path.expanduser(
             "~/.config/systemd/user/tinysignage.service"
@@ -2320,12 +2453,28 @@ def _uninstall_desktop(plat, install_dir, keep_data):
             _remove_path(service, label="systemd user unit")
         else:
             info("No systemd user unit found")
+        # Watchdog user unit
+        wd_service = os.path.expanduser(
+            "~/.config/systemd/user/tinysignage-watchdog.service"
+        )
+        if os.path.isfile(wd_service):
+            run_cmd(["systemctl", "--user", "stop", "tinysignage-watchdog"], check=False)
+            run_cmd(["systemctl", "--user", "disable", "tinysignage-watchdog"], check=False)
+            _remove_path(wd_service, label="watchdog systemd user unit")
     elif plat == "windows":
         bat = os.path.join(install_dir, "start-tinysignage.bat")
         if os.path.isfile(bat):
             _remove_path(bat, label="start batch file")
         else:
             info("No start batch file found")
+        # Watchdog startup shortcut
+        startup = os.path.join(
+            os.environ.get("APPDATA", ""),
+            r"Microsoft\Windows\Start Menu\Programs\Startup",
+        )
+        wd_shortcut = os.path.join(startup, "tinysignage-watchdog.vbs")
+        if os.path.isfile(wd_shortcut):
+            _remove_path(wd_shortcut, label="watchdog startup shortcut")
 
     # Runtime data inside the repo
     if not keep_data:
