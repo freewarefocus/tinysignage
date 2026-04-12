@@ -658,6 +658,7 @@
 
         activeZones.forEach(ctrl => {
             if (ctrl.timer) clearTimeout(ctrl.timer);
+            if (ctrl.txFallbackTimer) clearTimeout(ctrl.txFallbackTimer);
             zoneCleanupLayer(ctrl.layerA);
             zoneCleanupLayer(ctrl.layerB);
         });
@@ -818,7 +819,8 @@
                 zoneCleanupLayer(outLayer);
             };
             outLayer.addEventListener('transitionend', cleanSlide);
-            setTimeout(cleanSlide, (dur + 0.5) * 1000);
+            if (ctrl.txFallbackTimer) clearTimeout(ctrl.txFallbackTimer);
+            ctrl.txFallbackTimer = setTimeout(cleanSlide, (dur + 0.5) * 1000);
         } else {
             if (txDuration != null) {
                 inLayer.style.transitionDuration = txDuration + 's';
@@ -834,7 +836,8 @@
             };
             outLayer.addEventListener('transitionend', onEnd);
             const dur = txDuration != null ? txDuration : 1;
-            setTimeout(() => {
+            if (ctrl.txFallbackTimer) clearTimeout(ctrl.txFallbackTimer);
+            ctrl.txFallbackTimer = setTimeout(() => {
                 outLayer.removeEventListener('transitionend', onEnd);
                 zoneCleanupLayer(outLayer);
                 inLayer.style.transitionDuration = '';
@@ -867,7 +870,8 @@
         const iframe = layer.querySelector('iframe');
         if (iframe) {
             iframe.onload = null;
-            iframe.src = 'about:blank';
+            iframe.removeAttribute('src');
+            iframe.srcdoc = '';   // synchronously clear document without navigation
         }
         layer.innerHTML = '';
     }
@@ -1095,6 +1099,7 @@
 
             if (asset.asset_type === 'image') {
                 if (!preloadImg) preloadImg = new Image();
+                preloadImg.src = '';                              // release previous decode buffer
                 preloadImg.src = `${baseUrl}/media/${asset.uri}`;
             }
         }
@@ -1227,7 +1232,8 @@
         const iframe = layer.querySelector('iframe');
         if (iframe) {
             iframe.onload = null;
-            iframe.src = 'about:blank';
+            iframe.removeAttribute('src');
+            iframe.srcdoc = '';   // synchronously clear document without navigation
         }
         // Cancel any in-flight transition cleanup on this layer so a stale
         // transitionend (or fallback timer) from a previous crossfade cannot
