@@ -211,11 +211,11 @@ def find_cms_pid() -> int | None:
     """Find the PID of the CMS (uvicorn/python) process."""
     system = platform.system()
     if system == "Linux":
-        return _find_pid_linux("uvicorn", fallback_comm="python")
+        return _find_pid_linux("uvicorn")
     elif system == "Darwin":
         return _find_pid_macos("uvicorn")
     elif system == "Windows":
-        return _find_pid_windows("python.exe")
+        return _find_pid_windows("python.exe", cmdline_filter="app.server")
     return None
 
 
@@ -231,7 +231,7 @@ def find_browser_pid() -> int | None:
     return None
 
 
-def _find_pid_linux(cmdline_match: str, fallback_comm: str | None = None) -> int | None:
+def _find_pid_linux(cmdline_match: str) -> int | None:
     """Scan /proc for a process whose cmdline contains the match string."""
     try:
         for entry in Path("/proc").iterdir():
@@ -303,8 +303,30 @@ def _find_browser_pid_macos() -> int | None:
     return None
 
 
-def _find_pid_windows(image_name: str) -> int | None:
-    """Use tasklist to find a process by image name, then filter by cmdline."""
+def _find_pid_windows(image_name: str, cmdline_filter: str | None = None) -> int | None:
+    """Use tasklist to find a process by image name, optionally filtering by cmdline via PowerShell."""
+    if cmdline_filter:
+        # Use PowerShell Get-CimInstance for command-line filtering
+        try:
+            ps_cmd = (
+                f"Get-CimInstance Win32_Process -Filter "
+                f"\"Name='{image_name}' AND CommandLine LIKE '%{cmdline_filter}%'\" "
+                f"| Select-Object -First 1 -ExpandProperty ProcessId"
+            )
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_cmd],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    return int(result.stdout.strip())
+                except ValueError:
+                    pass
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+        return None
+
+    # Simple tasklist lookup (no cmdline filter)
     try:
         result = subprocess.run(
             ["tasklist", "/FI", f"IMAGENAME eq {image_name}", "/FO", "CSV", "/NH"],
@@ -394,7 +416,11 @@ def _read_rss_macos(pid: int) -> int | None:
 
 
 def _read_rss_windows(pid: int) -> int | None:
-    """Read RSS via tasklist /FI (parse CSV, 'Mem Usage' column in KB)."""
+    """Read RSS via tasklist /FI (parse CSV, 'Mem Usage' column in KB).
+
+    The memory column format varies by locale (e.g. "123,456 K", "123.456 Ko").
+    We strip all non-digit characters to handle any locale.
+    """
     try:
         result = subprocess.run(
             ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
@@ -408,12 +434,14 @@ def _read_rss_windows(pid: int) -> int | None:
                 # CSV: "name","pid","session","session#","mem"
                 parts = line.split('","')
                 if len(parts) >= 5:
-                    mem_str = parts[4].strip('"').replace(",", "").replace(" K", "")
-                    try:
-                        kb = int(mem_str)
-                        return kb // 1024
-                    except ValueError:
-                        pass
+                    # Strip everything except digits to handle any locale
+                    digits = "".join(c for c in parts[4] if c.isdigit())
+                    if digits:
+                        try:
+                            kb = int(digits)
+                            return kb // 1024
+                        except ValueError:
+                            pass
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
     return None
@@ -463,30 +491,31 @@ def restart_browser(plat: str):
 
 def _restart_cms_windows():
     """Kill uvicorn/python and re-launch via batch file."""
-    # Kill existing python processes running app.server
+    # Kill existing python processes running app.server via PowerShell
     try:
-        # Use WMIC to find python processes with app.server in command line
+        ps_cmd = (
+            "Get-CimInstance Win32_Process -Filter "
+            "\"Name='python.exe' AND CommandLine LIKE '%app.server%'\" "
+            "| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
+        )
         result = subprocess.run(
-            ["wmic", "process", "where",
-             "Name='python.exe' and CommandLine like '%app.server%'",
-             "get", "ProcessId", "/format:csv"],
-            capture_output=True, text=True, timeout=10,
+            ["powershell", "-NoProfile", "-Command", ps_cmd],
+            capture_output=True, text=True, timeout=15,
         )
         if result.returncode == 0:
-            for line in result.stdout.strip().split("\n"):
-                parts = line.strip().split(",")
-                if len(parts) >= 2:
-                    try:
-                        pid = int(parts[-1])
-                        subprocess.run(
-                            ["taskkill", "/PID", str(pid), "/F"],
-                            capture_output=True, timeout=10,
-                        )
-                        log.info("Killed CMS process PID %d", pid)
-                    except (ValueError, subprocess.TimeoutExpired):
-                        continue
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+            log.info("Killed CMS python processes via PowerShell")
+        elif result.stderr.strip():
+            log.warning("PowerShell CMS kill output: %s", result.stderr.strip())
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        log.warning("PowerShell not available for CMS kill: %s — trying taskkill fallback", e)
+        # Fallback: use taskkill by image name (less precise)
+        try:
+            subprocess.run(
+                ["taskkill", "/IM", "python.exe", "/F"],
+                capture_output=True, timeout=10,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
 
     # Re-launch via batch file
     bat = SCRIPT_DIR / "start-tinysignage.bat"
@@ -505,15 +534,43 @@ def _restart_cms_windows():
 
 
 def _restart_browser_windows():
-    """Kill Chrome and re-launch via launcher.py."""
-    for name in BROWSER_NAMES_WINDOWS:
-        try:
-            subprocess.run(
-                ["taskkill", "/IM", name, "/F"],
-                capture_output=True, timeout=10,
-            )
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
+    """Kill the signage Chrome instance and re-launch via launcher.py.
+
+    Targets only Chrome processes whose command line contains 'browser-profile'
+    (the custom --user-data-dir used by launcher.py), so the user's normal
+    Chrome windows are left untouched.
+    """
+    killed = False
+    # Try PowerShell first — can filter by command line to target only signage Chrome
+    try:
+        ps_cmd = (
+            "Get-CimInstance Win32_Process -Filter "
+            "\"(Name='chrome.exe' OR Name='chromium.exe') "
+            "AND CommandLine LIKE '%browser-profile%'\" "
+            "| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
+        )
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_cmd],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode == 0:
+            killed = True
+            log.info("Killed signage browser processes via PowerShell")
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    if not killed:
+        # Fallback: find browser PID via tasklist + kill individually
+        pid = find_browser_pid()
+        if pid:
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/F"],
+                    capture_output=True, timeout=10,
+                )
+                log.info("Killed browser PID %d via taskkill", pid)
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass
 
     launcher = SCRIPT_DIR / "launcher.py"
     if launcher.exists():
@@ -565,14 +622,13 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
     grace = cfg.get("startup_grace", 60)
     cms_threshold = cfg.get("cms_fail_threshold", 3)
     browser_threshold = cfg.get("browser_fail_threshold", 2)
-    mem_limit = cfg.get("browser_memory_limit_mb", 400)
+    mem_limit = cfg.get("browser_memory_limit_mb", 1024)
     port = cfg.get("_port", 8080)
     use_https = cfg.get("_https", False)
 
     cms_fails = 0
     browser_fails = 0
     start_time = time.monotonic()
-    last_browser_pid = None
 
     log.info(
         "Watchdog started: platform=%s, mode=%s, interval=%ds, grace=%ds",
@@ -613,7 +669,6 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
                 browser_pid = find_browser_pid()
                 if browser_pid:
                     browser_fails = 0
-                    last_browser_pid = browser_pid
 
                     # Memory check
                     if mem_limit > 0:
@@ -627,7 +682,6 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
                                     rss, mem_limit,
                                 )
                                 restart_browser(plat)
-                                last_browser_pid = None
                                 if not once:
                                     log.info("Cooldown 30s after browser restart")
                                     time.sleep(30)
