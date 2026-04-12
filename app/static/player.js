@@ -174,6 +174,7 @@
     let pollInProgress = false;
     let pendingDoTxTimer = null;
     let pendingVideoTimeout = null;
+    let loadGeneration = 0;           // Bumped each loadAsset; stale callbacks exit early
 
     // --- Webhook trigger state ---
     let lastSeenWebhookFires = {};    // { branchId: isoTimestamp } — tracks last processed webhook fire
@@ -648,6 +649,7 @@
                 settings: zoneSettings,
                 timer: null,
                 transitionType: zoneSettings.transition_type || 'fade',
+                loadGeneration: 0,
             };
 
             activeZones.push(ctrl);
@@ -730,6 +732,7 @@
 
     function zoneLoadAsset(ctrl, item) {
         const asset = item.asset || item;
+        const gen = ++ctrl.loadGeneration;
         const isLayerA = ctrl.currentLayer === 'a';
         const nextLayer = isLayerA ? ctrl.layerB : ctrl.layerA;
         const outLayer = isLayerA ? ctrl.layerA : ctrl.layerB;
@@ -742,8 +745,8 @@
         let element;
         if (asset.asset_type === 'image') {
             element = document.createElement('img');
-            element.onload = () => { nextLayer._doTxTimer = setTimeout(doTx, 300); };
-            element.onerror = () => { nextLayer._doTxTimer = setTimeout(doTx, 300); };
+            element.onload = () => { if (gen !== ctrl.loadGeneration) return; nextLayer._doTxTimer = setTimeout(doTx, 300); };
+            element.onerror = () => { if (gen !== ctrl.loadGeneration) return; nextLayer._doTxTimer = setTimeout(doTx, 300); };
             element.src = `${baseUrl}/media/${asset.uri}`;
         } else if (asset.asset_type === 'video') {
             element = document.createElement('video');
@@ -752,6 +755,7 @@
             element.playsInline = true;
             element.loop = false;
             const videoLoadTimeout = setTimeout(() => {
+                if (gen !== ctrl.loadGeneration) return;
                 if (element.readyState < 2) {
                     PlayerLog.warn('Video load timeout (zone): ' + asset.uri);
                     element.oncanplay = null;
@@ -761,18 +765,18 @@
                 }
             }, 10000);
             nextLayer._videoLoadTimer = videoLoadTimeout;
-            element.oncanplay = () => { element.oncanplay = null; clearTimeout(videoLoadTimeout); nextLayer._doTxTimer = setTimeout(doTx, 300); };
-            element.onerror = () => { clearTimeout(videoLoadTimeout); zoneAdvance(ctrl); };
-            element.onended = () => { zoneAdvance(ctrl); };
+            element.oncanplay = () => { if (gen !== ctrl.loadGeneration) return; element.oncanplay = null; clearTimeout(videoLoadTimeout); nextLayer._doTxTimer = setTimeout(doTx, 300); };
+            element.onerror = () => { if (gen !== ctrl.loadGeneration) return; clearTimeout(videoLoadTimeout); zoneAdvance(ctrl); };
+            element.onended = () => { if (gen !== ctrl.loadGeneration) return; zoneAdvance(ctrl); };
             element.src = `${baseUrl}/media/${asset.uri}`;
         } else if (asset.asset_type === 'html') {
             element = document.createElement('iframe');
-            element.onload = () => { nextLayer._doTxTimer = setTimeout(doTx, 300); };
+            element.onload = () => { if (gen !== ctrl.loadGeneration) return; nextLayer._doTxTimer = setTimeout(doTx, 300); };
             element.src = `${baseUrl}/media/${asset.uri}`;
             element.sandbox = 'allow-scripts allow-same-origin';
         } else if (asset.asset_type === 'url') {
             element = document.createElement('iframe');
-            element.onload = () => { nextLayer._doTxTimer = setTimeout(doTx, 500); };
+            element.onload = () => { if (gen !== ctrl.loadGeneration) return; nextLayer._doTxTimer = setTimeout(doTx, 500); };
             element.src = asset.uri;
             element.sandbox = 'allow-scripts allow-same-origin';
         }
@@ -1047,6 +1051,7 @@
     // --- Asset Loading ---
     function loadAsset(item) {
         const asset = item.asset || item;
+        const gen = ++loadGeneration;
         const nextLayerId = currentLayer === 'a' ? 'b' : 'a';
         const nextLayer = document.getElementById(`layer-${nextLayerId}`);
         const currentLayerEl = document.getElementById(`layer-${currentLayer}`);
@@ -1059,8 +1064,9 @@
         let element;
         if (asset.asset_type === 'image') {
             element = document.createElement('img');
-            element.onload = () => { pendingDoTxTimer = setTimeout(doTx, 300); };
+            element.onload = () => { if (gen !== loadGeneration) return; pendingDoTxTimer = setTimeout(doTx, 300); };
             element.onerror = () => {
+                if (gen !== loadGeneration) return;
                 PlayerLog.error('Image load failed: ' + asset.uri);
                 pendingDoTxTimer = setTimeout(doTx, 300);
             };
@@ -1073,6 +1079,7 @@
             element.loop = false;
 
             const videoLoadTimeout = setTimeout(() => {
+                if (gen !== loadGeneration) return;
                 if (element.readyState < 2) {
                     PlayerLog.error('Video load timeout: ' + asset.uri);
                     element.oncanplay = null;
@@ -1083,27 +1090,29 @@
             }, 10000);
             pendingVideoTimeout = videoLoadTimeout;
 
-            element.oncanplay = () => { element.oncanplay = null; clearTimeout(videoLoadTimeout); pendingDoTxTimer = setTimeout(doTx, 300); };
+            element.oncanplay = () => { if (gen !== loadGeneration) return; element.oncanplay = null; clearTimeout(videoLoadTimeout); pendingDoTxTimer = setTimeout(doTx, 300); };
 
             element.onerror = () => {
+                if (gen !== loadGeneration) return;
                 clearTimeout(videoLoadTimeout);
                 PlayerLog.error('Video load failed: ' + asset.uri);
                 advance();
             };
 
             element.onended = () => {
+                if (gen !== loadGeneration) return;
                 advance();
             };
 
             element.src = `${baseUrl}/media/${asset.uri}`;
         } else if (asset.asset_type === 'html') {
             element = document.createElement('iframe');
-            element.onload = () => { pendingDoTxTimer = setTimeout(doTx, 300); };
+            element.onload = () => { if (gen !== loadGeneration) return; pendingDoTxTimer = setTimeout(doTx, 300); };
             element.src = `${baseUrl}/media/${asset.uri}`;
             element.sandbox = 'allow-scripts allow-same-origin';
         } else if (asset.asset_type === 'url') {
             element = document.createElement('iframe');
-            element.onload = () => { pendingDoTxTimer = setTimeout(doTx, 500); };
+            element.onload = () => { if (gen !== loadGeneration) return; pendingDoTxTimer = setTimeout(doTx, 500); };
             element.src = asset.uri;
             element.sandbox = 'allow-scripts allow-same-origin';
         }
