@@ -170,6 +170,10 @@
     let serverMemoryLimitMb = 200;
     let preloadImg = null;
     const isWPE = /WPE/i.test(navigator.userAgent);
+    let rafProbeRunning = false;
+    let pollInProgress = false;
+    let pendingDoTxTimer = null;
+    let pendingVideoTimeout = null;
 
     // --- Webhook trigger state ---
     let lastSeenWebhookFires = {};    // { branchId: isoTimestamp } — tracks last processed webhook fire
@@ -446,11 +450,13 @@
     }
 
     async function poll() {
+        if (pollInProgress) return;
         if (!deviceId) {
             setOnlineStatus(false);
             return;
         }
 
+        pollInProgress = true;
         try {
             const resp = await authFetch(apiUrl(`/api/devices/${deviceId}/playlist`));
             if (resp.status === 401) {
@@ -565,6 +571,8 @@
         } catch (e) {
             PlayerLog.warn('Poll failed: ' + e.message);
             setOnlineStatus(false);
+        } finally {
+            pollInProgress = false;
         }
     }
 
@@ -734,8 +742,8 @@
         let element;
         if (asset.asset_type === 'image') {
             element = document.createElement('img');
-            element.onload = () => { setTimeout(doTx, 300); };
-            element.onerror = () => { setTimeout(doTx, 300); };
+            element.onload = () => { nextLayer._doTxTimer = setTimeout(doTx, 300); };
+            element.onerror = () => { nextLayer._doTxTimer = setTimeout(doTx, 300); };
             element.src = `${baseUrl}/media/${asset.uri}`;
         } else if (asset.asset_type === 'video') {
             element = document.createElement('video');
@@ -752,18 +760,19 @@
                     zoneAdvance(ctrl);
                 }
             }, 10000);
-            element.oncanplay = () => { clearTimeout(videoLoadTimeout); setTimeout(doTx, 300); };
+            nextLayer._videoLoadTimer = videoLoadTimeout;
+            element.oncanplay = () => { element.oncanplay = null; clearTimeout(videoLoadTimeout); nextLayer._doTxTimer = setTimeout(doTx, 300); };
             element.onerror = () => { clearTimeout(videoLoadTimeout); zoneAdvance(ctrl); };
             element.onended = () => { zoneAdvance(ctrl); };
             element.src = `${baseUrl}/media/${asset.uri}`;
         } else if (asset.asset_type === 'html') {
             element = document.createElement('iframe');
-            element.onload = () => { setTimeout(doTx, 300); };
+            element.onload = () => { nextLayer._doTxTimer = setTimeout(doTx, 300); };
             element.src = `${baseUrl}/media/${asset.uri}`;
             element.sandbox = 'allow-scripts allow-same-origin';
         } else if (asset.asset_type === 'url') {
             element = document.createElement('iframe');
-            element.onload = () => { setTimeout(doTx, 500); };
+            element.onload = () => { nextLayer._doTxTimer = setTimeout(doTx, 500); };
             element.src = asset.uri;
             element.sandbox = 'allow-scripts allow-same-origin';
         }
@@ -849,6 +858,8 @@
     }
 
     function zoneCleanupLayer(layer) {
+        if (layer._doTxTimer) { clearTimeout(layer._doTxTimer); layer._doTxTimer = null; }
+        if (layer._videoLoadTimer) { clearTimeout(layer._videoLoadTimer); layer._videoLoadTimer = null; }
         const video = layer.querySelector('video');
         if (video) {
             video.onended = null;
@@ -1033,10 +1044,10 @@
         let element;
         if (asset.asset_type === 'image') {
             element = document.createElement('img');
-            element.onload = () => { setTimeout(doTx, 300); };
+            element.onload = () => { pendingDoTxTimer = setTimeout(doTx, 300); };
             element.onerror = () => {
                 PlayerLog.error('Image load failed: ' + asset.uri);
-                setTimeout(doTx, 300);
+                pendingDoTxTimer = setTimeout(doTx, 300);
             };
             element.src = `${baseUrl}/media/${asset.uri}`;
         } else if (asset.asset_type === 'video') {
@@ -1055,8 +1066,9 @@
                     advance();
                 }
             }, 10000);
+            pendingVideoTimeout = videoLoadTimeout;
 
-            element.oncanplay = () => { clearTimeout(videoLoadTimeout); setTimeout(doTx, 300); };
+            element.oncanplay = () => { element.oncanplay = null; clearTimeout(videoLoadTimeout); pendingDoTxTimer = setTimeout(doTx, 300); };
 
             element.onerror = () => {
                 clearTimeout(videoLoadTimeout);
@@ -1071,12 +1083,12 @@
             element.src = `${baseUrl}/media/${asset.uri}`;
         } else if (asset.asset_type === 'html') {
             element = document.createElement('iframe');
-            element.onload = () => { setTimeout(doTx, 300); };
+            element.onload = () => { pendingDoTxTimer = setTimeout(doTx, 300); };
             element.src = `${baseUrl}/media/${asset.uri}`;
             element.sandbox = 'allow-scripts allow-same-origin';
         } else if (asset.asset_type === 'url') {
             element = document.createElement('iframe');
-            element.onload = () => { setTimeout(doTx, 500); };
+            element.onload = () => { pendingDoTxTimer = setTimeout(doTx, 500); };
             element.src = asset.uri;
             element.sandbox = 'allow-scripts allow-same-origin';
         }
@@ -1211,6 +1223,8 @@
 
     // --- Cleanup ---
     function cleanupLayer(layer) {
+        if (pendingDoTxTimer) { clearTimeout(pendingDoTxTimer); pendingDoTxTimer = null; }
+        if (pendingVideoTimeout) { clearTimeout(pendingVideoTimeout); pendingVideoTimeout = null; }
         const video = layer.querySelector('video');
         if (video) {
             video.onended = null;
@@ -1278,6 +1292,8 @@
 
     // --- Health Monitor ---
     function startRafProbe() {
+        if (rafProbeRunning) return;
+        rafProbeRunning = true;
         function tick() {
             lastRafTime = Date.now();
             rafResponsive = true;
@@ -1725,6 +1741,7 @@
         if (!container) return;
         container.innerHTML = '';
 
+        let lastTouchTriggerTime = 0;
         touchBranches.forEach(branch => {
             const config = branch.trigger_config || {};
             const zone = document.createElement('div');
@@ -1736,6 +1753,9 @@
 
             const handler = function (e) {
                 if (activeOverride) return;
+                const now = Date.now();
+                if (now - lastTouchTriggerTime < 500) return;
+                lastTouchTriggerTime = now;
                 e.preventDefault();
                 PlayerLog.info('Touch zone trigger fired');
                 fireTrigger(branch);
