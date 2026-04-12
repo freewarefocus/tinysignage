@@ -155,7 +155,7 @@ def detect_mode(cfg: dict, plat: str) -> str:
         has_cms = Path("/etc/systemd/system/signage-app.service").exists()
         has_player = (
             Path("/etc/systemd/system/signage-player.service").exists()
-            or _has_pi_desktop_player()
+            or (SCRIPT_DIR / "scripts" / "run-player.sh").exists()
         )
     elif plat == "linux":
         has_cms = Path("~/.config/systemd/user/tinysignage.service").expanduser().exists()
@@ -173,20 +173,6 @@ def detect_mode(cfg: dict, plat: str) -> str:
         return "player"
     # Default to CMS if we can't tell — it's the most common case
     return "cms"
-
-
-def _has_pi_desktop_player() -> bool:
-    """Check if the Pi Desktop XDG autostart player entry exists."""
-    try:
-        import pwd
-        for pw in pwd.getpwall():
-            if 1000 <= pw.pw_uid < 65000:
-                autostart = Path(pw.pw_dir) / ".config/autostart/signage-player.desktop"
-                if autostart.exists():
-                    return True
-    except (ImportError, OSError):
-        pass
-    return False
 
 
 # =========================================================================
