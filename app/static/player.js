@@ -23,7 +23,7 @@
     const RAF_STALE_THRESHOLD = 10000;           // 10s = DOM frozen
     const MEMORY_GRACE_PERIOD = 300000;          // 5 min after reload, skip memory checks
     const MIN_UPTIME_FOR_SCHEDULED_RESTART = 3600000; // 1hr
-    const WPE_MAX_UPTIME = 21600000; // 6 hours — safety-net restart on WPE
+    const WPE_MAX_UPTIME = 86400000; // 24 hours — safety-net restart on WPE
 
     // --- Persistent Player Log (ring buffer in localStorage) ---
     const LOG_STORAGE_KEY = 'tinysignage_player_log';
