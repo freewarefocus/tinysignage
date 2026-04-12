@@ -157,6 +157,7 @@ class Device(Base):
     js_heap_used_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
     js_heap_total_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
     dom_responsive: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    cog_rss_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
     restart_requested: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     registration_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     registration_expires: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

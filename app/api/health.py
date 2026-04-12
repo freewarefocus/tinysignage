@@ -159,6 +159,11 @@ async def player_heartbeat(
     else:
         resp["restart"] = False
 
+    # Attach server-side cog RSS reading (Pi only)
+    from app.cog_monitor import cog_monitor
+    if cog_monitor.last_rss_mb is not None:
+        device.cog_rss_mb = cog_monitor.last_rss_mb
+
     # Include player health settings from global Settings
     settings = await session.get(Settings, 1)
     if settings:

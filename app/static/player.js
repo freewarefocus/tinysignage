@@ -23,6 +23,7 @@
     const RAF_STALE_THRESHOLD = 10000;           // 10s = DOM frozen
     const MEMORY_GRACE_PERIOD = 300000;          // 5 min after reload, skip memory checks
     const MIN_UPTIME_FOR_SCHEDULED_RESTART = 3600000; // 1hr
+    const WPE_MAX_UPTIME = 21600000; // 6 hours — safety-net restart on WPE
 
     // --- Persistent Player Log (ring buffer in localStorage) ---
     const LOG_STORAGE_KEY = 'tinysignage_player_log';
@@ -167,6 +168,8 @@
     let rafResponsive = true;
     let serverRestartHour = null;
     let serverMemoryLimitMb = 200;
+    let preloadImg = null;
+    const isWPE = /WPE/i.test(navigator.userAgent);
 
     // --- Webhook trigger state ---
     let lastSeenWebhookFires = {};    // { branchId: isoTimestamp } — tracks last processed webhook fire
@@ -856,10 +859,15 @@
         if (img) {
             img.onload = null;
             img.onerror = null;
+            img.classList.remove('has-effect');
+            img.style.animationName = '';
+            img.removeAttribute('src');
+            img.src = '';
         }
         const iframe = layer.querySelector('iframe');
         if (iframe) {
             iframe.onload = null;
+            iframe.src = 'about:blank';
         }
         layer.innerHTML = '';
     }
@@ -1086,8 +1094,8 @@
             if (!asset) continue;
 
             if (asset.asset_type === 'image') {
-                const img = new Image();
-                img.src = `${baseUrl}/media/${asset.uri}`;
+                if (!preloadImg) preloadImg = new Image();
+                preloadImg.src = `${baseUrl}/media/${asset.uri}`;
             }
         }
     }
@@ -1211,10 +1219,15 @@
         if (img) {
             img.onload = null;
             img.onerror = null;
+            img.classList.remove('has-effect');
+            img.style.animationName = '';
+            img.removeAttribute('src');
+            img.src = '';
         }
         const iframe = layer.querySelector('iframe');
         if (iframe) {
             iframe.onload = null;
+            iframe.src = 'about:blank';
         }
         // Cancel any in-flight transition cleanup on this layer so a stale
         // transitionend (or fallback timer) from a previous crossfade cannot
@@ -1295,6 +1308,13 @@
             }
         }
 
+        // WPE fallback: performance.memory unavailable, use uptime ceiling
+        if (isWPE && serverRestartHour === null && uptimeMs > WPE_MAX_UPTIME) {
+            PlayerLog.info('Health: WPE uptime ' + Math.round(uptimeMs / 3600000) + 'h — restarting as safety net');
+            gracefulReload('wpe-uptime');
+            return;
+        }
+
         // Responsiveness check
         if (Date.now() - lastRafTime > RAF_STALE_THRESHOLD) {
             rafResponsive = false;
@@ -1352,6 +1372,8 @@
             if (performance.memory) {
                 payload.js_heap_used_mb = Math.round(performance.memory.usedJSHeapSize / (1024 * 1024));
                 payload.js_heap_total_mb = Math.round(performance.memory.totalJSHeapSize / (1024 * 1024));
+            } else {
+                payload.js_heap_used_mb = null;
             }
 
             const resp = await authFetch(apiUrl('/api/player/heartbeat'), {
