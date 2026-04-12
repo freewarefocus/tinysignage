@@ -819,6 +819,8 @@
             outLayer.classList.add('slide-out');
             const cleanSlide = () => {
                 outLayer.removeEventListener('transitionend', cleanSlide);
+                if (ctrl.txFallbackTimer) { clearTimeout(ctrl.txFallbackTimer); ctrl.txFallbackTimer = null; }
+                outLayer._txCleanup = null;
                 inLayer.classList.remove('slide-transition', 'slide-in');
                 outLayer.classList.remove('slide-transition', 'slide-out');
                 inLayer.style.removeProperty('--transition-duration');
@@ -830,6 +832,7 @@
             outLayer.addEventListener('transitionend', cleanSlide);
             if (ctrl.txFallbackTimer) clearTimeout(ctrl.txFallbackTimer);
             ctrl.txFallbackTimer = setTimeout(cleanSlide, (dur + 0.5) * 1000);
+            outLayer._txCleanup = { listener: cleanSlide, fallbackTimer: ctrl.txFallbackTimer };
         } else {
             if (txDuration != null) {
                 inLayer.style.transitionDuration = txDuration + 's';
@@ -839,6 +842,8 @@
             outLayer.classList.remove('active');
             const onEnd = () => {
                 outLayer.removeEventListener('transitionend', onEnd);
+                if (ctrl.txFallbackTimer) { clearTimeout(ctrl.txFallbackTimer); ctrl.txFallbackTimer = null; }
+                outLayer._txCleanup = null;
                 zoneCleanupLayer(outLayer);
                 inLayer.style.transitionDuration = '';
                 outLayer.style.transitionDuration = '';
@@ -848,10 +853,12 @@
             if (ctrl.txFallbackTimer) clearTimeout(ctrl.txFallbackTimer);
             ctrl.txFallbackTimer = setTimeout(() => {
                 outLayer.removeEventListener('transitionend', onEnd);
+                outLayer._txCleanup = null;
                 zoneCleanupLayer(outLayer);
                 inLayer.style.transitionDuration = '';
                 outLayer.style.transitionDuration = '';
             }, (dur + 0.5) * 1000);
+            outLayer._txCleanup = { listener: onEnd, fallbackTimer: ctrl.txFallbackTimer };
         }
 
         ctrl.currentLayer = newCurrentId;
@@ -860,6 +867,15 @@
     function zoneCleanupLayer(layer) {
         if (layer._doTxTimer) { clearTimeout(layer._doTxTimer); layer._doTxTimer = null; }
         if (layer._videoLoadTimer) { clearTimeout(layer._videoLoadTimer); layer._videoLoadTimer = null; }
+        // Cancel any in-flight transition cleanup on this layer so a stale
+        // transitionend (or fallback timer) from a previous crossfade cannot
+        // fire after new content has been loaded — mirrors single-mode
+        // layerTxCleanup logic.
+        if (layer._txCleanup) {
+            layer.removeEventListener('transitionend', layer._txCleanup.listener);
+            clearTimeout(layer._txCleanup.fallbackTimer);
+            layer._txCleanup = null;
+        }
         const video = layer.querySelector('video');
         if (video) {
             video.onended = null;
@@ -876,7 +892,6 @@
             img.classList.remove('has-effect');
             img.style.animationName = '';
             img.removeAttribute('src');
-            img.src = '';
         }
         const iframe = layer.querySelector('iframe');
         if (iframe) {
@@ -1241,7 +1256,6 @@
             img.classList.remove('has-effect');
             img.style.animationName = '';
             img.removeAttribute('src');
-            img.src = '';
         }
         const iframe = layer.querySelector('iframe');
         if (iframe) {
