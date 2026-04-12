@@ -956,7 +956,7 @@
                 shuffleAdvanceCount++;
                 if (shuffleAdvanceCount >= playlist.length) {
                     shuffleAdvanceCount = 0;
-                    checkLoopCount();
+                    if (checkLoopCount()) return;
                 }
             }
         } else {
@@ -964,7 +964,7 @@
             if (currentIndex >= playlist.length) {
                 currentIndex = 0;
                 // Playlist wrapped — check loop count triggers
-                if (triggerFlow) checkLoopCount();
+                if (triggerFlow && checkLoopCount()) return;
             }
         }
         playCurrentAsset();
@@ -1810,7 +1810,7 @@
     }
 
     function checkLoopCount() {
-        if (!triggerFlow) return;
+        if (!triggerFlow) return false;
         loopCount++;
 
         const branches = findBranchesForSource(currentSourcePlaylistId);
@@ -1818,12 +1818,14 @@
         const targetCount = loopBranch ? (loopBranch.trigger_config?.count || 3) : '?';
         PlayerLog.info('Loop ' + loopCount + '/' + targetCount + ' on ' + currentSourcePlaylistId);
 
-        if (!loopBranch) return;
+        if (!loopBranch) return false;
 
         if (loopCount >= (loopBranch.trigger_config?.count || 3)) {
             PlayerLog.info('Loop count trigger fired after ' + loopCount + ' loops');
             fireTrigger(loopBranch);
+            return true;
         }
+        return false;
     }
 
     function fireTrigger(branch) {
@@ -1887,7 +1889,8 @@
             connectBridge(newBranches);
             initWebhookTracking(newBranches);
         } else {
-            disconnectGpioBridge();
+            activeGpioBranches = [];
+            activeJoystickBranches = [];
         }
     }
 
@@ -1925,7 +1928,8 @@
         const joystickBranches = branches.filter(b => b.trigger_type === 'joystick');
 
         if (gpioBranches.length === 0 && joystickBranches.length === 0) {
-            disconnectGpioBridge();
+            activeGpioBranches = [];
+            activeJoystickBranches = [];
             return;
         }
 
@@ -1986,6 +1990,9 @@
             gpioReconnectTimer = null;
         }
         if (gpioWebSocket) {
+            gpioWebSocket.onopen = null;
+            gpioWebSocket.onmessage = null;
+            gpioWebSocket.onerror = null;
             gpioWebSocket.onclose = null; // Prevent reconnect on intentional close
             gpioWebSocket.close();
             gpioWebSocket = null;

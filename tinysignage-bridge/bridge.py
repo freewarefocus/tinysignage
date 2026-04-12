@@ -222,6 +222,8 @@ async def read_single_joystick(device, device_index, config):
 
     except (OSError, IOError):
         log.warning("Joystick %d (%s) disconnected", device_index, device_name)
+    except Exception:
+        log.exception("Joystick %d (%s) unexpected error", device_index, device_name)
     finally:
         try:
             device.close()
@@ -236,20 +238,21 @@ async def read_joystick_events(config):
     device_index_counter = 0
 
     while True:
-        # Discover new devices
-        for dev in find_joystick_devices():
-            if dev.path not in active_paths or active_paths[dev.path].done():
-                idx = device_index_counter
-                device_index_counter += 1
-                task = asyncio.create_task(read_single_joystick(dev, idx, joy_config))
-                active_paths[dev.path] = task
-            else:
-                dev.close()  # Already being read
-
         # Clean up finished tasks
         for path in list(active_paths):
             if active_paths[path].done():
                 del active_paths[path]
+
+        # Skip rescan when all tracked joystick tasks are still running
+        if not active_paths or any(t.done() for t in active_paths.values()):
+            for dev in find_joystick_devices():
+                if dev.path not in active_paths or active_paths[dev.path].done():
+                    idx = device_index_counter
+                    device_index_counter += 1
+                    task = asyncio.create_task(read_single_joystick(dev, idx, joy_config))
+                    active_paths[dev.path] = task
+                else:
+                    dev.close()  # Already being read
 
         # Re-scan every 5 seconds for hot-plug
         await asyncio.sleep(5)
