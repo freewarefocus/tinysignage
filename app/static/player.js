@@ -175,6 +175,13 @@
     let pendingVideoTimeout = null;
     let loadGeneration = 0;           // Bumped each loadAsset; stale callbacks exit early
 
+    // --- Video element reuse cache (Fix 2: avoid GStreamer pipeline churn) ---
+    const layerVideoCache = {};       // { layerId: HTMLVideoElement }
+
+    // --- WPE video play counter (Fix 3: memory pressure proxy) ---
+    let wpeVideoPlayCount = 0;
+    let wpeVideoReloadThreshold = 200;
+
     // --- Webhook trigger state ---
     let lastSeenWebhookFires = {};    // { branchId: isoTimestamp } — tracks last processed webhook fire
 
@@ -586,6 +593,9 @@
         if (s.transition_type) {
             currentTransitionType = s.transition_type;
         }
+        if (s.wpe_video_reload_threshold != null && s.wpe_video_reload_threshold > 0) {
+            wpeVideoReloadThreshold = s.wpe_video_reload_threshold;
+        }
     }
 
     // ===================================================================
@@ -670,6 +680,8 @@
             if (ctrl.txFallbackTimer) clearTimeout(ctrl.txFallbackTimer);
             zoneCleanupLayer(ctrl.layerA);
             zoneCleanupLayer(ctrl.layerB);
+            destroyCachedVideo(ctrl.layerA);
+            destroyCachedVideo(ctrl.layerB);
         });
         activeZones = [];
         zonesActive = false;
@@ -748,7 +760,7 @@
             element.onerror = () => { if (gen !== ctrl.loadGeneration) return; nextLayer._doTxTimer = setTimeout(doTx, 300); };
             element.src = `${baseUrl}/media/${asset.uri}`;
         } else if (asset.asset_type === 'video') {
-            element = document.createElement('video');
+            element = getOrCreateVideo(nextLayer);
             element.autoplay = true;
             element.muted = true;
             element.playsInline = true;
@@ -768,6 +780,7 @@
             element.onerror = () => { if (gen !== ctrl.loadGeneration) return; clearTimeout(videoLoadTimeout); zoneAdvance(ctrl); };
             element.onended = () => { if (gen !== ctrl.loadGeneration) return; zoneAdvance(ctrl); };
             element.src = `${baseUrl}/media/${asset.uri}`;
+            wpeVideoPlayCount++;
         } else if (asset.asset_type === 'html') {
             element = document.createElement('iframe');
             element.onload = () => { if (gen !== ctrl.loadGeneration) return; nextLayer._doTxTimer = setTimeout(doTx, 300); };
@@ -879,15 +892,7 @@
             clearTimeout(layer._txCleanup.fallbackTimer);
             layer._txCleanup = null;
         }
-        const video = layer.querySelector('video');
-        if (video) {
-            video.onended = null;
-            video.onerror = null;
-            video.oncanplay = null;
-            video.pause();
-            video.removeAttribute('src');
-            video.load();
-        }
+        releaseVideoFromLayer(layer);
         const img = layer.querySelector('img');
         if (img) {
             img.onload = null;
@@ -1071,7 +1076,7 @@
             };
             element.src = `${baseUrl}/media/${asset.uri}`;
         } else if (asset.asset_type === 'video') {
-            element = document.createElement('video');
+            element = getOrCreateVideo(nextLayer);
             element.autoplay = true;
             element.muted = true;
             element.playsInline = true;
@@ -1104,6 +1109,7 @@
             };
 
             element.src = `${baseUrl}/media/${asset.uri}`;
+            wpeVideoPlayCount++;
         } else if (asset.asset_type === 'html') {
             element = document.createElement('iframe');
             element.onload = () => { if (gen !== loadGeneration) return; pendingDoTxTimer = setTimeout(doTx, 300); };
@@ -1248,15 +1254,7 @@
     function cleanupLayer(layer) {
         if (pendingDoTxTimer) { clearTimeout(pendingDoTxTimer); pendingDoTxTimer = null; }
         if (pendingVideoTimeout) { clearTimeout(pendingVideoTimeout); pendingVideoTimeout = null; }
-        const video = layer.querySelector('video');
-        if (video) {
-            video.onended = null;
-            video.onerror = null;
-            video.oncanplay = null;
-            video.pause();
-            video.removeAttribute('src');
-            video.load();
-        }
+        releaseVideoFromLayer(layer);
         const img = layer.querySelector('img');
         if (img) {
             img.onload = null;
@@ -1289,6 +1287,79 @@
         layer.style.transform = '';
         layer.classList.remove('slide-transition', 'slide-in', 'slide-out', 'slide-ready');
         layer.innerHTML = '';
+    }
+
+    // --- Video Element Reuse Helpers ---
+    function _videoCacheKey(layer) {
+        if (layer.id) return layer.id;
+        if (!layer._cacheKey) layer._cacheKey = 'zone-' + Math.random().toString(36).slice(2, 10);
+        return layer._cacheKey;
+    }
+
+    function getOrCreateVideo(layer) {
+        const key = _videoCacheKey(layer);
+        let video = layerVideoCache[key];
+        if (video) {
+            // Reset for reuse
+            video.onended = null;
+            video.onerror = null;
+            video.oncanplay = null;
+            video.pause();
+            video.removeAttribute('src');
+            video.srcObject = null;
+            while (video.firstChild) video.removeChild(video.firstChild);
+            // Detach from old parent if still in DOM
+            if (video.parentNode) video.parentNode.removeChild(video);
+            return video;
+        }
+        video = document.createElement('video');
+        layerVideoCache[key] = video;
+        return video;
+    }
+
+    function releaseVideoFromLayer(layer) {
+        const key = _videoCacheKey(layer);
+        const video = layerVideoCache[key];
+        if (!video) {
+            // Fallback: clean any non-cached video in the layer (e.g. from before cache existed)
+            const orphan = layer.querySelector('video');
+            if (orphan) {
+                orphan.onended = null;
+                orphan.onerror = null;
+                orphan.oncanplay = null;
+                orphan.pause();
+                orphan.removeAttribute('src');
+                orphan.srcObject = null;
+                while (orphan.firstChild) orphan.removeChild(orphan.firstChild);
+                orphan.load();
+                orphan.remove();
+            }
+            return;
+        }
+        video.onended = null;
+        video.onerror = null;
+        video.oncanplay = null;
+        video.pause();
+        video.removeAttribute('src');
+        video.srcObject = null;
+        while (video.firstChild) video.removeChild(video.firstChild);
+        if (video.parentNode) video.parentNode.removeChild(video);
+    }
+
+    function destroyCachedVideo(layer) {
+        const key = _videoCacheKey(layer);
+        const video = layerVideoCache[key];
+        if (!video) return;
+        video.onended = null;
+        video.onerror = null;
+        video.oncanplay = null;
+        video.pause();
+        video.removeAttribute('src');
+        video.srcObject = null;
+        while (video.firstChild) video.removeChild(video.firstChild);
+        video.load();
+        if (video.parentNode) video.parentNode.removeChild(video);
+        delete layerVideoCache[key];
     }
 
     // --- Status ---
@@ -1347,6 +1418,13 @@
             return;
         }
 
+        // WPE video play count — proxy for GStreamer memory pressure
+        if (isWPE && wpeVideoPlayCount >= wpeVideoReloadThreshold) {
+            PlayerLog.info('Health: WPE video count ' + wpeVideoPlayCount + ' — graceful reload');
+            gracefulReload('wpe-video-pressure');
+            return;
+        }
+
         // Responsiveness check
         if (Date.now() - lastRafTime > RAF_STALE_THRESHOLD) {
             rafResponsive = false;
@@ -1398,6 +1476,7 @@
                            : 'browser',
                 uptime_seconds: Math.round((Date.now() - startTime) / 1000),
                 dom_responsive: rafResponsive,
+                video_play_count: wpeVideoPlayCount,
             };
 
             // Include memory telemetry if available
