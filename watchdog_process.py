@@ -274,6 +274,30 @@ def _find_browser_pid_linux() -> int | None:
     return None
 
 
+def _find_all_browser_pids_linux() -> list[int]:
+    """Return ALL PIDs matching known browser comm names. Linux only."""
+    pids = []
+    try:
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                comm = (entry / "comm").read_text().strip()
+                if comm in BROWSER_NAMES_LINUX:
+                    pids.append(int(entry.name))
+            except (OSError, ValueError):
+                continue
+    except OSError:
+        pass
+    return pids
+
+
+def _find_all_wpe_pids_linux() -> list[int]:
+    """Return ALL WPEWebProcess + WPENetworkProcess PIDs. Linux only."""
+    return (_find_pids_by_comm_linux("WPEWebProcess")
+            + _find_pids_by_comm_linux("WPENetworkProcess"))
+
+
 def _find_pid_macos(match: str) -> int | None:
     """Use ps to find a process matching a string."""
     try:
@@ -453,6 +477,65 @@ def _read_rss_windows(pid: int) -> int | None:
     return None
 
 
+def _cleanup_orphan_wpe_processes(plat: str):
+    """Kill orphaned WPE processes whose parent is no longer cog.
+
+    Orphans get re-parented to PID 1 when their parent cog dies.
+    Only acts when there are more than 4 WPE processes (healthy threshold).
+    """
+    if plat not in ("pi", "linux"):
+        return
+
+    wpe_pids = _find_all_wpe_pids_linux()
+    if len(wpe_pids) <= 4:
+        return
+
+    # Find current cog PID(s) — these are the "live" parents
+    browser_pids = set(_find_all_browser_pids_linux())
+
+    orphans = []
+    for pid in wpe_pids:
+        try:
+            # /proc/<pid>/stat field 4 = PPID
+            stat = Path(f"/proc/{pid}/stat").read_text()
+            # Parse carefully: comm field (field 2) can contain spaces/parens
+            # Format: pid (comm) state ppid ...
+            # Find the closing ')' of comm, then split the rest
+            close_paren = stat.rfind(")")
+            if close_paren < 0:
+                continue
+            fields_after_comm = stat[close_paren + 2:].split()
+            ppid = int(fields_after_comm[1])  # state=0, ppid=1
+            if ppid not in browser_pids:
+                orphans.append(pid)
+        except (OSError, IndexError, ValueError):
+            continue
+
+    if orphans:
+        log.warning("Orphan WPE sweep: killing %d orphaned WPE processes "
+                    "(total WPE: %d, orphan PIDs: %s)",
+                    len(orphans), len(wpe_pids), orphans)
+        _kill_pids_with_fallback(orphans, "orphan-WPE", timeout=3)
+
+
+def _read_total_browser_rss_linux(browser_pid: int) -> tuple[int, int]:
+    """Sum RSS of browser PID + all WPE child processes.
+
+    Returns (total_rss_mb, process_count).
+    """
+    all_pids = [browser_pid] + _find_all_wpe_pids_linux()
+    # Deduplicate (browser_pid might appear in wpe list if names overlap)
+    all_pids = list(set(all_pids))
+    total = 0
+    count = 0
+    for pid in all_pids:
+        rss = read_rss_mb(pid)
+        if rss is not None:
+            total += rss
+            count += 1
+    return total, count
+
+
 # =========================================================================
 # Memory snapshot (periodic diagnostics)
 # =========================================================================
@@ -605,14 +688,79 @@ def restart_cms(plat: str):
             log.warning("CMS PID not found — cannot restart")
 
 
+def _kill_pids_with_fallback(pids: list[int], label: str, timeout: int = 5):
+    """SIGTERM all PIDs, wait up to *timeout* seconds, SIGKILL survivors."""
+    if not pids:
+        return
+    # Send SIGTERM to all
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    log.info("Sent SIGTERM to %d %s process(es): %s", len(pids), label, pids)
+
+    # Wait for them to exit
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        survivors = [p for p in pids if pid_exists(p)]
+        if not survivors:
+            return
+        time.sleep(0.5)
+
+    # SIGKILL any still alive
+    survivors = [p for p in pids if pid_exists(p)]
+    for pid in survivors:
+        try:
+            os.kill(pid, signal.SIGKILL)
+            log.warning("Sent SIGKILL to %s PID %d (did not exit after SIGTERM)", label, pid)
+        except OSError:
+            pass
+
+
+def _restart_browser_via_systemd() -> bool:
+    """Try to restart the browser via systemctl. Returns True on success."""
+    try:
+        result = subprocess.run(
+            ["sudo", "systemctl", "restart", "signage-player.service"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode == 0:
+            log.info("Restarted browser via systemctl (cgroup cleanup)")
+            return True
+        log.debug("systemctl restart failed (rc=%d): %s",
+                  result.returncode, result.stderr.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        log.debug("systemctl restart unavailable: %s", e)
+    return False
+
+
 def restart_browser(plat: str):
     """Restart the browser process. OS supervisor / shell loop handles re-launch."""
     log.warning("Restarting browser...")
 
     if plat == "windows":
         _restart_browser_windows()
+        return
+
+    # Linux/macOS/Pi: try systemd first (cgroup kill is atomic & complete)
+    if plat in ("pi", "linux") and _restart_browser_via_systemd():
+        # systemd's KillMode=control-group already killed all children
+        return
+
+    # Fallback: manual kill of ALL browser + WPE processes
+    if platform.system() == "Linux":
+        browser_pids = _find_all_browser_pids_linux()
+        wpe_pids = _find_all_wpe_pids_linux()
+        all_pids = browser_pids + wpe_pids
+        if all_pids:
+            log.info("Manual kill: %d browser + %d WPE processes",
+                     len(browser_pids), len(wpe_pids))
+            _kill_pids_with_fallback(all_pids, "browser/WPE")
+        else:
+            log.warning("No browser or WPE processes found — cannot restart")
     else:
-        # Linux/macOS/Pi: SIGTERM the process
+        # macOS fallback — single PID kill (unchanged behavior)
         pid = find_browser_pid()
         if pid:
             try:
@@ -844,22 +992,29 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
                 if browser_pid:
                     browser_fails = 0
 
-                    # Memory check
+                    # Memory check — aggregate RSS of browser + all WPE children
                     if mem_limit > 0:
-                        rss = read_rss_mb(browser_pid)
-                        if rss is not None:
+                        if platform.system() == "Linux":
+                            rss, proc_count = _read_total_browser_rss_linux(browser_pid)
+                            log.debug("Browser total RSS: %d MB across %d processes (limit: %d MB)",
+                                      rss, proc_count, mem_limit)
+                        else:
+                            rss = read_rss_mb(browser_pid)
                             log.debug("Browser PID %d RSS: %d MB (limit: %d MB)",
-                                      browser_pid, rss, mem_limit)
-                            if rss > mem_limit:
-                                log.warning(
-                                    "Browser RSS %d MB exceeds limit %d MB — restarting",
-                                    rss, mem_limit,
-                                )
-                                restart_browser(plat)
-                                if not once:
-                                    log.info("Cooldown 30s after browser restart")
-                                    time.sleep(30)
-                                    continue
+                                      browser_pid, rss or 0, mem_limit)
+                        if rss is not None and rss > mem_limit:
+                            log.warning(
+                                "Browser total RSS %d MB exceeds limit %d MB — restarting",
+                                rss, mem_limit,
+                            )
+                            restart_browser(plat)
+                            if not once:
+                                log.info("Cooldown 30s after browser restart")
+                                time.sleep(30)
+                                continue
+
+                    # Orphan WPE cleanup (Linux/Pi only)
+                    _cleanup_orphan_wpe_processes(plat)
                 else:
                     # Browser not found — but only count as failure after grace
                     if elapsed > grace:
@@ -869,7 +1024,6 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
                         if browser_fails >= browser_threshold:
                             restart_browser(plat)
                             browser_fails = 0
-                            last_browser_pid = None
                             if not once:
                                 log.info("Cooldown 30s after browser restart")
                                 time.sleep(30)

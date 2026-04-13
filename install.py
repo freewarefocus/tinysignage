@@ -262,7 +262,6 @@ WorkingDirectory={install_dir}
 ExecStart={python} {install_dir}/watchdog_process.py
 Restart=always
 RestartSec=10
-NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths={install_dir}/logs
 
@@ -1201,6 +1200,22 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
         ))
     services.append("signage-watchdog")
 
+    # Sudoers drop-in: let the watchdog user run systemctl restart/reboot
+    # without a password. Required because the watchdog service no longer
+    # uses NoNewPrivileges=true (which blocked sudo entirely).
+    sudoers_path = "/etc/sudoers.d/tinysignage-watchdog"
+    sudoers_content = (
+        f"# TinySignage watchdog — passwordless systemctl for browser restart & reboot\n"
+        f"{SERVICE_USER} ALL=(root) NOPASSWD: "
+        f"/usr/bin/systemctl restart signage-player.service, "
+        f"/usr/bin/systemctl restart signage-app.service, "
+        f"/usr/bin/systemctl reboot\n"
+    )
+    with open(sudoers_path, "w") as f:
+        f.write(sudoers_content)
+    os.chmod(sudoers_path, 0o440)
+    info(f"Installed sudoers drop-in: {sudoers_path}")
+
     run_cmd(["systemctl", "daemon-reload"])
     if services:
         run_cmd(["systemctl", "enable"] + services)
@@ -1988,17 +2003,36 @@ def do_update(plat, install_dir, skip_pull=False):
                 run_as_user(SERVICE_USER, ["mkdir", "-p", certs_dir])
                 info("Created missing certs/ directory for HTTPS support")
 
-        # Self-heal: install watchdog service if missing
+        # Self-heal: always rewrite the watchdog unit to pick up template
+        # fixes (e.g. removal of NoNewPrivileges that blocked sudo).
         wd_unit = "/etc/systemd/system/signage-watchdog.service"
-        if not os.path.isfile(wd_unit):
-            venv_python = get_venv_python(install_dir)
-            with open(wd_unit, "w") as f:
-                f.write(SYSTEMD_WATCHDOG.format(
-                    install_dir=install_dir, user=SERVICE_USER, python=venv_python,
-                ))
-            run_cmd(["systemctl", "daemon-reload"])
+        wd_existed = os.path.isfile(wd_unit)
+        venv_python = get_venv_python(install_dir)
+        with open(wd_unit, "w") as f:
+            f.write(SYSTEMD_WATCHDOG.format(
+                install_dir=install_dir, user=SERVICE_USER, python=venv_python,
+            ))
+        run_cmd(["systemctl", "daemon-reload"])
+        if not wd_existed:
             run_cmd(["systemctl", "enable", "signage-watchdog"])
             info("Installed signage-watchdog service (new in this update)")
+        else:
+            info("Updated signage-watchdog service unit")
+
+        # Self-heal: ensure sudoers drop-in exists for watchdog
+        sudoers_path = "/etc/sudoers.d/tinysignage-watchdog"
+        if not os.path.isfile(sudoers_path):
+            sudoers_content = (
+                f"# TinySignage watchdog — passwordless systemctl for browser restart & reboot\n"
+                f"{SERVICE_USER} ALL=(root) NOPASSWD: "
+                f"/usr/bin/systemctl restart signage-player.service, "
+                f"/usr/bin/systemctl restart signage-app.service, "
+                f"/usr/bin/systemctl reboot\n"
+            )
+            with open(sudoers_path, "w") as f:
+                f.write(sudoers_content)
+            os.chmod(sudoers_path, 0o440)
+            info(f"Installed sudoers drop-in: {sudoers_path}")
 
         step(step_num, total_steps, "Restarting services...")
         for svc in ["signage-app", "signage-player", "signage-watchdog"]:
