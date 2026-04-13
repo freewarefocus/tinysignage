@@ -167,7 +167,6 @@
     let lastRafTime = Date.now();
     let rafResponsive = true;
     let serverRestartHour = null;
-    let serverMemoryLimitMb = 200;
     let preloadImg = null;
     const isWPE = /WPE/i.test(navigator.userAgent);
     let rafProbeRunning = false;
@@ -1330,8 +1329,6 @@
         try {
             const cachedHour = localStorage.getItem('tinysignage_restart_hour');
             if (cachedHour !== null) serverRestartHour = cachedHour === 'null' ? null : parseInt(cachedHour, 10);
-            const cachedLimit = localStorage.getItem('tinysignage_memory_limit_mb');
-            if (cachedLimit !== null) serverMemoryLimitMb = parseInt(cachedLimit, 10) || 200;
         } catch { /* ok */ }
 
         startRafProbe();
@@ -1342,16 +1339,6 @@
 
     function runHealthCheck() {
         const uptimeMs = Date.now() - startTime;
-
-        // Memory check
-        if (performance.memory && uptimeMs > MEMORY_GRACE_PERIOD) {
-            const usedMb = Math.round(performance.memory.usedJSHeapSize / (1024 * 1024));
-            if (usedMb > serverMemoryLimitMb) {
-                PlayerLog.warn('Health: JS heap ' + usedMb + ' MB exceeds limit ' + serverMemoryLimitMb + ' MB');
-                gracefulReload('memory');
-                return;
-            }
-        }
 
         // WPE fallback: performance.memory unavailable, use uptime ceiling
         if (isWPE && serverRestartHour === null && uptimeMs > WPE_MAX_UPTIME) {
@@ -1442,10 +1429,6 @@
                 if (data.restart_hour !== undefined) {
                     serverRestartHour = data.restart_hour;
                     try { localStorage.setItem('tinysignage_restart_hour', String(data.restart_hour)); } catch { /* ok */ }
-                }
-                if (data.memory_limit_mb !== undefined && data.memory_limit_mb !== null) {
-                    serverMemoryLimitMb = data.memory_limit_mb;
-                    try { localStorage.setItem('tinysignage_memory_limit_mb', String(data.memory_limit_mb)); } catch { /* ok */ }
                 }
             }
 

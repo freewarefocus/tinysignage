@@ -66,11 +66,6 @@
         </select>
         <span class="hint-text">Restart all players once a day at this hour to reclaim memory. Requires at least 1 hour uptime.</span>
       </div>
-      <div class="form-group">
-        <label>Memory Limit (MB)</label>
-        <input type="number" v-model.number="settings.player_memory_limit_mb" min="50" step="50" @change="saveSettings" />
-        <span class="hint-text">When a player's JavaScript heap exceeds this, it automatically reloads. Default: 200 MB.</span>
-      </div>
     </div>
 
     <hr class="section-divider" />

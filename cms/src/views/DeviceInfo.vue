@@ -179,7 +179,7 @@
             </div>
             <div class="health-item">
               <span class="health-label">JS Heap</span>
-              <span :class="signalColor('js_heap')">
+              <span>
                 <template v-if="deviceHealth.js_heap_used_mb != null">
                   {{ deviceHealth.js_heap_used_mb }} MB{{ deviceHealth.js_heap_total_mb != null ? ' / ' + deviceHealth.js_heap_total_mb + ' MB' : '' }}
                 </template>

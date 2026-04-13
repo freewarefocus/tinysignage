@@ -163,10 +163,8 @@ async def player_heartbeat(
     settings = await session.get(Settings, 1)
     if settings:
         resp["restart_hour"] = settings.player_restart_hour
-        resp["memory_limit_mb"] = settings.player_memory_limit_mb if settings.player_memory_limit_mb is not None else 200
     else:
         resp["restart_hour"] = None
-        resp["memory_limit_mb"] = 200
 
     await session.commit()
     return resp
@@ -442,22 +440,6 @@ def _compute_signals(device: Device, now: datetime) -> dict:
             signals["ram"] = {"level": "yellow", "message": f"Low RAM: {device.ram_mb} MB"}
     else:
         signals["ram"] = {"level": "yellow", "message": "RAM unknown"}
-
-    # JS Heap signal (memory_limit_mb defaults to 200 if not set)
-    memory_limit = 200
-    if device.js_heap_used_mb is not None:
-        pct = device.js_heap_used_mb / memory_limit if memory_limit > 0 else 0
-        if pct > 1.0:
-            signals["js_heap"] = {"level": "red", "message": f"JS heap {device.js_heap_used_mb} MB exceeds {memory_limit} MB limit"}
-        elif pct > 0.7:
-            signals["js_heap"] = {"level": "yellow", "message": f"JS heap {device.js_heap_used_mb} MB ({pct:.0%} of limit)"}
-        else:
-            signals["js_heap"] = {"level": "green", "message": ""}
-    elif device.last_heartbeat is not None:
-        # Device is checking in but browser doesn't expose performance.memory
-        signals["js_heap"] = {"level": "green", "message": "N/A (unsupported by browser)"}
-    else:
-        signals["js_heap"] = {"level": "grey", "message": "Waiting for first heartbeat"}
 
     # DOM responsiveness signal
     if device.dom_responsive is not None:
