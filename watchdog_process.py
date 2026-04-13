@@ -44,6 +44,11 @@ DEFAULTS = {
     "browser_fail_threshold": 2,
     "log_file": "./logs/watchdog.log",
     "memory_log_interval": 1800,
+    # Scheduled weekly full system reboot (Linux/Pi only).
+    # Every mature signage project recommends this as a safety net against
+    # slow memory accumulation that per-process restarts can't catch.
+    "scheduled_reboot_day": None,    # 0=Mon .. 6=Sun, None=disabled
+    "scheduled_reboot_hour": 3,      # Hour (0-23) to reboot on the scheduled day
 }
 
 # Browser process names to scan for, per engine type
@@ -719,6 +724,31 @@ def _restart_browser_windows():
         log.warning("launcher.py not found — cannot re-launch browser")
 
 
+def scheduled_system_reboot(plat: str) -> None:
+    """Perform a full system reboot (Linux/Pi only).
+
+    Every mature signage project (PiSignage, Xibo, FullPageOS) recommends a
+    weekly reboot as a safety net against slow memory accumulation that
+    per-process restarts cannot catch — kernel slab caches, GPU driver
+    allocations, and other resources only freed on reboot.
+    """
+    if plat not in ("pi", "linux"):
+        log.warning("Scheduled reboot skipped — only supported on Linux/Pi (current: %s)", plat)
+        return
+
+    log.warning("Initiating scheduled system reboot...")
+    try:
+        subprocess.run(["sudo", "systemctl", "reboot"], timeout=30)
+    except FileNotFoundError:
+        # Fallback for systems without systemctl
+        try:
+            subprocess.run(["sudo", "reboot"], timeout=30)
+        except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+            log.error("Failed to reboot: %s", e)
+    except subprocess.TimeoutExpired:
+        log.error("Reboot command timed out")
+
+
 # =========================================================================
 # Process existence check
 # =========================================================================
@@ -754,18 +784,30 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
     browser_threshold = cfg.get("browser_fail_threshold", 2)
     mem_limit = cfg.get("browser_memory_limit_mb", 1024)
     memory_log_interval = cfg.get("memory_log_interval", 1800)
+    reboot_day = cfg.get("scheduled_reboot_day")       # 0=Mon..6=Sun or None
+    reboot_hour = cfg.get("scheduled_reboot_hour", 3)  # 0-23
     port = cfg.get("_port", 8080)
     use_https = cfg.get("_https", False)
 
     cms_fails = 0
     browser_fails = 0
     last_memory_log = 0.0
+    last_reboot_check_day = -1  # Track which weekday we last triggered a reboot
     start_time = time.monotonic()
 
-    log.info(
-        "Watchdog started: platform=%s, mode=%s, interval=%ds, grace=%ds, mem_log=%ds",
-        plat, mode, interval, grace, memory_log_interval,
-    )
+    if reboot_day is not None:
+        day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        day_label = day_names[reboot_day] if 0 <= reboot_day <= 6 else f"day={reboot_day}"
+        log.info(
+            "Watchdog started: platform=%s, mode=%s, interval=%ds, grace=%ds, mem_log=%ds, "
+            "reboot=%s@%02d:00",
+            plat, mode, interval, grace, memory_log_interval, day_label, reboot_hour,
+        )
+    else:
+        log.info(
+            "Watchdog started: platform=%s, mode=%s, interval=%ds, grace=%ds, mem_log=%ds",
+            plat, mode, interval, grace, memory_log_interval,
+        )
 
     while True:
         try:
@@ -842,6 +884,24 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
                     except Exception:
                         log.exception("Failed to collect memory snapshot")
                     last_memory_log = now
+
+            # --- Scheduled weekly system reboot (Linux/Pi only) ---
+            if reboot_day is not None and not once:
+                import datetime as _dt
+                now_dt = _dt.datetime.now()
+                if (now_dt.weekday() == reboot_day
+                        and now_dt.hour == reboot_hour
+                        and last_reboot_check_day != now_dt.weekday()):
+                    last_reboot_check_day = now_dt.weekday()
+                    log.warning(
+                        "Scheduled weekly reboot (day=%d, hour=%d)",
+                        reboot_day, reboot_hour,
+                    )
+                    scheduled_system_reboot(plat)
+                    # If we're still running (non-Pi or reboot failed),
+                    # continue the loop rather than firing again this hour.
+                    time.sleep(3600)
+                    continue
 
             if once:
                 log.info("Single check complete — exiting")

@@ -97,6 +97,10 @@ def _cog_platform() -> str:
 def get_cog_args(url: str, https: bool = False) -> list[str]:
     """Build the cog command line with the correct platform backend."""
     args = ["cog", f"--platform={_cog_platform()}"]
+    # Disable the page cache so navigating away from a page releases its
+    # DOM/JS context immediately instead of keeping it alive for back/forward.
+    # Prevents the WPE GC regression where stale Window objects accumulate.
+    args.append("--enable-page-cache=false")
     if https:
         args.append("--ignore-tls-errors")
     args.append(url)
@@ -144,6 +148,18 @@ def get_kiosk_flags(is_pi: bool = False) -> list[str]:
             # kiosk never appears. We don't store passwords in the
             # signage profile, so a plaintext local store is fine.
             "--password-store=basic",
+            # Memory leak prevention flags (from Xibo/PiSignage research):
+            # Discard cached resources more aggressively under memory pressure.
+            "--aggressive-cache-discard",
+            # Prevent background DNS prefetch, Safe Browsing, etc. from
+            # allocating memory behind the scenes.
+            "--disable-background-networking",
+            # One renderer process per site instead of per-tab — caps the
+            # number of renderer processes on a single-origin signage player.
+            "--process-per-site",
+            # Hard cap on renderer processes.  The signage player uses a
+            # single tab, so one renderer is sufficient.
+            "--renderer-process-limit=1",
         ])
 
     return flags
@@ -247,6 +263,13 @@ def _build_cog_env() -> dict[str, str]:
     # when launched via systemd or XDG autostart.
     env["XCURSOR_THEME"] = "hidden"
     env["XCURSOR_SIZE"] = "1"
+    # WPE memory tuning (from info-beamer / WebKit research):
+    # Size internal caches (decoded images, GL textures) relative to
+    # available RAM.  128 MB keeps usage in check on 1–2 GB Pi models.
+    env["WPE_RAM_SIZE"] = "128"
+    # Per-WebProcess RSS ceiling (MB).  When exceeded WPE fires its
+    # internal MemoryPressureHandler which trims caches and triggers GC.
+    env["WPE_POLL_MAX_MEMORY"] = "512"
     return env
 
 

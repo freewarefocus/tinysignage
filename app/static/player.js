@@ -904,8 +904,8 @@
         const iframe = layer.querySelector('iframe');
         if (iframe) {
             iframe.onload = null;
-            iframe.removeAttribute('src');
-            iframe.srcdoc = '';   // synchronously clear document without navigation
+            iframe.src = 'about:blank';
+            iframe.srcdoc = '';
         }
         layer.innerHTML = '';
     }
@@ -1266,8 +1266,12 @@
         const iframe = layer.querySelector('iframe');
         if (iframe) {
             iframe.onload = null;
-            iframe.removeAttribute('src');
-            iframe.srcdoc = '';   // synchronously clear document without navigation
+            // Navigate to about:blank first — on WPE this triggers proper
+            // context unload and GC of the iframe's JS/DOM context (the GC
+            // regression keeps stale Window objects alive if you only clear
+            // the src attribute).
+            iframe.src = 'about:blank';
+            iframe.srcdoc = '';
         }
         // Cancel any in-flight transition cleanup on this layer so a stale
         // transitionend (or fallback timer) from a previous crossfade cannot

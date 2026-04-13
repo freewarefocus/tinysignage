@@ -137,6 +137,8 @@ async def player_heartbeat(
         device.js_heap_total_mb = body["js_heap_total_mb"]
     if "dom_responsive" in body:
         device.dom_responsive = body["dom_responsive"]
+    if "video_play_count" in body:
+        device.video_play_count = body["video_play_count"]
 
     # Compute clock drift
     player_time_str = body.get("player_time")
@@ -164,7 +166,7 @@ async def player_heartbeat(
     if settings:
         resp["restart_hour"] = settings.player_restart_hour
     else:
-        resp["restart_hour"] = None
+        resp["restart_hour"] = 0  # Default: midnight daily restart
 
     await session.commit()
     return resp
@@ -374,6 +376,7 @@ async def health_dashboard(
             "js_heap_total_mb": d.js_heap_total_mb,
             "dom_responsive": d.dom_responsive,
             "uptime_seconds": d.uptime_seconds,
+            "video_play_count": d.video_play_count,
             "capabilities_updated_at": d.capabilities_updated_at.isoformat() if d.capabilities_updated_at else None,
             "warnings": warnings,
         }
