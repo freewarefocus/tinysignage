@@ -43,6 +43,7 @@ DEFAULTS = {
     "browser_memory_limit_mb": 1024,
     "browser_fail_threshold": 2,
     "log_file": "./logs/watchdog.log",
+    "memory_log_interval": 1800,
 }
 
 # Browser process names to scan for, per engine type
@@ -448,6 +449,135 @@ def _read_rss_windows(pid: int) -> int | None:
 
 
 # =========================================================================
+# Memory snapshot (periodic diagnostics)
+# =========================================================================
+
+def _find_pids_by_comm_linux(comm_name: str) -> list[int]:
+    """Scan /proc/*/comm for all PIDs matching *comm_name*. Linux only."""
+    pids = []
+    try:
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                comm = (entry / "comm").read_text().strip()
+                if comm == comm_name:
+                    pids.append(int(entry.name))
+            except (OSError, ValueError):
+                continue
+    except OSError:
+        pass
+    return pids
+
+
+def _find_pids_by_cmdline_linux(match: str) -> list[int]:
+    """Scan /proc/*/cmdline for all PIDs whose cmdline contains *match*. Linux only."""
+    pids = []
+    try:
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit():
+                continue
+            pid = int(entry.name)
+            if pid == os.getpid():
+                continue
+            try:
+                cmdline = (entry / "cmdline").read_text().replace("\0", " ")
+                if match in cmdline:
+                    pids.append(pid)
+            except (OSError, ValueError):
+                continue
+    except OSError:
+        pass
+    return pids
+
+
+def read_system_memory() -> dict | None:
+    """Parse /proc/meminfo for total and available memory. Linux only.
+
+    Returns {"total_mb": int, "available_mb": int, "used_pct": float} or None.
+    """
+    if platform.system() != "Linux":
+        return None
+    try:
+        text = Path("/proc/meminfo").read_text()
+        info = {}
+        for line in text.splitlines():
+            parts = line.split()
+            if len(parts) >= 2:
+                key = parts[0].rstrip(":")
+                if key in ("MemTotal", "MemAvailable"):
+                    info[key] = int(parts[1])  # value in kB
+        if "MemTotal" in info and "MemAvailable" in info:
+            total_mb = info["MemTotal"] // 1024
+            avail_mb = info["MemAvailable"] // 1024
+            used_pct = ((total_mb - avail_mb) / total_mb * 100) if total_mb else 0.0
+            return {"total_mb": total_mb, "available_mb": avail_mb, "used_pct": used_pct}
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def collect_memory_snapshot(plat: str, mode: str) -> list[tuple[str, int | None, int | None]]:
+    """Gather (label, pid, rss_mb) tuples for TinySignage-related processes."""
+    entries: list[tuple[str, int | None, int | None]] = []
+
+    # CMS (uvicorn)
+    cms_pid = find_cms_pid()
+    entries.append(("CMS (uvicorn)", cms_pid, read_rss_mb(cms_pid) if cms_pid else None))
+
+    # Browser (cog / chromium)
+    browser_pid = find_browser_pid()
+    browser_label = "Browser (cog)" if plat == "pi" else "Browser"
+    entries.append((browser_label, browser_pid, read_rss_mb(browser_pid) if browser_pid else None))
+
+    # Linux/Pi-only children
+    if platform.system() == "Linux":
+        for pid in _find_pids_by_comm_linux("WPEWebProcess"):
+            entries.append(("WPEWebProcess", pid, read_rss_mb(pid)))
+        for pid in _find_pids_by_comm_linux("WPENetworkProcess"):
+            entries.append(("WPENetworkProcess", pid, read_rss_mb(pid)))
+        # GPIO bridge — optional, omitted if not running
+        bridge_pids = _find_pids_by_cmdline_linux("bridge.py")
+        for pid in bridge_pids:
+            entries.append(("GPIO bridge", pid, read_rss_mb(pid)))
+
+    # Watchdog self
+    self_pid = os.getpid()
+    entries.append(("Watchdog (self)", self_pid, read_rss_mb(self_pid)))
+
+    return entries
+
+
+def log_memory_snapshot(plat: str, mode: str):
+    """Format and log a memory snapshot as a single log.info() call."""
+    entries = collect_memory_snapshot(plat, mode)
+    sys_mem = read_system_memory()
+
+    lines = ["--- Memory Snapshot ---"]
+
+    if sys_mem:
+        lines.append(
+            "  System: %.1f%% used (%d / %d MB)"
+            % (sys_mem["used_pct"], sys_mem["total_mb"] - sys_mem["available_mb"], sys_mem["total_mb"])
+        )
+
+    total_rss = 0
+    for label, pid, rss in entries:
+        if pid is None:
+            lines.append("  %-24s  not running" % label)
+        elif rss is None:
+            lines.append("  %-24s  PID %-8d  RSS: ?" % (label, pid))
+        else:
+            lines.append("  %-24s  PID %-8d  RSS: %d MB" % (label, pid, rss))
+            total_rss += rss
+
+    lines.append("  %-24s                RSS: %d MB" % ("Total", total_rss))
+    lines.append("--- End Snapshot ---")
+
+    log.info("\n".join(lines))
+
+
+# =========================================================================
 # Restart commands (platform-dispatched)
 # =========================================================================
 
@@ -623,16 +753,18 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
     cms_threshold = cfg.get("cms_fail_threshold", 3)
     browser_threshold = cfg.get("browser_fail_threshold", 2)
     mem_limit = cfg.get("browser_memory_limit_mb", 1024)
+    memory_log_interval = cfg.get("memory_log_interval", 1800)
     port = cfg.get("_port", 8080)
     use_https = cfg.get("_https", False)
 
     cms_fails = 0
     browser_fails = 0
+    last_memory_log = 0.0
     start_time = time.monotonic()
 
     log.info(
-        "Watchdog started: platform=%s, mode=%s, interval=%ds, grace=%ds",
-        plat, mode, interval, grace,
+        "Watchdog started: platform=%s, mode=%s, interval=%ds, grace=%ds, mem_log=%ds",
+        plat, mode, interval, grace, memory_log_interval,
     )
 
     while True:
@@ -700,6 +832,16 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
                                 log.info("Cooldown 30s after browser restart")
                                 time.sleep(30)
                                 continue
+
+            # --- Periodic memory snapshot ---
+            if memory_log_interval > 0:
+                now = time.monotonic()
+                if now - last_memory_log >= memory_log_interval:
+                    try:
+                        log_memory_snapshot(plat, mode)
+                    except Exception:
+                        log.exception("Failed to collect memory snapshot")
+                    last_memory_log = now
 
             if once:
                 log.info("Single check complete — exiting")
