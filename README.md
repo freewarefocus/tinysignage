@@ -67,10 +67,14 @@ Open `http://localhost:8080/setup` to create your admin account, then `/cms` to 
 ```
 Browser (player)  -- poll every 30s -->  FastAPI backend  -->  SQLite
 Browser (CMS)     -- REST API -------->       |
-                                         Watchdog (health monitoring)
+                                         Device watchdog (marks offline devices)
+
+watchdog_process.py -- GET /health --->  Monitors CMS + browser
+                                         Restarts crashed processes
+                                         Memory limit enforcement
 ```
 
-A single FastAPI process serves the API, CMS, player, and media files. SQLite is the only database. The player polls for changes, caches everything locally, and manages its own playback timer -- no WebSocket, no server-push. See [Architecture](docs/architecture.md) for details.
+A single FastAPI process serves the API, CMS, player, and media files. SQLite is the only database. The player polls for changes, caches everything locally, and manages its own playback timer -- no WebSocket, no server-push. An independent process watchdog monitors the CMS and browser from the outside, restarting them if they crash or exceed memory limits. See [Architecture](docs/architecture.md) for details.
 
 ---
 
@@ -98,6 +102,7 @@ TinySignage never fails silently. Every error surfaces through two channels: use
 | **Server errors** (500s, crashes) | CMS > System Log, or `logs/errors.jsonl`, or `GET /api/logs/errors` |
 | **Player issues** (poll failures, asset load errors) | Press **Ctrl+Shift+D** on the player for the debug overlay, or `GET /api/devices/{id}/player-log` for remote access |
 | **Who changed what** (asset deleted, playlist modified) | CMS > Audit Log, or `GET /api/audit` |
+| **Watchdog activity** (restarts, memory snapshots) | `logs/watchdog.log`, or `journalctl -u signage-watchdog` (Pi/Linux) |
 | **Failed login attempts** | Audit Log (action: `auth_failed`) |
 
 Player logs are especially useful for headless devices (Raspberry Pi, kiosk). The player stores a 200-entry ring buffer locally and uploads it to the server on each heartbeat, so you can debug remotely without physical access.

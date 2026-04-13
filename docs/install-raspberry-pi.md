@@ -95,6 +95,7 @@ What the installer sets up depends on the mode:
 | Transparent cursor theme | Yes | No | Yes |
 | `signage-app` systemd service | Yes | Yes | No |
 | `signage-player` systemd service | Yes | No | Yes |
+| `signage-watchdog` systemd service | Yes | Yes | No |
 
 All modes install: `python3`, `avahi-daemon` (mDNS), `curl`. A dedicated `tinysignage` service user is created in every mode — no application code runs as root.
 
@@ -164,6 +165,26 @@ If the Pi will run unattended (shop window, lobby, menu board), these steps redu
 The installer enables the Pi's built-in hardware watchdog (`bcm2835_wdt`). If the OS completely freezes — kernel panic, OOM lockup — the watchdog chip reboots the Pi automatically within ~14 seconds. The systemd service also has a `WatchdogSec=120` setting that restarts the player if Chromium becomes unresponsive.
 
 No action needed — the installer configures both automatically.
+
+### Process watchdog (enabled by installer)
+
+The installer also sets up the `signage-watchdog` systemd service, an independent process that monitors the CMS and browser from the outside. It:
+
+- **Checks CMS health** every 30 seconds via `GET /health`. Restarts the CMS after 3 consecutive failures.
+- **Monitors browser memory** (cog/WPE RSS). Restarts the browser if memory exceeds 1024 MB (configurable).
+- **Detects missing browser process** and restarts it after 2 consecutive checks.
+- **Logs periodic memory snapshots** (every 30 minutes) for diagnosing slow leaks.
+- **Optional weekly reboot** — a safety net against kernel/GPU memory accumulation. Disabled by default. Enable via `config.yaml`:
+
+```yaml
+watchdog:
+  scheduled_reboot_day: 0    # Monday (0=Mon .. 6=Sun)
+  scheduled_reboot_hour: 3   # 3:00 AM
+```
+
+Check watchdog status: `sudo systemctl status signage-watchdog`. Logs: `journalctl -u signage-watchdog` or `logs/watchdog.log`.
+
+See [Configuration](configuration.md#watchdog) for all watchdog settings.
 
 ### Read-only root filesystem (OverlayFS)
 

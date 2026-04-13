@@ -39,6 +39,18 @@ cors:
 logging:
   level: INFO
   log_dir: ./logs
+
+watchdog:
+  enabled: true
+  check_interval: 30
+  startup_grace: 60
+  cms_fail_threshold: 3
+  browser_memory_limit_mb: 1024
+  browser_fail_threshold: 2
+  log_file: ./logs/watchdog.log
+  memory_log_interval: 1800
+  scheduled_reboot_day: null
+  scheduled_reboot_hour: 3
 ```
 
 ### Full reference
@@ -62,6 +74,17 @@ logging:
 | `cors` | `allowed_origins` | list | `['*']` | CORS allowed origins |
 | `logging` | `level` | string | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 | `logging` | `log_dir` | string | `./logs` | Directory for log files |
+| `watchdog` | `enabled` | boolean | `true` | Master switch for the process watchdog |
+| `watchdog` | `check_interval` | integer | `30` | Seconds between health checks |
+| `watchdog` | `startup_grace` | integer | `60` | Seconds after startup before checks begin (gives the CMS time to initialize) |
+| `watchdog` | `mode` | string | `auto` | What to monitor: `auto` (detect from installed services), `cms`, `player`, or `both` |
+| `watchdog` | `cms_fail_threshold` | integer | `3` | Consecutive CMS health check failures before restart |
+| `watchdog` | `browser_memory_limit_mb` | integer | `1024` | Browser RSS memory limit in MB. Set to `0` to disable memory monitoring |
+| `watchdog` | `browser_fail_threshold` | integer | `2` | Consecutive browser-not-found checks before restart |
+| `watchdog` | `log_file` | string | `./logs/watchdog.log` | Watchdog log file path (rotating, 5 MB x 3 backups) |
+| `watchdog` | `memory_log_interval` | integer | `1800` | Seconds between memory snapshot log entries. Set to `0` to disable |
+| `watchdog` | `scheduled_reboot_day` | integer/null | `null` | Day of week for scheduled system reboot (0=Mon .. 6=Sun). `null` = disabled. Linux/Pi only |
+| `watchdog` | `scheduled_reboot_hour` | integer | `3` | Hour (0-23) for the scheduled reboot |
 
 ### Additional runtime keys
 

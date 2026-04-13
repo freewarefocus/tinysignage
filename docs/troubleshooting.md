@@ -28,6 +28,15 @@ The player stores a persistent ring buffer (last 200 entries) in the browser's l
 
 The player uploads its log to the server after each successful heartbeat, so remote logs are at most 60 seconds behind.
 
+### Watchdog logs
+
+The process watchdog runs as a separate process and has its own log:
+
+| Log | Location | What it contains |
+|-----|----------|-----------------|
+| **Watchdog log** | `logs/watchdog.log` | Health check results, process restarts, memory snapshots (rotating, 5 MB x 3 backups) |
+| **systemd journal** (Pi/Linux) | `journalctl -u signage-watchdog` | Same output via stderr |
+
 ### Audit log
 
 The audit log (CMS > Audit Log, admin only) records **who changed what** -- it is not an error log. Use it to track:
@@ -188,6 +197,40 @@ Check device hardware. Transitions use CSS opacity with GPU compositing, which w
 
 **High memory usage:**
 The Docker container is limited to 512MB by default. The systemd service unit also sets a `MemoryMax`. If you have many large media files, the server may need more memory for thumbnail generation. Increase the limit in `docker-compose.yml` or the systemd unit.
+
+---
+
+## Watchdog issues
+
+**Watchdog log location:**
+The process watchdog writes to `logs/watchdog.log` (rotating, 5 MB x 3 backups) and to stderr. On Pi/Linux: `journalctl -u signage-watchdog`. On macOS: `~/Library/LaunchAgents/com.tinysignage.watchdog.plist` stdout goes to `logs/watchdog.log`.
+
+**Watchdog keeps restarting the CMS during startup:**
+The watchdog has a startup grace period (default 60 seconds) where it skips health checks. If your CMS takes longer to initialize (large database, slow SD card), increase `watchdog.startup_grace` in `config.yaml`.
+
+**Watchdog not running on Pi:**
+Check the service status:
+```bash
+sudo systemctl status signage-watchdog
+```
+If the service doesn't exist, re-run the installer with `--update` -- it self-heals missing watchdog services.
+
+**Watchdog incorrectly restarting the browser:**
+The watchdog auto-detects what to monitor based on installed services. If it's monitoring a browser that isn't your signage player, set `watchdog.mode` explicitly in `config.yaml`:
+```yaml
+watchdog:
+  mode: cms    # Only monitor the CMS, not the browser
+```
+
+**Disabling the watchdog:**
+```yaml
+watchdog:
+  enabled: false
+```
+Or stop the service: `sudo systemctl stop signage-watchdog` (Pi/Linux).
+
+**Memory snapshots not appearing in the log:**
+Memory snapshots are logged every 30 minutes by default. Check `watchdog.memory_log_interval` in `config.yaml`. Set to `0` to disable.
 
 ---
 
