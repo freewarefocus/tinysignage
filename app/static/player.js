@@ -24,7 +24,6 @@
     const MEMORY_GRACE_PERIOD = 300000;          // 5 min after reload, skip memory checks
     const MIN_UPTIME_FOR_SCHEDULED_RESTART = 3600000; // 1hr
 
-
     // --- Persistent Player Log (ring buffer in localStorage) ---
     const LOG_STORAGE_KEY = 'tinysignage_player_log';
     const LOG_MAX_ENTRIES = 200;

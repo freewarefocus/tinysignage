@@ -250,19 +250,14 @@ def launch(config_path: str | None = None):
 
 def reset_browser_profile():
     """Delete browser profile to force re-registration."""
-    cleared = False
-    for profile_dir in (BROWSER_PROFILE_DIR,):
-        if profile_dir.exists():
-            try:
-                shutil.rmtree(profile_dir)
-            except PermissionError:
-                print(f"ERROR: Could not delete {profile_dir}")
-                print("Close the browser first, then try again.")
-                sys.exit(1)
-            print(f"Cleared: {profile_dir}")
-            cleared = True
-
-    if cleared:
+    if BROWSER_PROFILE_DIR.exists():
+        try:
+            shutil.rmtree(BROWSER_PROFILE_DIR)
+        except PermissionError:
+            print(f"ERROR: Could not delete {BROWSER_PROFILE_DIR}")
+            print("Close the browser first, then try again.")
+            sys.exit(1)
+        print(f"Cleared: {BROWSER_PROFILE_DIR}")
         print("Player registration cleared.")
         print("The player will show the registration screen on next launch.")
     else:
