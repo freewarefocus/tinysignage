@@ -184,7 +184,7 @@
 
     // --- WPE image load counter (safety net for residual image decode leaks) ---
     let wpeImageLoadCount = 0;
-    let wpeImageReloadThreshold = 500;
+    let wpeImageReloadThreshold = 150;
 
     // --- Webhook trigger state ---
     let lastSeenWebhookFires = {};    // { branchId: isoTimestamp } — tracks last processed webhook fire
@@ -756,6 +756,8 @@
         const outLayer = isLayerA ? ctrl.layerA : ctrl.layerB;
 
         zoneCleanupLayer(nextLayer);
+        nextLayer.style.visibility = 'visible';
+        nextLayer.style.transform = '';
 
         const transition = getEffectiveTransition(item);
         const doTx = () => zoneDoTransition(ctrl, nextLayer, outLayer, isLayerA ? 'b' : 'a', transition);
@@ -916,6 +918,8 @@
             iframe.srcdoc = '';
         }
         layer.innerHTML = '';
+        layer.style.visibility = 'hidden';
+        layer.style.transform = 'none';
     }
 
     // ===================================================================
@@ -1069,6 +1073,8 @@
         const currentLayerEl = document.getElementById(`layer-${currentLayer}`);
 
         cleanupLayer(nextLayer);
+        nextLayer.style.visibility = 'visible';
+        nextLayer.style.transform = '';
 
         const transition = getEffectiveTransition(item);
         const doTx = () => doTransition(nextLayer, currentLayerEl, nextLayerId, transition);
@@ -1297,9 +1303,10 @@
         // and removing it here would visually blink the current content.
         layer.style.transitionDuration = '';
         layer.style.removeProperty('--transition-duration');
-        layer.style.transform = '';
+        layer.style.transform = 'none';
         layer.classList.remove('slide-transition', 'slide-in', 'slide-out', 'slide-ready');
         layer.innerHTML = '';
+        layer.style.visibility = 'hidden';
     }
 
     // --- Video Element Reuse Helpers ---
@@ -1405,7 +1412,7 @@
         function tick() {
             lastRafTime = Date.now();
             rafResponsive = true;
-            requestAnimationFrame(tick);
+            setTimeout(() => requestAnimationFrame(tick), 1000);
         }
         requestAnimationFrame(tick);
     }
@@ -1546,11 +1553,12 @@
         try {
             const entries = PlayerLog.getAll();
             if (entries.length === 0) return;
-            await authFetch(apiUrl('/api/devices/' + deviceId + '/player-log'), {
+            const resp = await authFetch(apiUrl('/api/devices/' + deviceId + '/player-log'), {
                 method: 'POST',
                 headers: authHeaders(),
                 body: JSON.stringify({ entries: entries }),
             });
+            if (resp && resp.body) resp.body.cancel();
         } catch (e) {
             // Don't log this to PlayerLog to avoid recursion-like noise
         }
@@ -1730,11 +1738,12 @@
         if (!deviceId) return;
         try {
             const payload = await gatherCapabilities();
-            await authFetch(apiUrl(`/api/devices/${deviceId}/capabilities`), {
+            const resp = await authFetch(apiUrl(`/api/devices/${deviceId}/capabilities`), {
                 method: 'POST',
                 headers: authHeaders(),
                 body: JSON.stringify(payload),
             });
+            if (resp && resp.body) resp.body.cancel();
             PlayerLog.info('Capabilities reported');
         } catch (e) {
             PlayerLog.warn('Capability report failed: ' + e.message);
