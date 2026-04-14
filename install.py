@@ -565,6 +565,39 @@ def _install_player_autostart(install_dir, desktop_user, standalone):
     info(f"Installed signage-player autostart for {desktop_user}: {desktop_path}")
 
 
+# Xorg config file path — xorg.conf.d in this location is read by the
+# packaged Xorg on Pi OS.  /etc/X11/xorg.conf.d/ also works but this is
+# the conventional Pi OS location.
+_XORG_CONFD = "/usr/share/X11/xorg.conf.d"
+_VC4_CONF = "99-tinysignage-vc4.conf"
+
+
+def _deploy_xorg_vc4_conf():
+    """Tell Xorg to use the vc4 display controller as primary GPU.
+
+    Pi 5 exposes two DRM devices: v3d (3D-only, no connectors) and vc4
+    (HDMI output).  Card numbers are assigned at boot and can swap.
+    Without this config Xorg may pick v3d as card0 and fail with
+    "Cannot run in framebuffer mode".  Matching by kernel driver name
+    is stable across boots and harmless on Pi 4 (single display device).
+    """
+    conf_dir = _XORG_CONFD
+    os.makedirs(conf_dir, exist_ok=True)
+    conf_path = os.path.join(conf_dir, _VC4_CONF)
+    with open(conf_path, "w") as f:
+        f.write(textwrap.dedent("""\
+            # TinySignage — force vc4 display controller as primary GPU
+            # Fixes Pi 5 dual-DRM issue (v3d has no display output)
+            Section "OutputClass"
+                Identifier  "vc4"
+                MatchDriver "vc4"
+                Driver      "modesetting"
+                Option      "PrimaryGPU" "true"
+            EndSection
+        """))
+    info("Deployed Xorg vc4 OutputClass config (Pi 5 dual-GPU fix)")
+
+
 def _enable_pi_autologin(lite):
     """Enable autologin via raspi-config so a session exists at boot."""
     if not shutil.which("raspi-config"):
@@ -1110,6 +1143,16 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
         run_cmd(["systemctl", "start", "avahi-daemon"])
         info(f"mDNS enabled — reachable at {hostname or platform.node()}.local")
 
+    # Ensure all directories/files referenced by ReadWritePaths exist BEFORE
+    # writing systemd units — if install crashes after this step but before
+    # app setup, services won't fail with 226/NAMESPACE on reboot.
+    for d in ["media", "db", "logs", "certs"]:
+        os.makedirs(os.path.join(install_dir, d), exist_ok=True)
+    for f_name in ["config.yaml", "config.env"]:
+        p = os.path.join(install_dir, f_name)
+        if not os.path.exists(p):
+            open(p, "a").close()
+
     # --- [4] Systemd units (generated from templates — no sed patching) ---
     step(4, total, "Installing systemd units...")
     services = []
@@ -1135,8 +1178,11 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
             # Xorg needs permission to start as a non-root user
             os.makedirs("/etc/X11", exist_ok=True)
             with open("/etc/X11/Xwrapper.config", "w") as f:
-                f.write("allowed_users=anybody\n")
+                f.write("allowed_users=anybody\nneeds_root_rights=yes\n")
             info("Configured Xwrapper for non-root Xorg")
+
+            # Pi 5 has two DRM devices; tell Xorg which one has display output
+            _deploy_xorg_vc4_conf()
 
             # Ensure the kiosk script is executable (git on Windows
             # may not preserve the execute bit)
@@ -2014,8 +2060,18 @@ def do_update(plat, install_dir, skip_pull=False):
                 kiosk_script = os.path.join(install_dir, "scripts", "kiosk-x11.sh")
                 if os.path.isfile(kiosk_script):
                     os.chmod(kiosk_script, 0o755)
+                _deploy_xorg_vc4_conf()
                 run_cmd(["systemctl", "daemon-reload"])
                 info("Migration complete — cage replaced with X11 + matchbox")
+
+        # Self-heal: deploy vc4 Xorg config for Pi 5 (fixes dual-DRM issue)
+        if os.path.isfile(player_unit_path):
+            with open(player_unit_path) as f:
+                unit_text = f.read()
+            if "xinit" in unit_text or "kiosk-x11" in unit_text:
+                vc4_conf = os.path.join(_XORG_CONFD, _VC4_CONF)
+                if not os.path.isfile(vc4_conf):
+                    _deploy_xorg_vc4_conf()
 
         # Self-heal: ensure sudoers drop-in exists for watchdog
         sudoers_path = "/etc/sudoers.d/tinysignage-watchdog"
