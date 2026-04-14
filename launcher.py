@@ -64,10 +64,11 @@ def get_kiosk_flags(is_pi: bool = False) -> list[str]:
         # Pick the ozone backend from the actual session type.
         # Hard-coding wayland breaks Pi OS Desktop X11 sessions; missing it
         # entirely makes Chromium guess (often wrong on labwc/wayfire).
+        # On Lite (xinit), XDG_SESSION_TYPE isn't set but DISPLAY is.
         session = os.environ.get("XDG_SESSION_TYPE", "").lower()
         if session == "wayland":
             flags.append("--ozone-platform=wayland")
-        elif session == "x11":
+        elif session == "x11" or os.environ.get("DISPLAY"):
             flags.append("--ozone-platform=x11")
         # else: leave it to Chromium's auto-detection
 
@@ -241,7 +242,7 @@ def launch(config_path: str | None = None):
     print(f"Launching: {' '.join(args)}")
 
     if platform.system() == "Linux":
-        # Replace this process with the browser — lets systemd (and cage)
+        # Replace this process with the browser — lets systemd
         # track the browser directly for restart/lifecycle management
         os.execvp(args[0], args)
     else:

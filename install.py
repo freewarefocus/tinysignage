@@ -81,7 +81,7 @@ WantedBy=multi-user.target
 def _build_player_unit(lite, standalone, install_dir, user):
     """Build a systemd unit for the player service.
 
-    lite:           True for Pi OS Lite (cage/Wayland), False for X11/Desktop
+    lite:           True for Pi OS Lite (X11/matchbox kiosk), False for Desktop
     standalone:     True for player-only (no local backend), False for co-located
     """
     if standalone:
@@ -110,17 +110,16 @@ def _build_player_unit(lite, standalone, install_dir, user):
             User={user}
             WorkingDirectory={install_dir}
 
-            # cage creates its own Wayland session on this TTY
+            # Xorg needs access to this TTY for VT switching
             TTYPath=/dev/tty1
             StandardInput=tty-force
             StandardOutput=journal
             StandardError=journal
 
-            RuntimeDirectory=tinysignage
-            Environment=XDG_RUNTIME_DIR=/run/tinysignage
+            Environment=DISPLAY=:0
 
             ExecStartPre=/bin/sleep 5
-            ExecStart=/usr/bin/cage -d -s -- {python_bin} {install_dir}/launcher.py
+            ExecStart=/usr/bin/xinit {install_dir}/scripts/kiosk-x11.sh {python_bin} -- :0 vt1
             WatchdogSec=120
             MemoryMax=1024M
             Restart=on-failure
@@ -1039,10 +1038,13 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
             packages.append("python3-yaml")  # launcher.py needs PyYAML
         packages.append("chromium")
         if lite:
-            info("Detected Pi OS Lite — will install kiosk compositor (cage)")
-            packages.extend(["cage", "xwayland"])
-        # Cursor-hiding tools for desktop sessions
-        packages.extend(["wtype", "swayidle"])
+            info("Detected Pi OS Lite — will install X11 kiosk (matchbox)")
+            packages.extend(["xserver-xorg", "xinit",
+                             "matchbox-window-manager",
+                             "x11-xserver-utils", "unclutter"])
+        else:
+            # Cursor-hiding tools for desktop Wayland sessions (labwc)
+            packages.extend(["wtype", "swayidle"])
         run_cmd(["apt-get", "update", "-qq"])
         run_cmd(
             ["apt-get", "install", "-y", "-qq"] + packages,
@@ -1110,15 +1112,27 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
     if mode in ("both", "player"):
         standalone = (mode == "player")
         if lite:
-            info("Using Lite kiosk service (cage + Chromium on tty1)")
+            info("Using Lite kiosk service (X11 + matchbox + Chromium on tty1)")
             unit = _build_player_unit(lite, standalone, install_dir, SERVICE_USER)
             with open("/etc/systemd/system/signage-player.service", "w") as f:
                 f.write(unit)
             services.append("signage-player")
-            # cage needs sole ownership of tty1 — kick getty off it.
+            # xinit/Xorg needs sole ownership of tty1 — kick getty off it.
             run_cmd(["systemctl", "disable", "--now", "getty@tty1.service"],
                     check=False)
             run_cmd(["systemctl", "mask", "getty@tty1.service"], check=False)
+
+            # Xorg needs permission to start as a non-root user
+            os.makedirs("/etc/X11", exist_ok=True)
+            with open("/etc/X11/Xwrapper.config", "w") as f:
+                f.write("allowed_users=anybody\n")
+            info("Configured Xwrapper for non-root Xorg")
+
+            # Ensure the kiosk script is executable (git on Windows
+            # may not preserve the execute bit)
+            kiosk_script = os.path.join(install_dir, "scripts", "kiosk-x11.sh")
+            if os.path.isfile(kiosk_script):
+                os.chmod(kiosk_script, 0o755)
         else:
             # Pi OS Desktop: the player must run inside the desktop user's
             # graphical session. A systemd user unit bound to
@@ -1168,7 +1182,7 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
         info("Skipped (no player on this device)")
 
     # Set cursor theme in labwc environment (Pi OS Desktop with Wayland).
-    # Lite uses cage (no labwc), so this is meaningless there.
+    # Lite uses X11 + matchbox (no labwc), so this is meaningless there.
     if mode in ("both", "player") and not lite and shutil.which("labwc"):
         try:
             import pwd
@@ -1958,6 +1972,34 @@ def do_update(plat, install_dir, skip_pull=False):
         else:
             info("Updated signage-watchdog service unit")
 
+        # Self-heal: migrate cage-based Lite installs to X11 + matchbox
+        player_unit_path = "/etc/systemd/system/signage-player.service"
+        if os.path.isfile(player_unit_path):
+            with open(player_unit_path) as f:
+                old_unit = f.read()
+            if "cage" in old_unit:
+                info("Migrating Lite player from cage to X11 + matchbox...")
+                run_cmd(
+                    ["apt-get", "install", "-y", "-qq",
+                     "xserver-xorg", "xinit", "matchbox-window-manager",
+                     "x11-xserver-utils", "unclutter"],
+                    env={"DEBIAN_FRONTEND": "noninteractive"},
+                )
+                standalone = (mode == "player")
+                unit = _build_player_unit(True, standalone, install_dir, SERVICE_USER)
+                with open(player_unit_path, "w") as f:
+                    f.write(unit)
+                os.makedirs("/etc/X11", exist_ok=True)
+                xwrapper_conf = "/etc/X11/Xwrapper.config"
+                if not os.path.isfile(xwrapper_conf):
+                    with open(xwrapper_conf, "w") as f:
+                        f.write("allowed_users=anybody\n")
+                kiosk_script = os.path.join(install_dir, "scripts", "kiosk-x11.sh")
+                if os.path.isfile(kiosk_script):
+                    os.chmod(kiosk_script, 0o755)
+                run_cmd(["systemctl", "daemon-reload"])
+                info("Migration complete — cage replaced with X11 + matchbox")
+
         # Self-heal: ensure sudoers drop-in exists for watchdog
         sudoers_path = "/etc/sudoers.d/tinysignage-watchdog"
         if not os.path.isfile(sudoers_path):
@@ -2352,7 +2394,7 @@ def _uninstall_pi(install_dir, keep_data):
     step(3, total, "Removing transparent cursor theme...")
     _remove_path("/usr/share/icons/hidden", label="cursor theme")
 
-    # --- [4] Restore tty1 if Lite cage masked it ---
+    # --- [4] Restore tty1 if Lite (xinit/cage) masked it ---
     if lite_player_removed:
         step(4, total, "Restoring tty1 console...")
         run_cmd(["systemctl", "unmask", "getty@tty1.service"], check=False)
