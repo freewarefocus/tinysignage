@@ -898,6 +898,9 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
 
     cms_fails = 0
     browser_fails = 0
+    check_count = 0
+    # Log a status heartbeat every STATUS_INTERVAL checks (~5 min at default 30s)
+    STATUS_INTERVAL = 10
     start_time = time.monotonic()
     # First snapshot fires after startup_grace (settling delay), not after
     # the full memory_log_interval.  Subsequent snapshots follow the interval.
@@ -987,6 +990,25 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
                                 log.info("Cooldown 30s after browser restart")
                                 time.sleep(30)
                                 continue
+
+            # --- Periodic status heartbeat ---
+            check_count += 1
+            if check_count % STATUS_INTERVAL == 0:
+                parts = []
+                if monitor_cms:
+                    parts.append("CMS=ok" if cms_fails == 0 else f"CMS=failing({cms_fails}/{cms_threshold})")
+                if monitor_browser:
+                    bp = find_browser_pid()
+                    if bp:
+                        if platform.system() == "Linux":
+                            rss_total, pc = _read_total_browser_rss_linux(bp)
+                            parts.append(f"browser=ok(RSS {rss_total}MB/{mem_limit}MB, {pc} procs)")
+                        else:
+                            rss_val = read_rss_mb(bp)
+                            parts.append(f"browser=ok(RSS {rss_val or '?'}MB/{mem_limit}MB)")
+                    else:
+                        parts.append(f"browser=not_found({browser_fails}/{browser_threshold})")
+                log.info("Status: %s", ", ".join(parts))
 
             # --- Memory snapshot ---
             # Always snapshot in --once mode (diagnostic tool).
