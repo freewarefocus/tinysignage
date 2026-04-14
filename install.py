@@ -1170,8 +1170,11 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
             with open("/etc/systemd/system/signage-player.service", "w") as f:
                 f.write(unit)
             services.append("signage-player")
-            # xinit/Xorg needs sole ownership of tty1 — kick getty off it.
-            run_cmd(["systemctl", "disable", "--now", "getty@tty1.service"],
+            # xinit/Xorg needs sole ownership of tty1 — disable getty so it
+            # won't start on next boot.  Do NOT use --now: the user is running
+            # the installer on tty1 right now and killing getty would blank
+            # their terminal mid-install.
+            run_cmd(["systemctl", "disable", "getty@tty1.service"],
                     check=False)
             run_cmd(["systemctl", "mask", "getty@tty1.service"], check=False)
 
