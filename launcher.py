@@ -269,7 +269,7 @@ def _build_cog_env() -> dict[str, str]:
     env["WPE_RAM_SIZE"] = "128"
     # Per-WebProcess RSS ceiling (MB).  When exceeded WPE fires its
     # internal MemoryPressureHandler which trims caches and triggers GC.
-    env["WPE_POLL_MAX_MEMORY"] = "512"
+    env["WPE_POLL_MAX_MEMORY"] = "256"
     return env
 
 

@@ -178,13 +178,16 @@
     // --- Video element reuse cache (Fix 2: avoid GStreamer pipeline churn) ---
     const layerVideoCache = {};       // { layerId: HTMLVideoElement }
 
+    // --- Image element reuse cache (avoid WebKit CachedImage decode leak) ---
+    const layerImageCache = {};       // { layerId: HTMLImageElement }
+
     // --- WPE video play counter (Fix 3: memory pressure proxy) ---
     let wpeVideoPlayCount = 0;
     let wpeVideoReloadThreshold = 200;
 
     // --- WPE image load counter (safety net for residual image decode leaks) ---
     let wpeImageLoadCount = 0;
-    let wpeImageReloadThreshold = 150;
+    let wpeImageReloadThreshold = 100;
 
     // --- Webhook trigger state ---
     let lastSeenWebhookFires = {};    // { branchId: isoTimestamp } — tracks last processed webhook fire
@@ -689,6 +692,8 @@
             zoneCleanupLayer(ctrl.layerB);
             destroyCachedVideo(ctrl.layerA);
             destroyCachedVideo(ctrl.layerB);
+            destroyCachedImage(ctrl.layerA);
+            destroyCachedImage(ctrl.layerB);
         });
         activeZones = [];
         zonesActive = false;
@@ -764,7 +769,7 @@
 
         let element;
         if (asset.asset_type === 'image') {
-            element = document.createElement('img');
+            element = getOrCreateImage(nextLayer);
             element.onload = () => { if (gen !== ctrl.loadGeneration) return; nextLayer._doTxTimer = setTimeout(doTx, 300); };
             element.onerror = () => { if (gen !== ctrl.loadGeneration) return; nextLayer._doTxTimer = setTimeout(doTx, 300); };
             element.src = `${baseUrl}/media/${asset.uri}`;
@@ -903,14 +908,7 @@
             layer._txCleanup = null;
         }
         releaseVideoFromLayer(layer);
-        const img = layer.querySelector('img');
-        if (img) {
-            img.onload = null;
-            img.onerror = null;
-            img.classList.remove('has-effect');
-            img.style.animationName = '';
-            img.src = '';
-        }
+        releaseImageFromLayer(layer);
         const iframe = layer.querySelector('iframe');
         if (iframe) {
             iframe.onload = null;
@@ -1081,7 +1079,7 @@
 
         let element;
         if (asset.asset_type === 'image') {
-            element = document.createElement('img');
+            element = getOrCreateImage(nextLayer);
             element.onload = () => { if (gen !== loadGeneration) return; pendingDoTxTimer = setTimeout(doTx, 300); };
             element.onerror = () => {
                 if (gen !== loadGeneration) return;
@@ -1270,14 +1268,7 @@
         if (pendingDoTxTimer) { clearTimeout(pendingDoTxTimer); pendingDoTxTimer = null; }
         if (pendingVideoTimeout) { clearTimeout(pendingVideoTimeout); pendingVideoTimeout = null; }
         releaseVideoFromLayer(layer);
-        const img = layer.querySelector('img');
-        if (img) {
-            img.onload = null;
-            img.onerror = null;
-            img.classList.remove('has-effect');
-            img.style.animationName = '';
-            img.src = '';
-        }
+        releaseImageFromLayer(layer);
         const iframe = layer.querySelector('iframe');
         if (iframe) {
             iframe.onload = null;
@@ -1309,15 +1300,15 @@
         layer.style.visibility = 'hidden';
     }
 
-    // --- Video Element Reuse Helpers ---
-    function _videoCacheKey(layer) {
+    // --- Element Reuse Helpers ---
+    function _layerCacheKey(layer) {
         if (layer.id) return layer.id;
         if (!layer._cacheKey) layer._cacheKey = 'zone-' + Math.random().toString(36).slice(2, 10);
         return layer._cacheKey;
     }
 
     function getOrCreateVideo(layer) {
-        const key = _videoCacheKey(layer);
+        const key = _layerCacheKey(layer);
         let video = layerVideoCache[key];
         if (video) {
             // Reset for reuse
@@ -1339,7 +1330,7 @@
     }
 
     function releaseVideoFromLayer(layer) {
-        const key = _videoCacheKey(layer);
+        const key = _layerCacheKey(layer);
         const video = layerVideoCache[key];
         if (!video) {
             // Fallback: clean any non-cached video in the layer (e.g. from before cache existed)
@@ -1369,7 +1360,7 @@
     }
 
     function destroyCachedVideo(layer) {
-        const key = _videoCacheKey(layer);
+        const key = _layerCacheKey(layer);
         const video = layerVideoCache[key];
         if (!video) return;
         video.onended = null;
@@ -1382,6 +1373,64 @@
         video.load();
         if (video.parentNode) video.parentNode.removeChild(video);
         delete layerVideoCache[key];
+    }
+
+    function getOrCreateImage(layer) {
+        const key = _layerCacheKey(layer);
+        let img = layerImageCache[key];
+        if (img) {
+            // Reset for reuse
+            img.onload = null;
+            img.onerror = null;
+            img.classList.remove('has-effect');
+            img.style.animationName = '';
+            img.style.animationDuration = '';
+            img.style.objectFit = '';
+            img.src = '';
+            // Detach from old parent if still in DOM
+            if (img.parentNode) img.parentNode.removeChild(img);
+            return img;
+        }
+        img = document.createElement('img');
+        layerImageCache[key] = img;
+        return img;
+    }
+
+    function releaseImageFromLayer(layer) {
+        const key = _layerCacheKey(layer);
+        const img = layerImageCache[key];
+        if (!img) {
+            // Fallback: clean any non-cached image in the layer
+            const orphan = layer.querySelector('img');
+            if (orphan) {
+                orphan.onload = null;
+                orphan.onerror = null;
+                orphan.classList.remove('has-effect');
+                orphan.style.animationName = '';
+                orphan.src = '';
+                orphan.remove();
+            }
+            return;
+        }
+        img.onload = null;
+        img.onerror = null;
+        img.classList.remove('has-effect');
+        img.style.animationName = '';
+        img.style.animationDuration = '';
+        img.style.objectFit = '';
+        img.src = '';
+        if (img.parentNode) img.parentNode.removeChild(img);
+    }
+
+    function destroyCachedImage(layer) {
+        const key = _layerCacheKey(layer);
+        const img = layerImageCache[key];
+        if (!img) return;
+        img.onload = null;
+        img.onerror = null;
+        img.src = '';
+        if (img.parentNode) img.parentNode.removeChild(img);
+        delete layerImageCache[key];
     }
 
     // --- Status ---
