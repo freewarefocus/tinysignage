@@ -137,9 +137,6 @@ async def player_heartbeat(
         device.js_heap_total_mb = body["js_heap_total_mb"]
     if "dom_responsive" in body:
         device.dom_responsive = body["dom_responsive"]
-    if "video_play_count" in body:
-        device.video_play_count = body["video_play_count"]
-
     # Compute clock drift
     player_time_str = body.get("player_time")
     if player_time_str:
@@ -293,7 +290,7 @@ async def report_capabilities(
 async def player_hardware(
     _token: ApiToken = Depends(require_device),
 ):
-    """Return server-side hardware stats (RAM, disk) for WPE/non-Chromium players."""
+    """Return server-side hardware stats (RAM, disk) for players that lack browser APIs."""
     ram_total_mb = None
     if platform.system() == "Linux":
         try:
@@ -376,7 +373,6 @@ async def health_dashboard(
             "js_heap_total_mb": d.js_heap_total_mb,
             "dom_responsive": d.dom_responsive,
             "uptime_seconds": d.uptime_seconds,
-            "video_play_count": d.video_play_count,
             "capabilities_updated_at": d.capabilities_updated_at.isoformat() if d.capabilities_updated_at else None,
             "warnings": warnings,
         }

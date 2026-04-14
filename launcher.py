@@ -14,7 +14,6 @@ import yaml
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 BROWSER_PROFILE_DIR = SCRIPT_DIR / "data" / "browser-profile"
-WPE_PROFILE_DIR = SCRIPT_DIR / "data" / "wpe-profile"
 # Real, writable tmpfs path for browser disk cache on Pi.
 # /tmp is tmpfs on Pi OS, so this still avoids SD-card wear, but unlike
 # /dev/null it is an actual directory the browser can mkdir into.
@@ -46,72 +45,6 @@ def find_browser() -> str | None:
             return candidate
     return None
 
-
-def find_browser_engine(browser_config: str) -> tuple[str | None, str]:
-    """Return (binary, engine_type) based on config and what's installed.
-
-    browser_config values:
-      "auto"     — prefer cog on Linux, fall back to chromium
-      "cog"      — force cog (error if missing)
-      "chromium" — force chromium (existing behavior)
-      "/path"    — explicit binary path (treated as chromium engine)
-    """
-    if browser_config == "cog":
-        cog = shutil.which("cog")
-        if cog:
-            return (cog, "cog")
-        return (None, "cog")
-
-    if browser_config == "auto" and platform.system() == "Linux":
-        cog = shutil.which("cog")
-        if cog:
-            return (cog, "cog")
-
-    # Fall through to chromium detection
-    if browser_config not in ("auto", "chromium", "cog"):
-        # Explicit path — treat as chromium engine
-        return (browser_config, "chromium")
-
-    browser = find_browser()
-    return (browser, "chromium") if browser else (None, "chromium")
-
-
-def _cog_platform() -> str:
-    """Pick the right cog platform backend for the current session.
-
-    - Lite (no display server): DRM/KMS — cog composites directly on the GPU.
-    - Desktop with Wayland compositor (labwc, wayfire): wl — cog runs as a
-      Wayland client inside the existing session.
-    - Desktop with X11: gtk4 — cog runs as an X11/GTK window.  (Rare on
-      modern Pi OS, but possible.)
-    - Unknown / no session type: DRM as a safe default (works headless too).
-    """
-    session = os.environ.get("XDG_SESSION_TYPE", "").lower()
-    if session == "wayland":
-        return "wl"
-    if session == "x11":
-        return "gtk4"
-    return "drm"
-
-
-def get_cog_args(url: str, https: bool = False) -> list[str]:
-    """Build the cog command line with the correct platform backend."""
-    args = ["cog", f"--platform={_cog_platform()}"]
-    # Disable the page cache so navigating away from a page releases its
-    # DOM/JS context immediately instead of keeping it alive for back/forward.
-    # Prevents the WPE GC regression where stale Window objects accumulate.
-    args.append("--enable-page-cache=false")
-    # DOCUMENT_VIEWER cache model — nearly disables caching, significantly
-    # reducing memory growth.  Media re-fetching from localhost is cheap
-    # (same machine, no network latency), so the tradeoff is strongly favorable.
-    args.append("--doc-viewer")
-    # If WPEWebProcess crashes under memory pressure, restart it instead of
-    # showing a blank screen.  Essential for 24/7 signage.
-    args.append("--webprocess-failure=restart")
-    if https:
-        args.append("--ignore-tls-errors")
-    args.append(url)
-    return args
 
 
 def get_kiosk_flags(is_pi: bool = False) -> list[str]:
@@ -257,51 +190,6 @@ def _compute_https_kiosk_flags(config: dict, server_url: str) -> list[str]:
     return ["--ignore-certificate-errors", "--test-type"]
 
 
-def _build_cog_env() -> dict[str, str]:
-    """Build environment variables for cog/WPE launch."""
-    env = os.environ.copy()
-    env["XDG_DATA_HOME"] = str(WPE_PROFILE_DIR)
-    env["XDG_CACHE_HOME"] = PI_DISK_CACHE_DIR
-    env["COG_PLATFORM_DRM_CURSOR_DISABLED"] = "1"
-    env["COG_PLATFORM_WL_VIEW_FULLSCREEN"] = "1"
-    env["WPE_WEBKIT_DISABLE_SANDBOX"] = "1"
-    # Use the transparent cursor theme installed by install.py.
-    # Set explicitly — labwc's environment file may not be inherited
-    # when launched via systemd or XDG autostart.
-    env["XCURSOR_THEME"] = "hidden"
-    env["XCURSOR_SIZE"] = "1"
-    # WPE memory tuning (from info-beamer / WebKit research):
-    # Size internal caches (decoded images, GL textures) relative to
-    # available RAM.  128 MB keeps usage in check on 1–2 GB Pi models.
-    # NOTE: Very likely a no-op on Pi OS's Debian-packaged WPE — the
-    # ENABLE_MEMORY_SAMPLER feature that reads these vars may not be
-    # compiled in.  Kept in place as it costs nothing and helps custom builds.
-    env["WPE_RAM_SIZE"] = "128"
-    # Per-process RSS ceiling.  Correct format is "Process:SizeUnit,..." —
-    # plain MB value was silently ignored.
-    # NOTE: Also very likely a no-op on Pi OS packages (see above).
-    env["WPE_POLL_MAX_MEMORY"] = "WPEWebProcess:270m,WPENetworkProcess:40m"
-    return env
-
-
-def _log_cog_version() -> None:
-    """Log the installed cog/WPE version for diagnostics.
-
-    Non-blocking — if cog --version fails, log a warning and continue.
-    Helps diagnose whether the Pi runs WPE >= 2.38 (better memory behavior).
-    """
-    try:
-        result = subprocess.run(
-            ["cog", "--version"], capture_output=True, text=True, timeout=5,
-        )
-        version_text = (result.stdout or result.stderr).strip()
-        if version_text:
-            print(f"cog version: {version_text}")
-        else:
-            print("WARN: cog --version returned no output")
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
-        print(f"WARN: could not determine cog version: {e}")
-
 
 def launch(config_path: str | None = None):
     # Resolve config.yaml relative to this script so the launcher works
@@ -312,11 +200,14 @@ def launch(config_path: str | None = None):
     browser_config = config.get("player", {}).get("browser", "auto")
     kiosk = config.get("player", {}).get("kiosk", True)
 
-    browser, engine = find_browser_engine(browser_config)
+    if browser_config not in ("auto", "chromium"):
+        # Explicit path — use as-is
+        browser = browser_config
+    else:
+        browser = find_browser()
 
     if not browser:
-        engine_label = "cog (WPE WebKit)" if engine == "cog" else "Chromium-based browser"
-        print(f"ERROR: No {engine_label} found.")
+        print("ERROR: No Chromium-based browser found.")
         return
 
     # Use server_url if set, otherwise fall back to localhost
@@ -337,42 +228,30 @@ def launch(config_path: str | None = None):
     print(f"Waiting for {url} to become ready...")
     _wait_for_url(url)
 
-    if engine == "cog":
-        # WPE WebKit via cog — does its own DRM/KMS compositing
-        os.makedirs(WPE_PROFILE_DIR, exist_ok=True)
-        os.makedirs(PI_DISK_CACHE_DIR, exist_ok=True)
-        is_https = server_url.lower().startswith("https://")
-        env = _build_cog_env()
-        args = get_cog_args(url, https=is_https)
-        _log_cog_version()
-        print(f"Launching (cog/WPE): {' '.join(args)}")
-        os.execvpe(args[0], args, env)
+    if is_pi:
+        _ensure_pi_cache_dir()
+
+    args = [browser]
+    if kiosk:
+        args.extend(get_kiosk_flags(is_pi))
+    args.extend(_compute_https_kiosk_flags(config, server_url))
+    args.append(f"--user-data-dir={BROWSER_PROFILE_DIR}")
+    args.append(url)
+
+    print(f"Launching: {' '.join(args)}")
+
+    if platform.system() == "Linux":
+        # Replace this process with the browser — lets systemd (and cage)
+        # track the browser directly for restart/lifecycle management
+        os.execvp(args[0], args)
     else:
-        # Chromium path — existing behavior
-        if is_pi:
-            _ensure_pi_cache_dir()
-
-        args = [browser]
-        if kiosk:
-            args.extend(get_kiosk_flags(is_pi))
-        args.extend(_compute_https_kiosk_flags(config, server_url))
-        args.append(f"--user-data-dir={BROWSER_PROFILE_DIR}")
-        args.append(url)
-
-        print(f"Launching: {' '.join(args)}")
-
-        if platform.system() == "Linux":
-            # Replace this process with the browser — lets systemd (and cage)
-            # track the browser directly for restart/lifecycle management
-            os.execvp(args[0], args)
-        else:
-            subprocess.Popen(args)
+        subprocess.Popen(args)
 
 
 def reset_browser_profile():
-    """Delete browser profiles (Chromium and WPE) to force re-registration."""
+    """Delete browser profile to force re-registration."""
     cleared = False
-    for profile_dir in (BROWSER_PROFILE_DIR, WPE_PROFILE_DIR):
+    for profile_dir in (BROWSER_PROFILE_DIR,):
         if profile_dir.exists():
             try:
                 shutil.rmtree(profile_dir)

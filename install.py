@@ -78,12 +78,11 @@ MemoryMax=512M
 WantedBy=multi-user.target
 """
 
-def _build_player_unit(lite, standalone, install_dir, user, browser_engine="chromium"):
+def _build_player_unit(lite, standalone, install_dir, user):
     """Build a systemd unit for the player service.
 
     lite:           True for Pi OS Lite (cage/Wayland), False for X11/Desktop
     standalone:     True for player-only (no local backend), False for co-located
-    browser_engine: "cog" for WPE WebKit, "chromium" for Chromium+cage
     """
     if standalone:
         after = "network-online.target"
@@ -97,41 +96,7 @@ def _build_player_unit(lite, standalone, install_dir, user, browser_engine="chro
 
     python_bin = "/usr/bin/python3" if standalone else f"{install_dir}/venv/bin/python"
 
-    if lite and browser_engine == "cog":
-        # cog does its own DRM/KMS compositing — no cage needed
-        return textwrap.dedent(f"""\
-            [Unit]
-            Description=TinySignage Player (WPE WebKit — Lite)
-            After={after}
-            Wants={wants}
-            StartLimitIntervalSec=300
-            StartLimitBurst=5
-
-            [Service]
-            Type=simple
-            User={user}
-            WorkingDirectory={install_dir}
-
-            # cog does DRM/KMS compositing directly on this TTY
-            TTYPath=/dev/tty1
-            StandardInput=tty-force
-            StandardOutput=journal
-            StandardError=journal
-
-            RuntimeDirectory=tinysignage
-            Environment=XDG_RUNTIME_DIR=/run/tinysignage
-
-            ExecStartPre=/bin/sleep 5
-            ExecStart={python_bin} {install_dir}/launcher.py
-            WatchdogSec=120
-            MemoryMax=768M
-            Restart=on-failure
-            RestartSec=10
-
-            [Install]
-            WantedBy=multi-user.target
-        """)
-    elif lite:
+    if lite:
         return textwrap.dedent(f"""\
             [Unit]
             Description=TinySignage Player (Kiosk Browser — Lite)
@@ -932,8 +897,8 @@ def _configure_labwc_rc_xml(home_dir, uid, gid):
 
     Two mechanisms (defense-in-depth):
     1. <cursor><theme>hidden</theme><size>1</size></cursor> — makes the
-       desktop cursor transparent (works for labwc itself, but Wayland
-       clients like cog can override with their own cursor).
+       desktop cursor transparent (works for labwc itself, but some Wayland
+       clients can override with their own cursor).
     2. <keyboard><keybind key="A-W-h"><action name="HideCursor"/>
        </keybind></keyboard> — compositor-level action that hides the
        cursor regardless of what the client sets. Triggered from labwc
@@ -1019,7 +984,7 @@ def _configure_labwc_autostart(home_dir, uid, gid):
 
     Uses wtype to trigger the HideCursor keybind defined in rc.xml, and
     swayidle to re-trigger it after any mouse movement (1s timeout).
-    This hides cog/WPE's own cursor which ignores XCURSOR_THEME.
+    This hides the cursor in Wayland sessions where XCURSOR_THEME alone is insufficient.
     """
     labwc_dir = os.path.join(home_dir, ".config", "labwc")
     autostart_path = os.path.join(labwc_dir, "autostart")
@@ -1069,41 +1034,20 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
     packages = ["python3", "avahi-daemon", "curl"]
     if mode in ("both", "cms"):
         packages.extend(["python3-venv", "python3-pip", "ffmpeg"])
-    browser_engine = "chromium"  # track which engine gets installed
     if mode in ("both", "player"):
         if mode == "player":
             packages.append("python3-yaml")  # launcher.py needs PyYAML
-        # Two-phase browser install: prefer cog (WPE WebKit), fall back to chromium
+        packages.append("chromium")
+        if lite:
+            info("Detected Pi OS Lite — will install kiosk compositor (cage)")
+            packages.extend(["cage", "xwayland"])
+        # Cursor-hiding tools for desktop sessions
+        packages.extend(["wtype", "swayidle"])
         run_cmd(["apt-get", "update", "-qq"])
-        # Try cog first — lighter engine for embedded kiosks
-        cog_packages = [
-            "cog",
-            "gstreamer1.0-plugins-good",
-            "gstreamer1.0-plugins-bad",
-            "gstreamer1.0-libav",
-            "wtype",      # trigger labwc keybinds from scripts (cursor hiding)
-            "swayidle",   # re-hide cursor after mouse movement
-        ]
-        cog_result = run_cmd(
-            ["apt-get", "install", "-y", "-qq"] + packages + cog_packages,
+        run_cmd(
+            ["apt-get", "install", "-y", "-qq"] + packages,
             env={"DEBIAN_FRONTEND": "noninteractive"},
-            check=False,
-            capture=True,
         )
-        if cog_result and cog_result.returncode == 0:
-            browser_engine = "cog"
-            info("Installed cog (WPE WebKit) — lightweight kiosk browser")
-        else:
-            # cog not available — fall back to chromium
-            info("cog not available, falling back to Chromium")
-            packages.append("chromium")
-            if lite:
-                info("Detected Pi OS Lite — will install kiosk compositor (cage)")
-                packages.extend(["cage", "xwayland"])
-            run_cmd(
-                ["apt-get", "install", "-y", "-qq"] + packages,
-                env={"DEBIAN_FRONTEND": "noninteractive"},
-            )
     else:
         run_cmd(["apt-get", "update", "-qq"])
         run_cmd(
@@ -1166,16 +1110,12 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
     if mode in ("both", "player"):
         standalone = (mode == "player")
         if lite:
-            if browser_engine == "cog":
-                info("Using Lite kiosk service (cog/WPE on tty1 — no cage needed)")
-            else:
-                info("Using Lite kiosk service (cage + Chromium on tty1)")
-            unit = _build_player_unit(lite, standalone, install_dir, SERVICE_USER,
-                                      browser_engine=browser_engine)
+            info("Using Lite kiosk service (cage + Chromium on tty1)")
+            unit = _build_player_unit(lite, standalone, install_dir, SERVICE_USER)
             with open("/etc/systemd/system/signage-player.service", "w") as f:
                 f.write(unit)
             services.append("signage-player")
-            # Both cog and cage need sole ownership of tty1 — kick getty off it.
+            # cage needs sole ownership of tty1 — kick getty off it.
             run_cmd(["systemctl", "disable", "--now", "getty@tty1.service"],
                     check=False)
             run_cmd(["systemctl", "mask", "getty@tty1.service"], check=False)
@@ -1612,10 +1552,9 @@ def check_windows_deps(mode="both"):
 def check_linux_deps(mode="both"):
     missing = []
     if mode in ("both", "player"):
-        if (not shutil.which("cog")
-                and not shutil.which("chromium")
+        if (not shutil.which("chromium")
                 and not shutil.which("chromium-browser")):
-            missing.append("chromium or cog")
+            missing.append("chromium")
     if mode != "player" and not shutil.which("ffmpeg"):
         missing.append("ffmpeg")
     if mode != "player":

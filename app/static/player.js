@@ -23,7 +23,7 @@
     const RAF_STALE_THRESHOLD = 10000;           // 10s = DOM frozen
     const MEMORY_GRACE_PERIOD = 300000;          // 5 min after reload, skip memory checks
     const MIN_UPTIME_FOR_SCHEDULED_RESTART = 3600000; // 1hr
-    const WPE_MAX_UPTIME = 43200000; // 12 hours — safety-net restart on WPE
+
 
     // --- Persistent Player Log (ring buffer in localStorage) ---
     const LOG_STORAGE_KEY = 'tinysignage_player_log';
@@ -168,7 +168,6 @@
     let rafResponsive = true;
     let serverRestartHour = null;
     let preloadImg = null;
-    const isWPE = /WPE/i.test(navigator.userAgent);
     let rafProbeRunning = false;
     let pollInProgress = false;
     let pendingDoTxTimer = null;
@@ -180,14 +179,6 @@
 
     // --- Image element reuse cache (avoid WebKit CachedImage decode leak) ---
     const layerImageCache = {};       // { layerId: HTMLImageElement }
-
-    // --- WPE video play counter (Fix 3: memory pressure proxy) ---
-    let wpeVideoPlayCount = 0;
-    let wpeVideoReloadThreshold = 100;
-
-    // --- WPE image load counter (safety net for residual image decode leaks) ---
-    let wpeImageLoadCount = 0;
-    let wpeImageReloadThreshold = 50;
 
     // --- Webhook trigger state ---
     let lastSeenWebhookFires = {};    // { branchId: isoTimestamp } — tracks last processed webhook fire
@@ -600,12 +591,6 @@
         if (s.transition_type) {
             currentTransitionType = s.transition_type;
         }
-        if (s.wpe_video_reload_threshold != null && s.wpe_video_reload_threshold > 0) {
-            wpeVideoReloadThreshold = s.wpe_video_reload_threshold;
-        }
-        if (s.wpe_image_reload_threshold != null && s.wpe_image_reload_threshold > 0) {
-            wpeImageReloadThreshold = s.wpe_image_reload_threshold;
-        }
     }
 
     // ===================================================================
@@ -773,7 +758,6 @@
             element.onload = () => { if (gen !== ctrl.loadGeneration) return; nextLayer._doTxTimer = setTimeout(doTx, 300); };
             element.onerror = () => { if (gen !== ctrl.loadGeneration) return; nextLayer._doTxTimer = setTimeout(doTx, 300); };
             element.src = `${baseUrl}/media/${asset.uri}`;
-            wpeImageLoadCount++;
         } else if (asset.asset_type === 'video') {
             element = getOrCreateVideo(nextLayer);
             element.autoplay = true;
@@ -795,7 +779,6 @@
             element.onerror = () => { if (gen !== ctrl.loadGeneration) return; clearTimeout(videoLoadTimeout); zoneAdvance(ctrl); };
             element.onended = () => { if (gen !== ctrl.loadGeneration) return; zoneAdvance(ctrl); };
             element.src = `${baseUrl}/media/${asset.uri}`;
-            wpeVideoPlayCount++;
         } else if (asset.asset_type === 'html') {
             element = document.createElement('iframe');
             element.onload = () => { if (gen !== ctrl.loadGeneration) return; nextLayer._doTxTimer = setTimeout(doTx, 300); };
@@ -1087,7 +1070,6 @@
                 pendingDoTxTimer = setTimeout(doTx, 300);
             };
             element.src = `${baseUrl}/media/${asset.uri}`;
-            wpeImageLoadCount++;
         } else if (asset.asset_type === 'video') {
             element = getOrCreateVideo(nextLayer);
             element.autoplay = true;
@@ -1122,7 +1104,6 @@
             };
 
             element.src = `${baseUrl}/media/${asset.uri}`;
-            wpeVideoPlayCount++;
         } else if (asset.asset_type === 'html') {
             element = document.createElement('iframe');
             element.onload = () => { if (gen !== loadGeneration) return; pendingDoTxTimer = setTimeout(doTx, 300); };
@@ -1272,10 +1253,8 @@
         const iframe = layer.querySelector('iframe');
         if (iframe) {
             iframe.onload = null;
-            // Navigate to about:blank first — on WPE this triggers proper
-            // context unload and GC of the iframe's JS/DOM context (the GC
-            // regression keeps stale Window objects alive if you only clear
-            // the src attribute).
+            // Navigate to about:blank first to trigger proper context unload
+            // and GC of the iframe's JS/DOM context.
             iframe.src = 'about:blank';
             iframe.srcdoc = '';
         }
@@ -1482,27 +1461,6 @@
     function runHealthCheck() {
         const uptimeMs = Date.now() - startTime;
 
-        // WPE fallback: performance.memory unavailable, use uptime ceiling
-        if (isWPE && serverRestartHour === null && uptimeMs > WPE_MAX_UPTIME) {
-            PlayerLog.info('Health: WPE uptime ' + Math.round(uptimeMs / 3600000) + 'h — restarting as safety net');
-            gracefulReload('wpe-uptime');
-            return;
-        }
-
-        // WPE video play count — proxy for GStreamer memory pressure
-        if (isWPE && wpeVideoPlayCount >= wpeVideoReloadThreshold) {
-            PlayerLog.info('Health: WPE video count ' + wpeVideoPlayCount + ' — graceful reload');
-            gracefulReload('wpe-video-pressure');
-            return;
-        }
-
-        // WPE image load count — safety net for residual image decode leaks
-        if (isWPE && wpeImageLoadCount >= wpeImageReloadThreshold) {
-            PlayerLog.info('Health: WPE image count ' + wpeImageLoadCount + ' — graceful reload');
-            gracefulReload('wpe-image-pressure');
-            return;
-        }
-
         // Responsiveness check
         if (Date.now() - lastRafTime > RAF_STALE_THRESHOLD) {
             rafResponsive = false;
@@ -1550,12 +1508,9 @@
                 player_version: PLAYER_VERSION,
                 player_type: /BrightSign/i.test(navigator.userAgent) ? 'brightsign'
                            : /TinySignageApp/i.test(navigator.userAgent) ? 'android'
-                           : /WPE/i.test(navigator.userAgent) ? 'wpe'
                            : 'browser',
                 uptime_seconds: Math.round((Date.now() - startTime) / 1000),
                 dom_responsive: rafResponsive,
-                video_play_count: wpeVideoPlayCount,
-                image_load_count: wpeImageLoadCount,
             };
 
             // Include memory telemetry if available
@@ -1729,7 +1684,6 @@
                 player_version: PLAYER_VERSION,
                 player_type: /BrightSign/i.test(navigator.userAgent) ? 'brightsign'
                            : /TinySignageApp/i.test(navigator.userAgent) ? 'android'
-                           : /WPE/i.test(navigator.userAgent) ? 'wpe'
                            : 'browser',
                 user_agent: navigator.userAgent,
             },
@@ -1764,7 +1718,7 @@
             } catch (e) { PlayerLog.warn('Storage quota check failed: ' + e.message); }
         }
 
-        // Server-side hardware fallback for WPE and other non-Chromium browsers
+        // Server-side hardware fallback for browsers lacking navigator.deviceMemory
         if (payload.hardware.ram_mb == null || payload.hardware.storage_total_mb == null) {
             try {
                 const hwResp = await authFetch(apiUrl('/api/player/hardware'));

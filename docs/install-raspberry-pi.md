@@ -13,7 +13,7 @@ Dedicated kiosk display -- boots straight into fullscreen playback, managed via 
 - Network connection (Ethernet or WiFi)
 - HDMI display (not needed for CMS-only installs)
 
-> **Why Lite?** Pi OS Lite has no desktop environment, which means faster boot times, lower memory usage, and fewer unnecessary services — ideal for a single-purpose signage display. The installer sets up `cog` (WPE WebKit), a lightweight kiosk browser that composites directly on the GPU without a full desktop.
+> **Why Lite?** Pi OS Lite has no desktop environment, which means faster boot times, lower memory usage, and fewer unnecessary services — ideal for a single-purpose signage display. The installer sets up `cage` (a minimal Wayland compositor) with Chromium in kiosk mode.
 >
 > Pi OS with Desktop also works — the installer detects which variant you're running and adjusts automatically.
 
@@ -91,7 +91,7 @@ What the installer sets up depends on the mode:
 | Python venv + pip dependencies | Yes | Yes | No |
 | SQLite database | Yes | Yes | No |
 | ffmpeg (video thumbnails) | Yes | Yes | No |
-| Kiosk browser (cog/WPE preferred, Chromium fallback) | Yes | No | Yes |
+| Kiosk browser (Chromium + cage on Lite) | Yes | No | Yes |
 | Transparent cursor theme | Yes | No | Yes |
 | `signage-app` systemd service | Yes | Yes | No |
 | `signage-player` systemd service | Yes | No | Yes |
@@ -171,7 +171,7 @@ No action needed — the installer configures both automatically.
 The installer also sets up the `signage-watchdog` systemd service, an independent process that monitors the CMS and browser from the outside. It:
 
 - **Checks CMS health** every 30 seconds via `GET /health`. Restarts the CMS after 3 consecutive failures.
-- **Monitors browser memory** (cog/WPE RSS). Restarts the browser if memory exceeds 1024 MB (configurable).
+- **Monitors browser memory** (Chromium RSS). Restarts the browser if memory exceeds 1024 MB (configurable).
 - **Detects missing browser process** and restarts it after 2 consecutive checks.
 - **Logs periodic memory snapshots** (every 30 minutes) for diagnosing slow leaks.
 - **Optional weekly reboot** — a safety net against kernel/GPU memory accumulation. Disabled by default. Enable via `config.yaml`:

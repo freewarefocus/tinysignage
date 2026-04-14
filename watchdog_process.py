@@ -52,8 +52,8 @@ DEFAULTS = {
 }
 
 # Browser process names to scan for, per engine type
-BROWSER_NAMES_LINUX = ("cog", "chromium", "chromium-browser", "chrome", "google-chrome")
-BROWSER_NAMES_MACOS = ("Google Chrome", "Chromium", "cog")
+BROWSER_NAMES_LINUX = ("chromium", "chromium-browser", "chrome", "google-chrome")
+BROWSER_NAMES_MACOS = ("Google Chrome", "Chromium")
 BROWSER_NAMES_WINDOWS = ("chrome.exe", "chromium.exe")
 
 # =========================================================================
@@ -292,11 +292,6 @@ def _find_all_browser_pids_linux() -> list[int]:
     return pids
 
 
-def _find_all_wpe_pids_linux() -> list[int]:
-    """Return ALL WPEWebProcess + WPENetworkProcess PIDs. Linux only."""
-    return (_find_pids_by_comm_linux("WPEWebProcess")
-            + _find_pids_by_comm_linux("WPENetworkProcess"))
-
 
 def _find_pid_macos(match: str) -> int | None:
     """Use ps to find a process matching a string."""
@@ -316,7 +311,7 @@ def _find_pid_macos(match: str) -> int | None:
 
 
 def _find_browser_pid_macos() -> int | None:
-    """Use pgrep to find Chrome/Chromium/cog on macOS."""
+    """Use pgrep to find Chrome/Chromium on macOS."""
     for name in BROWSER_NAMES_MACOS:
         try:
             result = subprocess.run(
@@ -488,55 +483,14 @@ def _read_rss_windows(pid: int) -> int | None:
     return None
 
 
-def _cleanup_orphan_wpe_processes(plat: str):
-    """Kill orphaned WPE processes whose parent is no longer cog.
-
-    Orphans get re-parented to PID 1 when their parent cog dies.
-    Only acts when there are more than 4 WPE processes (healthy threshold).
-    """
-    if plat not in ("pi", "linux"):
-        return
-
-    wpe_pids = _find_all_wpe_pids_linux()
-    if len(wpe_pids) <= 4:
-        return
-
-    # Find current cog PID(s) — these are the "live" parents
-    browser_pids = set(_find_all_browser_pids_linux())
-
-    orphans = []
-    for pid in wpe_pids:
-        try:
-            # /proc/<pid>/stat field 4 = PPID
-            stat = Path(f"/proc/{pid}/stat").read_text()
-            # Parse carefully: comm field (field 2) can contain spaces/parens
-            # Format: pid (comm) state ppid ...
-            # Find the closing ')' of comm, then split the rest
-            close_paren = stat.rfind(")")
-            if close_paren < 0:
-                continue
-            fields_after_comm = stat[close_paren + 2:].split()
-            ppid = int(fields_after_comm[1])  # state=0, ppid=1
-            if ppid not in browser_pids:
-                orphans.append(pid)
-        except (OSError, IndexError, ValueError):
-            continue
-
-    if orphans:
-        log.warning("Orphan WPE sweep: killing %d orphaned WPE processes "
-                    "(total WPE: %d, orphan PIDs: %s)",
-                    len(orphans), len(wpe_pids), orphans)
-        _kill_pids_with_fallback(orphans, "orphan-WPE", timeout=3)
-
-
 def _read_total_browser_rss_linux(browser_pid: int) -> tuple[int, int]:
-    """Sum RSS of browser PID + all WPE child processes.
+    """Read RSS of the browser process tree.
 
     Returns (total_rss_mb, process_count).
     """
-    all_pids = [browser_pid] + _find_all_wpe_pids_linux()
-    # Deduplicate (browser_pid might appear in wpe list if names overlap)
-    all_pids = list(set(all_pids))
+    all_pids = _find_all_browser_pids_linux()
+    if browser_pid not in all_pids:
+        all_pids.append(browser_pid)
     total = 0
     count = 0
     for pid in all_pids:
@@ -624,17 +578,12 @@ def collect_memory_snapshot(plat: str, mode: str) -> list[tuple[str, int | None,
     cms_pid = find_cms_pid()
     entries.append(("CMS (uvicorn)", cms_pid, read_rss_mb(cms_pid) if cms_pid else None))
 
-    # Browser (cog / chromium)
+    # Browser (chromium)
     browser_pid = find_browser_pid()
-    browser_label = "Browser (cog)" if plat == "pi" else "Browser"
-    entries.append((browser_label, browser_pid, read_rss_mb(browser_pid) if browser_pid else None))
+    entries.append(("Browser", browser_pid, read_rss_mb(browser_pid) if browser_pid else None))
 
     # Linux/Pi-only children
     if platform.system() == "Linux":
-        for pid in _find_pids_by_comm_linux("WPEWebProcess"):
-            entries.append(("WPEWebProcess", pid, read_rss_mb(pid)))
-        for pid in _find_pids_by_comm_linux("WPENetworkProcess"):
-            entries.append(("WPENetworkProcess", pid, read_rss_mb(pid)))
         # GPIO bridge — optional, omitted if not running
         bridge_pids = _find_pids_by_cmdline_linux("bridge.py")
         for pid in bridge_pids:
@@ -759,17 +708,14 @@ def restart_browser(plat: str):
         # systemd's KillMode=control-group already killed all children
         return
 
-    # Fallback: manual kill of ALL browser + WPE processes
+    # Fallback: manual kill of ALL browser processes
     if platform.system() == "Linux":
         browser_pids = _find_all_browser_pids_linux()
-        wpe_pids = _find_all_wpe_pids_linux()
-        all_pids = browser_pids + wpe_pids
-        if all_pids:
-            log.info("Manual kill: %d browser + %d WPE processes",
-                     len(browser_pids), len(wpe_pids))
-            _kill_pids_with_fallback(all_pids, "browser/WPE")
+        if browser_pids:
+            log.info("Manual kill: %d browser processes", len(browser_pids))
+            _kill_pids_with_fallback(browser_pids, "browser")
         else:
-            log.warning("No browser or WPE processes found — cannot restart")
+            log.warning("No browser processes found — cannot restart")
     else:
         # macOS fallback — single PID kill (unchanged behavior)
         pid = find_browser_pid()
@@ -1003,7 +949,7 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
                 if browser_pid:
                     browser_fails = 0
 
-                    # Memory check — aggregate RSS of browser + all WPE children
+                    # Memory check — aggregate RSS of browser process tree
                     if mem_limit > 0:
                         if platform.system() == "Linux":
                             rss, proc_count = _read_total_browser_rss_linux(browser_pid)
@@ -1024,8 +970,6 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
                                 time.sleep(30)
                                 continue
 
-                    # Orphan WPE cleanup (Linux/Pi only)
-                    _cleanup_orphan_wpe_processes(plat)
                 else:
                     # Browser not found — but only count as failure after grace
                     if elapsed > grace:
