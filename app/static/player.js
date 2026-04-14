@@ -182,6 +182,10 @@
     let wpeVideoPlayCount = 0;
     let wpeVideoReloadThreshold = 200;
 
+    // --- WPE image load counter (safety net for residual image decode leaks) ---
+    let wpeImageLoadCount = 0;
+    let wpeImageReloadThreshold = 500;
+
     // --- Webhook trigger state ---
     let lastSeenWebhookFires = {};    // { branchId: isoTimestamp } — tracks last processed webhook fire
 
@@ -596,6 +600,9 @@
         if (s.wpe_video_reload_threshold != null && s.wpe_video_reload_threshold > 0) {
             wpeVideoReloadThreshold = s.wpe_video_reload_threshold;
         }
+        if (s.wpe_image_reload_threshold != null && s.wpe_image_reload_threshold > 0) {
+            wpeImageReloadThreshold = s.wpe_image_reload_threshold;
+        }
     }
 
     // ===================================================================
@@ -759,6 +766,7 @@
             element.onload = () => { if (gen !== ctrl.loadGeneration) return; nextLayer._doTxTimer = setTimeout(doTx, 300); };
             element.onerror = () => { if (gen !== ctrl.loadGeneration) return; nextLayer._doTxTimer = setTimeout(doTx, 300); };
             element.src = `${baseUrl}/media/${asset.uri}`;
+            wpeImageLoadCount++;
         } else if (asset.asset_type === 'video') {
             element = getOrCreateVideo(nextLayer);
             element.autoplay = true;
@@ -899,7 +907,7 @@
             img.onerror = null;
             img.classList.remove('has-effect');
             img.style.animationName = '';
-            img.removeAttribute('src');
+            img.src = '';
         }
         const iframe = layer.querySelector('iframe');
         if (iframe) {
@@ -1075,6 +1083,7 @@
                 pendingDoTxTimer = setTimeout(doTx, 300);
             };
             element.src = `${baseUrl}/media/${asset.uri}`;
+            wpeImageLoadCount++;
         } else if (asset.asset_type === 'video') {
             element = getOrCreateVideo(nextLayer);
             element.autoplay = true;
@@ -1261,7 +1270,7 @@
             img.onerror = null;
             img.classList.remove('has-effect');
             img.style.animationName = '';
-            img.removeAttribute('src');
+            img.src = '';
         }
         const iframe = layer.querySelector('iframe');
         if (iframe) {
@@ -1431,6 +1440,13 @@
             return;
         }
 
+        // WPE image load count — safety net for residual image decode leaks
+        if (isWPE && wpeImageLoadCount >= wpeImageReloadThreshold) {
+            PlayerLog.info('Health: WPE image count ' + wpeImageLoadCount + ' — graceful reload');
+            gracefulReload('wpe-image-pressure');
+            return;
+        }
+
         // Responsiveness check
         if (Date.now() - lastRafTime > RAF_STALE_THRESHOLD) {
             rafResponsive = false;
@@ -1483,6 +1499,7 @@
                 uptime_seconds: Math.round((Date.now() - startTime) / 1000),
                 dom_responsive: rafResponsive,
                 video_play_count: wpeVideoPlayCount,
+                image_load_count: wpeImageLoadCount,
             };
 
             // Include memory telemetry if available
