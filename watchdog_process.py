@@ -40,7 +40,7 @@ DEFAULTS = {
     "startup_grace": 60,
     "mode": "auto",
     "cms_fail_threshold": 3,
-    "browser_memory_limit_mb": 1024,
+    "browser_memory_limit_mb": 0,  # 0 = auto-scale based on system RAM
     "browser_fail_threshold": 2,
     "log_file": "./logs/watchdog.log",
     "memory_log_enabled": False,
@@ -114,6 +114,22 @@ def load_config() -> dict:
                 )
         except Exception as e:
             log.warning("Could not read config.yaml: %s — using defaults", e)
+
+    # Auto-scale browser memory limit based on system RAM if not explicitly
+    # set in config.yaml.  A value of 0 (the default) triggers auto-scaling.
+    if cfg["browser_memory_limit_mb"] == 0:
+        sys_mem = read_system_memory()
+        if sys_mem:
+            total = sys_mem["total_mb"]
+            if total < 3072:       # 2 GB
+                cfg["browser_memory_limit_mb"] = 700
+            elif total < 6144:     # 4 GB
+                cfg["browser_memory_limit_mb"] = 1024
+            else:                  # 8 GB+
+                cfg["browser_memory_limit_mb"] = 1536
+        else:
+            cfg["browser_memory_limit_mb"] = 1024  # safe fallback
+
     return cfg
 
 

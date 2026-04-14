@@ -20,6 +20,18 @@ BROWSER_PROFILE_DIR = SCRIPT_DIR / "data" / "browser-profile"
 PI_DISK_CACHE_DIR = "/tmp/tinysignage-cache"
 
 
+def _get_total_ram_mb() -> int | None:
+    """Read total system RAM in MB. Linux only."""
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) // 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
 def find_browser() -> str | None:
     """Find an installed Chromium-based browser."""
     candidates = {
@@ -72,6 +84,17 @@ def get_kiosk_flags(is_pi: bool = False) -> list[str]:
             flags.append("--ozone-platform=x11")
         # else: leave it to Chromium's auto-detection
 
+        ram_mb = _get_total_ram_mb()
+
+        # js-flags: always clear the inherited Pi OS --js-flags that spam
+        # stderr.  On low-RAM models, also cap V8's old-generation heap.
+        if ram_mb is not None and ram_mb < 3072:      # 2 GB
+            flags.append("--js-flags=--max-old-space-size=128")
+        elif ram_mb is not None and ram_mb < 6144:    # 4 GB
+            flags.append("--js-flags=--max-old-space-size=256")
+        else:                                         # 8 GB+
+            flags.append("--js-flags=")
+
         flags.extend([
             "--disable-background-timer-throttling",
             # Real tmpfs path — /dev/null is a char device and Chromium's
@@ -79,10 +102,6 @@ def get_kiosk_flags(is_pi: bool = False) -> list[str]:
             # cold boots can delay/suppress the kiosk window.
             f"--disk-cache-dir={PI_DISK_CACHE_DIR}",
             "--disk-cache-size=1",
-            # Clear inherited --js-flags from Pi OS's chromium.conf
-            # (which injects --js-flags=--no-decommit-pooled-pages, an
-            # unrecognized flag that spams stderr and hides real errors).
-            "--js-flags=",
             # Skip libsecret/gnome-keyring. On a fresh Pi OS Desktop
             # session there's no unlocked keyring agent, so Chromium
             # blocks at startup with a "Unlock keyring" dialog and the
@@ -102,6 +121,19 @@ def get_kiosk_flags(is_pi: bool = False) -> list[str]:
             # single tab, so one renderer is sufficient.
             "--renderer-process-limit=1",
         ])
+
+        # Extra memory savings for ≤2 GB Pi models
+        if ram_mb is not None and ram_mb < 3072:
+            flags.extend([
+                # BackForwardCache keeps old pages in memory — useless in
+                # a single-page kiosk.  MediaRouter does Chromecast
+                # discovery.  IdleDetection polls for user activity.
+                "--disable-features=BackForwardCache,MediaRouter,IdleDetection",
+                # Merge the GPU process into the browser process — saves
+                # one process worth of base overhead (~80-120 MB).
+                "--in-process-gpu",
+            ])
+            print(f"Low-RAM mode: {ram_mb} MB detected, applying memory constraints")
 
     return flags
 

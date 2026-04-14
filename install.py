@@ -78,11 +78,38 @@ MemoryMax=512M
 WantedBy=multi-user.target
 """
 
-def _build_player_unit(lite, standalone, install_dir, user):
+def _detect_ram_mb():
+    """Detect total system RAM in MB. Returns None on non-Linux."""
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) // 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def _player_memory_max_mb(ram_mb):
+    """Return the MemoryMax value (in MB) for the player service.
+
+    Scaled to system RAM so the player can use available memory on
+    larger Pi models without being unnecessarily constrained, while
+    preventing OOM on smaller ones.
+    """
+    if ram_mb is None or ram_mb >= 6144:   # 8 GB+
+        return 2048
+    if ram_mb >= 3072:                     # 4 GB
+        return 1536
+    return 900                             # 2 GB
+
+
+def _build_player_unit(lite, standalone, install_dir, user, memory_max_mb=1024):
     """Build a systemd unit for the player service.
 
     lite:           True for Pi OS Lite (X11/matchbox kiosk), False for Desktop
     standalone:     True for player-only (no local backend), False for co-located
+    memory_max_mb:  Systemd MemoryMax cgroup limit (scaled to system RAM)
     """
     if standalone:
         after = "network-online.target"
@@ -120,7 +147,7 @@ def _build_player_unit(lite, standalone, install_dir, user):
 
             ExecStartPre=/bin/sleep 5
             ExecStart=/usr/bin/xinit {install_dir}/scripts/kiosk-x11.sh {python_bin} -- :0 vt1
-            MemoryMax=1024M
+            MemoryMax={memory_max_mb}M
             Restart=on-failure
             RestartSec=10
 
@@ -146,7 +173,7 @@ def _build_player_unit(lite, standalone, install_dir, user):
             Environment=XCURSOR_SIZE=1
             ExecStartPre=/bin/sleep 5
             ExecStart={python_bin} {install_dir}/launcher.py
-            MemoryMax=1024M
+            MemoryMax={memory_max_mb}M
             Restart=on-failure
             RestartSec=10
 
@@ -1161,11 +1188,25 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
             f.write(SYSTEMD_APP.format(install_dir=install_dir, user=SERVICE_USER, port=port))
         services.append("signage-app")
 
+    # Detect RAM for memory-tier tuning of player service
+    ram_mb = _detect_ram_mb()
+    mem_max = _player_memory_max_mb(ram_mb)
+    if ram_mb:
+        info(f"Detected {ram_mb} MB RAM — player MemoryMax={mem_max}M")
+        if ram_mb < 1500:
+            warn("1 GB RAM is not enough for Chromium kiosk — expect instability")
+        elif ram_mb < 3072:
+            warn(
+                "2 GB RAM is tight. Keep playlists simple — avoid multiple "
+                "videos or very large images to prevent out-of-memory restarts."
+            )
+
     if mode in ("both", "player"):
         standalone = (mode == "player")
         if lite:
             info("Using Lite kiosk service (X11 + matchbox + Chromium on tty1)")
-            unit = _build_player_unit(lite, standalone, install_dir, SERVICE_USER)
+            unit = _build_player_unit(lite, standalone, install_dir, SERVICE_USER,
+                                      memory_max_mb=mem_max)
             with open("/etc/systemd/system/signage-player.service", "w") as f:
                 f.write(unit)
             services.append("signage-player")
@@ -2051,7 +2092,9 @@ def do_update(plat, install_dir, skip_pull=False):
                     env={"DEBIAN_FRONTEND": "noninteractive"},
                 )
                 standalone = (mode == "player")
-                unit = _build_player_unit(True, standalone, install_dir, SERVICE_USER)
+                mem_max = _player_memory_max_mb(_detect_ram_mb())
+                unit = _build_player_unit(True, standalone, install_dir, SERVICE_USER,
+                                          memory_max_mb=mem_max)
                 with open(player_unit_path, "w") as f:
                     f.write(unit)
                 os.makedirs("/etc/X11", exist_ok=True)
@@ -2086,6 +2129,22 @@ def do_update(plat, install_dir, skip_pull=False):
                     f.write(new_unit)
                 run_cmd(["systemctl", "daemon-reload"])
                 info("Removed WatchdogSec from Lite player unit (xinit can't send keepalives)")
+
+        # Self-heal: scale MemoryMax to system RAM (existing installs may
+        # have the old hardcoded 1024M which is too low for 4GB+ or too
+        # high relative to available RAM on 2GB).
+        if os.path.isfile(player_unit_path):
+            with open(player_unit_path) as f:
+                unit_text = f.read()
+            ram_mb = _detect_ram_mb()
+            target = _player_memory_max_mb(ram_mb)
+            m = re.search(r"MemoryMax=(\d+)M", unit_text)
+            if m and int(m.group(1)) != target:
+                new_unit = re.sub(r"MemoryMax=\d+M", f"MemoryMax={target}M", unit_text)
+                with open(player_unit_path, "w") as f:
+                    f.write(new_unit)
+                run_cmd(["systemctl", "daemon-reload"])
+                info(f"Scaled player MemoryMax to {target}M for {ram_mb}MB RAM")
 
         # Self-heal: ensure sudoers drop-in exists for watchdog
         sudoers_path = "/etc/sudoers.d/tinysignage-watchdog"
