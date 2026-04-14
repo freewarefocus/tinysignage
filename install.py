@@ -1028,6 +1028,16 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
     """All Pi system-level steps (requires root)."""
     total = 6
 
+    # --- cloud-init: disable if present ---
+    # Pi OS Lite ships cloud-init enabled but with no datasource on bare-metal
+    # Pi hardware. It can hang at boot waiting for metadata, blocking
+    # multi-user.target and making the system appear stuck. Disable it.
+    ci_disable = "/etc/cloud/cloud-init.disabled"
+    if os.path.isdir("/etc/cloud") and not os.path.exists(ci_disable):
+        with open(ci_disable, "w") as f:
+            pass  # empty sentinel file
+        info("Disabled cloud-init (no datasource on bare-metal Pi)")
+
     # --- [1] apt packages ---
     step(1, total, "Installing system packages...")
     packages = ["python3", "avahi-daemon", "curl"]
@@ -1955,6 +1965,13 @@ def do_update(plat, install_dir, skip_pull=False):
             if not os.path.isdir(certs_dir):
                 run_as_user(SERVICE_USER, ["mkdir", "-p", certs_dir])
                 info("Created missing certs/ directory for HTTPS support")
+
+        # Self-heal: disable cloud-init on bare-metal Pi (hangs at boot)
+        ci_disable = "/etc/cloud/cloud-init.disabled"
+        if os.path.isdir("/etc/cloud") and not os.path.exists(ci_disable):
+            with open(ci_disable, "w") as f:
+                pass
+            info("Disabled cloud-init (no datasource on bare-metal Pi)")
 
         # Self-heal: always rewrite the watchdog unit to pick up template
         # fixes (e.g. removal of NoNewPrivileges that blocked sudo).
