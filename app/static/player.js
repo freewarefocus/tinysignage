@@ -23,7 +23,7 @@
     const RAF_STALE_THRESHOLD = 10000;           // 10s = DOM frozen
     const MEMORY_GRACE_PERIOD = 300000;          // 5 min after reload, skip memory checks
     const MIN_UPTIME_FOR_SCHEDULED_RESTART = 3600000; // 1hr
-    const WPE_MAX_UPTIME = 86400000; // 24 hours — safety-net restart on WPE
+    const WPE_MAX_UPTIME = 43200000; // 12 hours — safety-net restart on WPE
 
     // --- Persistent Player Log (ring buffer in localStorage) ---
     const LOG_STORAGE_KEY = 'tinysignage_player_log';
@@ -183,11 +183,11 @@
 
     // --- WPE video play counter (Fix 3: memory pressure proxy) ---
     let wpeVideoPlayCount = 0;
-    let wpeVideoReloadThreshold = 200;
+    let wpeVideoReloadThreshold = 100;
 
     // --- WPE image load counter (safety net for residual image decode leaks) ---
     let wpeImageLoadCount = 0;
-    let wpeImageReloadThreshold = 100;
+    let wpeImageReloadThreshold = 50;
 
     // --- Webhook trigger state ---
     let lastSeenWebhookFires = {};    // { branchId: isoTimestamp } — tracks last processed webhook fire

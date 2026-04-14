@@ -40,7 +40,7 @@ DEFAULTS = {
     "startup_grace": 60,
     "mode": "auto",
     "cms_fail_threshold": 3,
-    "browser_memory_limit_mb": 1024,
+    "browser_memory_limit_mb": 768,
     "browser_fail_threshold": 2,
     "log_file": "./logs/watchdog.log",
     "memory_log_interval": 1800,
@@ -421,7 +421,18 @@ def read_rss_mb(pid: int) -> int | None:
 
 
 def _read_rss_linux(pid: int) -> int | None:
-    """Read RSS from /proc/<pid>/statm (field 1 = resident pages)."""
+    """Read RSS from /proc — prefers smaps_rollup (more accurate), falls back to statm."""
+    # smaps_rollup includes shared/private pages and is more accurate than
+    # statm (which misses DRM/GBM buffers and GPU-mapped memory).
+    try:
+        text = Path(f"/proc/{pid}/smaps_rollup").read_text()
+        for line in text.splitlines():
+            if line.startswith("Rss:"):
+                kb = int(line.split()[1])
+                return kb // 1024
+    except (OSError, IndexError, ValueError):
+        pass
+    # Fallback to statm
     try:
         fields = Path(f"/proc/{pid}/statm").read_text().split()
         resident_pages = int(fields[1])

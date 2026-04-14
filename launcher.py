@@ -101,6 +101,13 @@ def get_cog_args(url: str, https: bool = False) -> list[str]:
     # DOM/JS context immediately instead of keeping it alive for back/forward.
     # Prevents the WPE GC regression where stale Window objects accumulate.
     args.append("--enable-page-cache=false")
+    # DOCUMENT_VIEWER cache model — nearly disables caching, significantly
+    # reducing memory growth.  Media re-fetching from localhost is cheap
+    # (same machine, no network latency), so the tradeoff is strongly favorable.
+    args.append("--doc-viewer")
+    # If WPEWebProcess crashes under memory pressure, restart it instead of
+    # showing a blank screen.  Essential for 24/7 signage.
+    args.append("--webprocess-failure=restart")
     if https:
         args.append("--ignore-tls-errors")
     args.append(url)
@@ -266,11 +273,34 @@ def _build_cog_env() -> dict[str, str]:
     # WPE memory tuning (from info-beamer / WebKit research):
     # Size internal caches (decoded images, GL textures) relative to
     # available RAM.  128 MB keeps usage in check on 1–2 GB Pi models.
+    # NOTE: Very likely a no-op on Pi OS's Debian-packaged WPE — the
+    # ENABLE_MEMORY_SAMPLER feature that reads these vars may not be
+    # compiled in.  Kept in place as it costs nothing and helps custom builds.
     env["WPE_RAM_SIZE"] = "128"
-    # Per-WebProcess RSS ceiling (MB).  When exceeded WPE fires its
-    # internal MemoryPressureHandler which trims caches and triggers GC.
-    env["WPE_POLL_MAX_MEMORY"] = "256"
+    # Per-process RSS ceiling.  Correct format is "Process:SizeUnit,..." —
+    # plain MB value was silently ignored.
+    # NOTE: Also very likely a no-op on Pi OS packages (see above).
+    env["WPE_POLL_MAX_MEMORY"] = "WPEWebProcess:270m,WPENetworkProcess:40m"
     return env
+
+
+def _log_cog_version() -> None:
+    """Log the installed cog/WPE version for diagnostics.
+
+    Non-blocking — if cog --version fails, log a warning and continue.
+    Helps diagnose whether the Pi runs WPE >= 2.38 (better memory behavior).
+    """
+    try:
+        result = subprocess.run(
+            ["cog", "--version"], capture_output=True, text=True, timeout=5,
+        )
+        version_text = (result.stdout or result.stderr).strip()
+        if version_text:
+            print(f"cog version: {version_text}")
+        else:
+            print("WARN: cog --version returned no output")
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        print(f"WARN: could not determine cog version: {e}")
 
 
 def launch(config_path: str | None = None):
@@ -314,6 +344,7 @@ def launch(config_path: str | None = None):
         is_https = server_url.lower().startswith("https://")
         env = _build_cog_env()
         args = get_cog_args(url, https=is_https)
+        _log_cog_version()
         print(f"Launching (cog/WPE): {' '.join(args)}")
         os.execvpe(args[0], args, env)
     else:

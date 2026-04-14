@@ -124,7 +124,7 @@ def _build_player_unit(lite, standalone, install_dir, user, browser_engine="chro
             ExecStartPre=/bin/sleep 5
             ExecStart={python_bin} {install_dir}/launcher.py
             WatchdogSec=120
-            MemoryMax=512M
+            MemoryMax=768M
             Restart=on-failure
             RestartSec=10
 
