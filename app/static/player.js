@@ -1312,6 +1312,7 @@
             video.removeAttribute('src');
             video.srcObject = null;
             while (video.firstChild) video.removeChild(video.firstChild);
+            video.load();  // Release any residual GStreamer pipeline before reuse
             // Detach from old parent if still in DOM
             if (video.parentNode) video.parentNode.removeChild(video);
             return video;
@@ -1347,6 +1348,7 @@
         video.removeAttribute('src');
         video.srcObject = null;
         while (video.firstChild) video.removeChild(video.firstChild);
+        video.load();  // Release GStreamer pipeline / decoded frame buffers
         if (video.parentNode) video.parentNode.removeChild(video);
     }
 
