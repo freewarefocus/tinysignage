@@ -40,9 +40,10 @@ DEFAULTS = {
     "startup_grace": 60,
     "mode": "auto",
     "cms_fail_threshold": 3,
-    "browser_memory_limit_mb": 768,
+    "browser_memory_limit_mb": 1024,
     "browser_fail_threshold": 2,
     "log_file": "./logs/watchdog.log",
+    "memory_log_enabled": False,
     "memory_log_interval": 1800,
     # Scheduled weekly full system reboot (Linux/Pi only).
     # Every mature signage project recommends this as a safety net against
@@ -52,7 +53,7 @@ DEFAULTS = {
 }
 
 # Browser process names to scan for, per engine type
-BROWSER_NAMES_LINUX = ("chromium", "chromium-browser", "chrome", "google-chrome")
+BROWSER_NAMES_LINUX = ("chromium", "chromium-browser", "chromium-browse", "chrome", "google-chrome")
 BROWSER_NAMES_MACOS = ("Google Chrome", "Chromium")
 BROWSER_NAMES_WINDOWS = ("chrome.exe", "chromium.exe")
 
@@ -888,6 +889,7 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
     cms_threshold = cfg.get("cms_fail_threshold", 3)
     browser_threshold = cfg.get("browser_fail_threshold", 2)
     mem_limit = cfg.get("browser_memory_limit_mb", 1024)
+    memory_log_enabled = cfg.get("memory_log_enabled", False)
     memory_log_interval = cfg.get("memory_log_interval", 1800)
     reboot_day = cfg.get("scheduled_reboot_day")       # 0=Mon..6=Sun or None
     reboot_hour = cfg.get("scheduled_reboot_hour", 3)  # 0-23
@@ -896,9 +898,11 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
 
     cms_fails = 0
     browser_fails = 0
-    last_memory_log = 0.0
-    last_reboot_check_day = -1  # Track which weekday we last triggered a reboot
     start_time = time.monotonic()
+    # First snapshot fires after startup_grace (settling delay), not after
+    # the full memory_log_interval.  Subsequent snapshots follow the interval.
+    last_memory_log = start_time + grace - memory_log_interval
+    last_reboot_check_day = -1  # Track which weekday we last triggered a reboot
 
     if reboot_day is not None:
         day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -984,15 +988,23 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
                                 time.sleep(30)
                                 continue
 
-            # --- Periodic memory snapshot ---
-            if memory_log_interval > 0:
+            # --- Memory snapshot ---
+            # Always snapshot in --once mode (diagnostic tool).
+            # In normal mode, only if memory_log_enabled.
+            should_snapshot = False
+            if once:
+                should_snapshot = True
+            elif memory_log_enabled and memory_log_interval > 0:
                 now = time.monotonic()
                 if now - last_memory_log >= memory_log_interval:
-                    try:
-                        log_memory_snapshot(plat, mode)
-                    except Exception:
-                        log.exception("Failed to collect memory snapshot")
-                    last_memory_log = now
+                    should_snapshot = True
+
+            if should_snapshot:
+                try:
+                    log_memory_snapshot(plat, mode)
+                except Exception:
+                    log.exception("Failed to collect memory snapshot")
+                last_memory_log = time.monotonic()
 
             # --- Scheduled weekly system reboot (Linux/Pi only) ---
             if reboot_day is not None and not once:

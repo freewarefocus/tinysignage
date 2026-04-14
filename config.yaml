@@ -33,5 +33,9 @@ watchdog:
   browser_memory_limit_mb: 1024
   browser_fail_threshold: 2
   log_file: ./logs/watchdog.log
+  memory_log_enabled: false
+  memory_log_interval: 1800
+  scheduled_reboot_day: null
+  scheduled_reboot_hour: 3
 device_id: 9659bdba-1b72-408d-9cad-21716ba4c285
 server_url: http://127.0.0.1:18080
