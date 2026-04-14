@@ -581,7 +581,7 @@ function getDefaultConfigForType(type) {
     case 'keyboard': return { key: 'ArrowRight', modifiers: [] }
     case 'touch_zone': return { x_percent: 0, y_percent: 0, width_percent: 100, height_percent: 100 }
     case 'timeout': return { seconds: 30 }
-    case 'loop_count': return { count: 3 }
+    case 'loop_count': return { count: 1 }
     case 'gpio': return { pin: 17, edge: 'falling' }
     case 'joystick': return { input: 'button', button: 0, value: 1, device: null }
     case 'webhook': return { token: generateToken() }
