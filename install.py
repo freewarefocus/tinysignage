@@ -120,7 +120,6 @@ def _build_player_unit(lite, standalone, install_dir, user):
 
             ExecStartPre=/bin/sleep 5
             ExecStart=/usr/bin/xinit {install_dir}/scripts/kiosk-x11.sh {python_bin} -- :0 vt1
-            WatchdogSec=120
             MemoryMax=1024M
             Restart=on-failure
             RestartSec=10
@@ -2075,6 +2074,18 @@ def do_update(plat, install_dir, skip_pull=False):
                 vc4_conf = os.path.join(_XORG_CONFD, _VC4_CONF)
                 if not os.path.isfile(vc4_conf):
                     _deploy_xorg_vc4_conf()
+
+        # Self-heal: remove WatchdogSec from Lite player unit — xinit never
+        # sends sd_notify(WATCHDOG=1), so systemd kills the kiosk every 2min.
+        if os.path.isfile(player_unit_path):
+            with open(player_unit_path) as f:
+                unit_text = f.read()
+            if "WatchdogSec" in unit_text and "xinit" in unit_text:
+                new_unit = re.sub(r"\nWatchdogSec=\d+", "", unit_text)
+                with open(player_unit_path, "w") as f:
+                    f.write(new_unit)
+                run_cmd(["systemctl", "daemon-reload"])
+                info("Removed WatchdogSec from Lite player unit (xinit can't send keepalives)")
 
         # Self-heal: ensure sudoers drop-in exists for watchdog
         sudoers_path = "/etc/sudoers.d/tinysignage-watchdog"
