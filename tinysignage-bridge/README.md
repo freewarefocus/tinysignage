@@ -54,13 +54,17 @@ sudo udevadm control --reload-rules
 
 ## Installation
 
-After running the main TinySignage installer, the bridge is located at `/opt/tinysignage/tinysignage-bridge/`. A single script handles the full setup — Python venv, udev rules, input group, and systemd service:
+After running the main TinySignage installer, the bridge is located at `/opt/tinysignage/tinysignage-bridge/`. The installer walks you through a short setup wizard (2-3 questions) and handles everything — Python venv, udev rules, input group, config.yaml, and systemd service:
 
 ```bash
-sudo bash /opt/tinysignage/tinysignage-bridge/install.sh
+sudo python3 /opt/tinysignage/tinysignage-bridge/install.py
 ```
 
-Edit `config.yaml` **before** running the installer if you want to enable joystick support or change pin assignments.
+The wizard asks which buttons and gamepad options you want, then generates `config.yaml` to match. For scripted or headless installs, use `--non-interactive` to skip prompts and use defaults (3 GPIO buttons, no joystick):
+
+```bash
+sudo python3 /opt/tinysignage/tinysignage-bridge/install.py --non-interactive
+```
 
 Note: `evdev` is Linux-only. On non-Linux systems, joystick support is unavailable but GPIO mock mode still works.
 
@@ -139,7 +143,7 @@ j0b0
 
 ### Running as a Service (systemd)
 
-The install script (`install.sh`) creates and enables the service automatically. To manage it manually:
+The installer (`install.py`) creates and enables the service automatically. To manage it manually:
 
 ```bash
 sudo systemctl status tinysignage-bridge   # check status
