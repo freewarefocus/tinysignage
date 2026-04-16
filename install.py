@@ -98,13 +98,13 @@ def _player_memory_max_mb(ram_mb):
     preventing OOM on smaller ones.
     """
     if ram_mb is None or ram_mb >= 6144:   # 8 GB+
-        return 2560
+        return 2688
     if ram_mb >= 3072:                     # 4 GB
-        return 1792
-    return 1024                            # 2 GB
+        return 1920
+    return 1152                            # 2 GB
 
 
-def _build_player_unit(lite, standalone, install_dir, user, memory_max_mb=1024):
+def _build_player_unit(lite, standalone, install_dir, user, memory_max_mb=1152):
     """Build a systemd unit for the player service.
 
     lite:           True for Pi OS Lite (X11/matchbox kiosk), False for Desktop
