@@ -149,6 +149,7 @@ async def read_single_joystick(device, device_index, config):
     """Read events from a single joystick device and broadcast them."""
     dead_zone = config.get("dead_zone", 0.1)
     axis_threshold = config.get("axis_threshold", 0.5)
+    button_names = {int(k): v for k, v in config.get("buttons", {}).items()}
     device_name = device.name
 
     # Track axis states for edge-triggering: (axis_code) -> "positive" | "negative" | None
@@ -172,7 +173,11 @@ async def read_single_joystick(device, device_index, config):
                     "value": ev.value,
                     "timestamp": int(time.time() * 1000),
                 }
-                log.info("Joystick %d button %d %s", device_index, ev.code,
+                btn_name = button_names.get(ev.code)
+                if btn_name:
+                    event["name"] = btn_name
+                log.info("Joystick %d button %d%s %s", device_index, ev.code,
+                         f" ({btn_name})" if btn_name else "",
                          "pressed" if ev.value else "released")
                 await broadcast(event)
 
@@ -271,7 +276,9 @@ MOCK_JOYSTICK_RE = re.compile(r"^j(\d+)(b|a)(\d+)([u+\-]?)$")
 
 async def mock_gpio_loop(config: dict):
     """In mock mode, simulate GPIO and joystick events from stdin."""
-    joy_enabled = config.get("joystick", {}).get("enabled", False)
+    joy_config = config.get("joystick", {})
+    joy_enabled = joy_config.get("enabled", False)
+    button_names = {int(k): v for k, v in joy_config.get("buttons", {}).items()}
     if joy_enabled:
         log.info("MOCK MODE: Type a pin number, or joystick command (j0b0, j0a0+, j0a0-)")
     else:
@@ -304,7 +311,11 @@ async def mock_gpio_loop(config: dict):
                     "value": value,
                     "timestamp": int(time.time() * 1000),
                 }
-                log.info("MOCK joystick %d button %d %s", dev_idx, code,
+                btn_name = button_names.get(code)
+                if btn_name:
+                    event["name"] = btn_name
+                log.info("MOCK joystick %d button %d%s %s", dev_idx, code,
+                         f" ({btn_name})" if btn_name else "",
                          "pressed" if value else "released")
             else:
                 direction = "negative" if modifier == "-" else "positive"
