@@ -1,5 +1,6 @@
 import hashlib
 import json
+import socket
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,6 +27,26 @@ from app.models import ApiToken, Asset, AssetTag, Device, DeviceGroupMembership,
 _config_path = Path("config.yaml")
 
 router = APIRouter()
+
+
+def _get_lan_ip() -> str:
+    """Return the machine's LAN-facing IP (no traffic sent)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def _player_ip(request: Request) -> str:
+    """Best-effort IP of the player device (for SSH access)."""
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    if client_ip in ("127.0.0.1", "::1"):
+        return _get_lan_ip()
+    return client_ip
 
 
 def _get_server_url(request: Request = None) -> str:
@@ -264,6 +285,7 @@ async def restart_device(
 @router.get("/devices/{device_id}/playlist")
 async def get_device_playlist(
     device_id: str,
+    request: Request,
     token: ApiToken = Depends(require_device),
     session: AsyncSession = Depends(get_session),
 ):
@@ -281,7 +303,7 @@ async def get_device_playlist(
     if device.status == "pending":
         device.last_seen = now
         await session.commit()
-        return {"status": "pending", "device_name": device.name}
+        return {"status": "pending", "device_name": device.name, "player_ip": _player_ip(request)}
 
     # Update last_seen (strip tzinfo — SQLite stores naive datetimes)
     device.last_seen = now
@@ -425,6 +447,7 @@ async def get_device_playlist(
         "items": [_item_to_dict(item) for item in active_items],
         "settings": resolved_settings,
         "device_name": device.name,
+        "player_ip": _player_ip(request),
     }
 
     # Include transition playlist for schedule-change bumpers

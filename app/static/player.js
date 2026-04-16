@@ -129,6 +129,7 @@
     let deviceId = '';
     let deviceToken = '';
     let deviceName = localStorage.getItem('tinysignage_device_name') || '';
+    let playerIp = localStorage.getItem('tinysignage_player_ip') || '';
     let startTime = Date.now();
     let heartbeatTimer = null;
     let activeOverride = null;
@@ -488,10 +489,14 @@
             const data = await resp.json();
             setOnlineStatus(true);
 
-            // Update device name from poll (may have been renamed in CMS)
+            // Update device name and player IP from poll
             if (data.device_name) {
                 deviceName = data.device_name;
                 localStorage.setItem('tinysignage_device_name', data.device_name);
+            }
+            if (data.player_ip) {
+                playerIp = data.player_ip;
+                localStorage.setItem('tinysignage_player_ip', data.player_ip);
             }
 
             // --- Pending approval gate ---
@@ -1440,7 +1445,7 @@
         var nameEl = document.getElementById('splash-name');
         var ipEl = document.getElementById('splash-ip');
         if (nameEl) nameEl.textContent = deviceName || '';
-        if (ipEl) ipEl.textContent = location.protocol + '//' + location.host;
+        if (ipEl) ipEl.textContent = playerIp || '';
     }
 
     function hideSplash() {
