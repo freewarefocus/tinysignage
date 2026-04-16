@@ -28,6 +28,14 @@
       </button>
     </div>
 
+    <div class="name-search">
+      <i class="pi pi-search"></i>
+      <input v-model="nameSearch" type="text" placeholder="Search by name..." class="name-search-input" />
+      <button v-if="nameSearch" class="name-search-clear" @click="nameSearch = ''">
+        <i class="pi pi-times"></i>
+      </button>
+    </div>
+
     <div v-if="canEdit" class="action-area">
       <div class="upload-row">
         <UploadZone @uploaded="loadAssets" />
@@ -45,14 +53,15 @@
       <p class="form-hint upload-hint">Large video files may take longer to load on the player.</p>
     </div>
 
-    <div v-if="assets.length === 0" class="empty">
-      <p v-if="activeTagFilter">No assets with this tag.</p>
+    <div v-if="filteredAssets.length === 0" class="empty">
+      <p v-if="nameSearch && assets.length > 0">No assets matching "{{ nameSearch }}".</p>
+      <p v-else-if="activeTagFilter">No assets with this tag.</p>
       <p v-else>No media yet. Upload images and videos to use in your playlists. Drag files here or click Upload.</p>
     </div>
 
     <div v-else class="asset-grid">
       <AssetCard
-        v-for="asset in assets"
+        v-for="asset in filteredAssets"
         :key="asset.id"
         :asset="asset"
         :all-tags="tags"
@@ -208,6 +217,13 @@ const canEdit = ['admin', 'editor'].includes(userRole)
 const assets = ref([])
 const tags = ref([])
 const activeTagFilter = ref(null)
+const nameSearch = ref('')
+
+const filteredAssets = computed(() => {
+  if (!nameSearch.value) return assets.value
+  const q = nameSearch.value.toLowerCase()
+  return assets.value.filter(a => a.name.toLowerCase().includes(q))
+})
 const replaceInput = ref(null)
 const replaceTarget = ref(null)
 
@@ -531,6 +547,30 @@ h2 {
 .tag-count {
   font-size: 0.7rem;
   opacity: 0.6;
+}
+
+.name-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+  max-width: 280px;
+}
+.name-search .pi-search { color: #888; font-size: .85rem; }
+.name-search-input {
+  flex: 1;
+  background: #23242a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #e0e0e0;
+  padding: 5px 8px;
+  font-size: .85rem;
+}
+.name-search-input::placeholder { color: #666; }
+.name-search-input:focus { border-color: #7c83ff; outline: none; }
+.name-search-clear {
+  background: none; border: none; color: #888;
+  cursor: pointer; padding: 2px;
 }
 
 .empty {
