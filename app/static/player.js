@@ -128,6 +128,7 @@
     let online = false;
     let deviceId = '';
     let deviceToken = '';
+    let deviceName = localStorage.getItem('tinysignage_device_name') || '';
     let startTime = Date.now();
     let heartbeatTimer = null;
     let activeOverride = null;
@@ -199,11 +200,15 @@
         return fetch(url, options);
     }
 
-    function storeCredentials(id, token) {
+    function storeCredentials(id, token, name) {
         deviceId = id;
         deviceToken = token;
         localStorage.setItem('tinysignage_device_id', id);
         localStorage.setItem('tinysignage_device_token', token);
+        if (name) {
+            deviceName = name;
+            localStorage.setItem('tinysignage_device_name', name);
+        }
     }
 
     function cleanUrl() {
@@ -270,7 +275,7 @@
                 }
                 const data = await resp.json();
                 storeServerUrl(serverUrl);
-                storeCredentials(data.device_id, data.token);
+                storeCredentials(data.device_id, data.token, data.device_name || name);
                 cleanUrl();
                 if (data.status === 'pending') {
                     hideRegistrationOverlay();
@@ -335,7 +340,7 @@
             const data = await resp.json();
             if (data.device_id && data.token) {
                 PlayerLog.info('Local bootstrap: paired as ' + (data.device_name || data.device_id));
-                storeCredentials(data.device_id, data.token);
+                storeCredentials(data.device_id, data.token, data.device_name);
                 return true;
             }
         } catch (e) {
@@ -370,7 +375,7 @@
                 if (resp.ok) {
                     const data = await resp.json();
                     storeServerUrl(serverUrl);
-                    storeCredentials(data.device_id, data.token);
+                    storeCredentials(data.device_id, data.token, data.device_name || autoName);
                     cleanUrl();
                     startPlayer();
                     return;
@@ -482,6 +487,12 @@
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
             setOnlineStatus(true);
+
+            // Update device name from poll (may have been renamed in CMS)
+            if (data.device_name) {
+                deviceName = data.device_name;
+                localStorage.setItem('tinysignage_device_name', data.device_name);
+            }
 
             // --- Pending approval gate ---
             if (data.status === 'pending') {
@@ -1426,6 +1437,10 @@
 
     function showSplash() {
         document.getElementById('splash').classList.remove('hidden');
+        var nameEl = document.getElementById('splash-name');
+        var ipEl = document.getElementById('splash-ip');
+        if (nameEl) nameEl.textContent = deviceName || '';
+        if (ipEl) ipEl.textContent = location.protocol + '//' + location.host;
     }
 
     function hideSplash() {

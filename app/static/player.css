@@ -155,6 +155,19 @@ html, body, #player { width: 100%; height: 100%; overflow: hidden; background: #
     color: #888;
 }
 
+#splash-name {
+    font-size: 1.1rem;
+    font-weight: 300;
+    color: #aaa;
+    margin-top: 1.5rem;
+}
+
+#splash-ip {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: #666;
+}
+
 #status-indicator {
     position: absolute;
     bottom: 12px;

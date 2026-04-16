@@ -281,7 +281,7 @@ async def get_device_playlist(
     if device.status == "pending":
         device.last_seen = now
         await session.commit()
-        return {"status": "pending"}
+        return {"status": "pending", "device_name": device.name}
 
     # Update last_seen (strip tzinfo — SQLite stores naive datetimes)
     device.last_seen = now
@@ -424,6 +424,7 @@ async def get_device_playlist(
         "hash": _playlist_hash(active_items) + "-" + _settings_hash(resolved_settings),
         "items": [_item_to_dict(item) for item in active_items],
         "settings": resolved_settings,
+        "device_name": device.name,
     }
 
     # Include transition playlist for schedule-change bumpers
