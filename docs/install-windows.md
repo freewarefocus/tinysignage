@@ -113,7 +113,9 @@ Or download from [ffmpeg.org](https://ffmpeg.org/download.html) and add the `bin
 
 The installer offers two autostart options:
 
-**Background service (Task Scheduler)** — starts at boot, no login required. Best for headless CMS servers or kiosks that reboot unattended. Requires running the installer as Administrator. To manage or remove:
+**Background service (Task Scheduler)** — starts at boot, no login required. Best for headless CMS servers or kiosks that reboot unattended. To manage or remove:
+
+> **You must run the installer as Administrator for this option.** Right-click Command Prompt or PowerShell and choose **Run as administrator** before running `python install.py`. If you skip this, the task won't be created and TinySignage won't start at boot. The installer will detect this and tell you, but it's easy to miss during a long install.
 
 ```powershell
 # View tasks
@@ -201,6 +203,23 @@ Check that the server is running, then verify:
 1. Your firewall allows Python on private networks — see [Allow through Windows Firewall](#allow-through-windows-firewall) above
 2. Your network profile is set to **Private**, not Public (**Settings → Network & Internet** → click your connection → Network profile type)
 3. You're using the correct IP address — run `ipconfig` and look for **IPv4 Address**
+
+**Background service doesn't start at boot:**
+You chose "Run as a background service" during install, but TinySignage doesn't start after a reboot. This almost always means the installer wasn't run as Administrator. Check whether the task exists:
+
+```powershell
+schtasks /query /tn "TinySignage"
+```
+
+If it says "The system cannot find the file specified", the task was never created. Re-run the installer from an Administrator command prompt:
+
+```powershell
+# Right-click Command Prompt → Run as administrator
+cd path\to\tinysignage
+python install.py
+```
+
+Choose "Run as a background service" again. This time it will succeed.
 
 **Antivirus blocks or slows TinySignage:**
 Some antivirus software (Windows Defender, Norton, McAfee, etc.) may quarantine `venv\Scripts\python.exe` or flag the server as suspicious. Check your antivirus quarantine list and restore any blocked files. If uploads are slow or files disappear from `media\`, add the TinySignage folder to your antivirus exclusion list.

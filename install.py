@@ -1768,18 +1768,45 @@ def _create_windows_startup_shortcuts(install_dir, bat_path):
         warn(f"Startup folder not found: {startup}")
 
 
+def _is_windows_admin():
+    """Return True if the current process has Administrator privileges."""
+    try:
+        import ctypes
+        return ctypes.windll.shell32.IsUserAnAdmin() != 0
+    except Exception:
+        return False
+
+
 def _create_windows_scheduled_tasks(install_dir):
-    """Create Windows Task Scheduler tasks to run at boot as SYSTEM."""
+    """Create Windows Task Scheduler tasks to run at boot as SYSTEM.
+
+    Returns True on success, False if admin privileges are missing.
+    """
+    if not _is_windows_admin():
+        print()
+        warn("This installer is not running as Administrator.")
+        warn("The background service option requires Administrator privileges")
+        warn("to create a Windows Task Scheduler entry.")
+        print()
+        info("To fix, close this window and re-run the installer like this:")
+        info("  1. Press Win, type 'cmd'")
+        info("  2. Click 'Run as administrator'")
+        info("  3. Re-run:  python install.py")
+        print()
+        info("Or skip the background service and use the Startup folder option instead.")
+        print()
+        return False
+
     bat_path = os.path.join(install_dir, "start-tinysignage.bat")
     pythonw = os.path.join(install_dir, "venv", "Scripts", "pythonw.exe")
     wd_script = os.path.join(install_dir, "watchdog_process.py")
 
-    info("Creating scheduled tasks (requires Administrator)...")
+    info("Creating scheduled tasks...")
 
     # Server task — starts 30s after boot
     result = run_cmd(
         ["schtasks", "/create", "/tn", "TinySignage",
-         "/tr", bat_path,
+         "/tr", f'"{bat_path}"',
          "/sc", "onstart", "/delay", "0000:30",
          "/ru", "SYSTEM", "/rl", "highest", "/f"],
         check=False,
@@ -1787,10 +1814,10 @@ def _create_windows_scheduled_tasks(install_dir):
     if result.returncode == 0:
         info("Created scheduled task: TinySignage")
     else:
-        warn("Failed to create TinySignage task — are you running as Administrator?")
-        info("To create manually, open Task Scheduler (taskschd.msc) and add a task")
+        warn("Failed to create TinySignage scheduled task.")
+        info(f"To create manually, open Task Scheduler (taskschd.msc) and add a task")
         info(f"  that runs at startup: {bat_path}")
-        return
+        return False
 
     # Watchdog task — starts 45s after boot
     result = run_cmd(
@@ -1809,6 +1836,7 @@ def _create_windows_scheduled_tasks(install_dir):
     info("TinySignage will start automatically at boot (no login required).")
     info("To manage: open Task Scheduler (taskschd.msc) and look for 'TinySignage'.")
     info("To remove: python install.py --uninstall")
+    return True
 
 
 def windows_post_install(install_dir, non_interactive, port=DEFAULT_PORT):
@@ -1824,7 +1852,10 @@ def windows_post_install(install_dir, non_interactive, port=DEFAULT_PORT):
                 "Run as a background service (starts at boot, no login required)?",
                 default=False,
             ):
-                _create_windows_scheduled_tasks(install_dir)
+                if not _create_windows_scheduled_tasks(install_dir):
+                    # Admin check failed — offer the login-based alternative
+                    if prompt_yn("Create shortcut in Startup folder instead (run on login)?"):
+                        _create_windows_startup_shortcuts(install_dir, bat_path)
             elif prompt_yn("Create shortcut in Startup folder (run on login)?"):
                 _create_windows_startup_shortcuts(install_dir, bat_path)
     else:
