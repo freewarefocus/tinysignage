@@ -243,6 +243,9 @@
         // Pre-fill server URL: stored > meta tag > current origin
         const storedUrl = getStoredServerUrl();
         serverInput.value = storedUrl || baseUrl || window.location.origin;
+        // Pre-fill display name from ?name= URL param (set by launcher.py)
+        const urlName = new URLSearchParams(window.location.search).get('name');
+        if (urlName) nameInput.value = urlName;
         nameInput.focus();
 
         if (registrationBound) return;
@@ -363,7 +366,20 @@
             return;
         }
 
-        // Headless auto-registration: ?name= param (used by BrightSign autorun)
+        // Check stored credentials FIRST — prevents ?name= from re-registering
+        // on every boot after the initial registration has already succeeded.
+        const storedId = localStorage.getItem('tinysignage_device_id');
+        const storedToken = localStorage.getItem('tinysignage_device_token');
+        if (storedId && storedToken) {
+            deviceId = storedId;
+            deviceToken = storedToken;
+            cleanUrl();
+            startPlayer();
+            return;
+        }
+
+        // Headless auto-registration: ?name= param (used by BrightSign autorun
+        // and launcher.py for player-only Pi installs)
         const autoName = params.get('name');
         if (autoName) {
             const serverUrl = baseUrl || window.location.origin;
@@ -385,15 +401,6 @@
                 PlayerLog.warn('Auto-registration failed: ' + e.message);
             }
             // Fall through to existing flow on failure
-        }
-
-        const storedId = localStorage.getItem('tinysignage_device_id');
-        const storedToken = localStorage.getItem('tinysignage_device_token');
-        if (storedId && storedToken) {
-            deviceId = storedId;
-            deviceToken = storedToken;
-            startPlayer();
-            return;
         }
 
         // Try local bootstrap before showing registration overlay

@@ -253,6 +253,15 @@ def launch(config_path: str | None = None):
         scheme = "https" if https_enabled else "http"
         server_url = f"{scheme}://localhost:{port}"
     url = f"{server_url}/player"
+
+    # Player-only installs: pass ?name= so the player auto-registers with the
+    # display name from config.yaml. "Both" mode always has a seeded device_id,
+    # so the guard prevents double-registration on co-located installs.
+    display_name = config.get("display_name", "")
+    device_id = config.get("device_id", "")
+    if display_name and not device_id:
+        url += f"?name={urllib.parse.quote(display_name, safe='')}"
+
     is_pi = Path("/proc/device-tree/model").exists()  # Rough Pi detection
 
     # Wait for the backend to be reachable before launching the kiosk.

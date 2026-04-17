@@ -1,4 +1,5 @@
 import html
+import ipaddress
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -35,6 +36,16 @@ from app.error_handlers import register_error_handlers
 from app.logging_config import setup_logging
 from app.scheduler import scheduler
 from app.watchdog import watchdog
+
+def _is_loopback(host: str) -> bool:
+    """Check if a hostname or IP refers to the loopback interface."""
+    if host in ("localhost", "::1"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
 
 _config_path = Path("config.yaml")
 _config = yaml.safe_load(_config_path.read_text())
@@ -135,6 +146,15 @@ async def player_page(request: Request):
     # the player always talks to whatever host served this page (important
     # when launcher.py opens http://localhost:8080/player)
     server_url = config.get("server_url", "") or str(request.base_url).rstrip("/")
+    # If configured URL is loopback but client is remote, use request origin
+    # so the player's <meta name="server-url"> points back to this CMS, not
+    # to 127.0.0.1 on the remote device.
+    if server_url:
+        from urllib.parse import urlparse
+        parsed_host = urlparse(server_url).hostname or ""
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        if _is_loopback(parsed_host) and not _is_loopback(client_ip):
+            server_url = str(request.base_url).rstrip("/")
     # Read PLAYER_VERSION from player.js for cache-busting
     player_version = "0"
     try:
