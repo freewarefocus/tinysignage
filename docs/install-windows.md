@@ -101,25 +101,32 @@ Player devices (Raspberry Pi, kiosk PCs) handle this automatically — no action
 
 ## Optional: FFmpeg for video thumbnails
 
-Video uploads work without FFmpeg — you just won't get thumbnail previews in the CMS.
-
-Install via [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/):
+The installer offers to install FFmpeg automatically via winget. If you skipped that prompt or need to install it manually:
 
 ```powershell
 winget install Gyan.FFmpeg
 ```
 
-Or download from [ffmpeg.org](https://ffmpeg.org/download.html) and add the `bin/` folder to your PATH.
-
-Verify:
-
-```powershell
-ffmpeg -version
-```
+Or download from [ffmpeg.org](https://ffmpeg.org/download.html) and add the `bin/` folder to your PATH. Close and reopen your terminal after installing, then verify with `ffmpeg -version`. Restart TinySignage afterward. Without FFmpeg, video uploads still work but won't show preview thumbnails.
 
 ## Optional: Run on startup
 
-If you skipped startup setup during install, you can re-run `python install.py` to generate the batch file and startup shortcut.
+The installer offers two autostart options:
+
+**Background service (Task Scheduler)** — starts at boot, no login required. Best for headless CMS servers or kiosks that reboot unattended. Requires running the installer as Administrator. To manage or remove:
+
+```powershell
+# View tasks
+taskschd.msc
+
+# Remove from command line
+schtasks /delete /tn "TinySignage" /f
+schtasks /delete /tn "TinySignage Watchdog" /f
+```
+
+**Startup folder shortcut** — starts when you log in. Simpler, no admin needed, but the CMS won't start until someone signs in after a reboot.
+
+If you skipped startup setup during install, re-run `python install.py` to generate the batch file and choose a startup method.
 
 To also open the player in kiosk mode, add this line to `start-tinysignage.bat` after the `python -m app.server` line (in a separate `start` command):
 

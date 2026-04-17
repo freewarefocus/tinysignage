@@ -1650,19 +1650,37 @@ def init_database(install_dir):
 # Dependency checks (desktop platforms)
 # =========================================================================
 
-def check_macos_deps(mode="both"):
+def check_macos_deps(mode="both", non_interactive=False):
     if mode != "player" and not shutil.which("ffmpeg"):
         warn("FFmpeg not found. Video thumbnails won't be generated.")
         info("Fix: brew install ffmpeg")
 
 
-def check_windows_deps(mode="both"):
+def check_windows_deps(mode="both", non_interactive=False):
     if mode != "player" and not shutil.which("ffmpeg"):
-        warn("FFmpeg not found. Video thumbnails won't be generated.")
-        info("Fix: winget install Gyan.FFmpeg")
+        has_winget = shutil.which("winget") is not None
+        if has_winget and not non_interactive:
+            if prompt_yn("FFmpeg not found. Install now via winget?"):
+                info("Installing FFmpeg via winget (this may take a minute)...")
+                run_cmd(
+                    ["winget", "install", "--id", "Gyan.FFmpeg", "-e",
+                     "--accept-source-agreements", "--accept-package-agreements"],
+                    check=False,
+                )
+                if shutil.which("ffmpeg"):
+                    info("FFmpeg installed successfully.")
+                else:
+                    warn("FFmpeg installed but not yet visible in PATH.")
+                    info("Close and reopen your terminal, then re-run the installer,")
+                    info("or just restart TinySignage later — it will pick up FFmpeg automatically.")
+            else:
+                info("Skipped. You can install FFmpeg later: winget install Gyan.FFmpeg")
+        else:
+            warn("FFmpeg not found — video thumbnails will be skipped.")
+            info("Optional: winget install Gyan.FFmpeg  (you can install it later)")
 
 
-def check_linux_deps(mode="both"):
+def check_linux_deps(mode="both", non_interactive=False):
     missing = []
     if mode in ("both", "player"):
         if (not shutil.which("chromium")
@@ -1711,6 +1729,80 @@ def macos_post_install(install_dir, non_interactive, port=DEFAULT_PORT):
         info("Skipped launchd setup")
 
 
+def _create_windows_startup_shortcuts(install_dir, bat_path):
+    """Create VBS shortcuts in the Windows Startup folder."""
+    startup = os.path.join(
+        os.environ.get("APPDATA", ""),
+        r"Microsoft\Windows\Start Menu\Programs\Startup",
+    )
+    if os.path.isdir(startup):
+        shortcut = os.path.join(startup, "tinysignage.vbs")
+        safe_path = bat_path.replace('"', '')
+        with open(shortcut, "w") as f:
+            f.write(
+                'CreateObject("WScript.Shell").Run '
+                f'Chr(34) & "{safe_path}" & Chr(34), 0, False\n'
+            )
+        info(f"Created startup shortcut: {shortcut}")
+
+        # Watchdog startup shortcut
+        wd_shortcut = os.path.join(startup, "tinysignage-watchdog.vbs")
+        pythonw = os.path.join(install_dir, "venv", "Scripts", "pythonw.exe")
+        wd_script = os.path.join(install_dir, "watchdog_process.py")
+        with open(wd_shortcut, "w") as f:
+            f.write(
+                'CreateObject("WScript.Shell").Run '
+                f'Chr(34) & "{pythonw}" & Chr(34) & " " & '
+                f'Chr(34) & "{wd_script}" & Chr(34), 0, False\n'
+            )
+        info(f"Created watchdog startup shortcut: {wd_shortcut}")
+    else:
+        warn(f"Startup folder not found: {startup}")
+
+
+def _create_windows_scheduled_tasks(install_dir):
+    """Create Windows Task Scheduler tasks to run at boot as SYSTEM."""
+    bat_path = os.path.join(install_dir, "start-tinysignage.bat")
+    pythonw = os.path.join(install_dir, "venv", "Scripts", "pythonw.exe")
+    wd_script = os.path.join(install_dir, "watchdog_process.py")
+
+    info("Creating scheduled tasks (requires Administrator)...")
+
+    # Server task — starts 30s after boot
+    result = run_cmd(
+        ["schtasks", "/create", "/tn", "TinySignage",
+         "/tr", bat_path,
+         "/sc", "onstart", "/delay", "0000:30",
+         "/ru", "SYSTEM", "/rl", "highest", "/f"],
+        check=False,
+    )
+    if result.returncode == 0:
+        info("Created scheduled task: TinySignage")
+    else:
+        warn("Failed to create TinySignage task — are you running as Administrator?")
+        info("To create manually, open Task Scheduler (taskschd.msc) and add a task")
+        info(f"  that runs at startup: {bat_path}")
+        return
+
+    # Watchdog task — starts 45s after boot
+    result = run_cmd(
+        ["schtasks", "/create", "/tn", "TinySignage Watchdog",
+         "/tr", f'"{pythonw}" "{wd_script}"',
+         "/sc", "onstart", "/delay", "0000:45",
+         "/ru", "SYSTEM", "/rl", "highest", "/f"],
+        check=False,
+    )
+    if result.returncode == 0:
+        info("Created scheduled task: TinySignage Watchdog")
+    else:
+        warn("Failed to create TinySignage Watchdog task.")
+
+    print()
+    info("TinySignage will start automatically at boot (no login required).")
+    info("To manage: open Task Scheduler (taskschd.msc) and look for 'TinySignage'.")
+    info("To remove: python install.py --uninstall")
+
+
 def windows_post_install(install_dir, non_interactive, port=DEFAULT_PORT):
     bat_path = os.path.join(install_dir, "start-tinysignage.bat")
 
@@ -1719,36 +1811,14 @@ def windows_post_install(install_dir, non_interactive, port=DEFAULT_PORT):
             f.write(WINDOWS_BAT.format(install_dir=install_dir, port=port))
         info(f"Created {bat_path}")
 
-        if not non_interactive and prompt_yn(
-            "Create shortcut in Startup folder (run on login)?"
-        ):
-            startup = os.path.join(
-                os.environ.get("APPDATA", ""),
-                r"Microsoft\Windows\Start Menu\Programs\Startup",
-            )
-            if os.path.isdir(startup):
-                shortcut = os.path.join(startup, "tinysignage.vbs")
-                safe_path = bat_path.replace('"', '')
-                with open(shortcut, "w") as f:
-                    f.write(
-                        'CreateObject("WScript.Shell").Run '
-                        f'Chr(34) & "{safe_path}" & Chr(34), 0, False\n'
-                    )
-                info(f"Created startup shortcut: {shortcut}")
-
-                # Watchdog startup shortcut
-                wd_shortcut = os.path.join(startup, "tinysignage-watchdog.vbs")
-                pythonw = os.path.join(install_dir, "venv", "Scripts", "pythonw.exe")
-                wd_script = os.path.join(install_dir, "watchdog_process.py")
-                with open(wd_shortcut, "w") as f:
-                    f.write(
-                        'CreateObject("WScript.Shell").Run '
-                        f'Chr(34) & "{pythonw}" & Chr(34) & " " & '
-                        f'Chr(34) & "{wd_script}" & Chr(34), 0, False\n'
-                    )
-                info(f"Created watchdog startup shortcut: {wd_shortcut}")
-            else:
-                warn(f"Startup folder not found: {startup}")
+        if not non_interactive:
+            if prompt_yn(
+                "Run as a background service (starts at boot, no login required)?",
+                default=False,
+            ):
+                _create_windows_scheduled_tasks(install_dir)
+            elif prompt_yn("Create shortcut in Startup folder (run on login)?"):
+                _create_windows_startup_shortcuts(install_dir, bat_path)
     else:
         info("Skipped bat file generation")
 
@@ -2628,11 +2698,17 @@ def _uninstall_desktop(plat, install_dir, keep_data):
             _remove_path(bat, label="start batch file")
         else:
             info("No start batch file found")
-        # Watchdog startup shortcut
+        # Scheduled tasks
+        run_cmd(["schtasks", "/delete", "/tn", "TinySignage", "/f"], check=False)
+        run_cmd(["schtasks", "/delete", "/tn", "TinySignage Watchdog", "/f"], check=False)
+        # Startup folder shortcuts
         startup = os.path.join(
             os.environ.get("APPDATA", ""),
             r"Microsoft\Windows\Start Menu\Programs\Startup",
         )
+        shortcut = os.path.join(startup, "tinysignage.vbs")
+        if os.path.isfile(shortcut):
+            _remove_path(shortcut, label="startup shortcut")
         wd_shortcut = os.path.join(startup, "tinysignage-watchdog.vbs")
         if os.path.isfile(wd_shortcut):
             _remove_path(wd_shortcut, label="watchdog startup shortcut")
@@ -2836,7 +2912,7 @@ def install_desktop(plat, install_dir, non_interactive, mode="both", server_url=
     # CMS or Both: full setup
     # Dependency checks
     {"macos": check_macos_deps, "windows": check_windows_deps,
-     "linux": check_linux_deps}[plat](mode)
+     "linux": check_linux_deps}[plat](mode, non_interactive=non_interactive)
     print()
 
     # App setup
