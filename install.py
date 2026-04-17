@@ -753,8 +753,8 @@ def prompt_server_url():
     """Prompt for the CMS server URL (player-only mode)."""
     print("\nEnter the address of your CMS server.")
     print("This is the device where you installed the TinySignage CMS.\n")
-    print("  Examples:  http://192.168.1.50:8080")
-    print("             http://lobby-tv.local:8080\n")
+    print("  Examples:  https://192.168.1.50:8080")
+    print("             https://lobby-tv.local:8080\n")
     while True:
         url = prompt_input("CMS server address")
         if url:
@@ -762,7 +762,7 @@ def prompt_server_url():
         print("  A server address is required for player-only installs.")
     url = url.rstrip("/")
     if not url.startswith(("http://", "https://")):
-        url = "http://" + url
+        url = "https://" + url
     parsed = urllib.parse.urlparse(url)
     if not parsed.port:
         suggested = f"{url}:{DEFAULT_PORT}"
@@ -792,7 +792,7 @@ def validate_server_url(url):
     parsed = urllib.parse.urlparse(url)
     if not parsed.scheme or not parsed.hostname:
         warn(f"'{url}' doesn't look like a valid URL.")
-        info("Expected format: http://192.168.1.50:8080 or http://hostname.local:8080")
+        info("Expected format: https://192.168.1.50:8080 or https://hostname.local:8080")
         return
     try:
         resp = _urlopen_tolerant(f"{url}/health", timeout=5)
@@ -2981,7 +2981,7 @@ def main():
             examples:
               python3 install.py                                         Interactive install
               python3 install.py --mode cms                              CMS server only
-              python3 install.py --mode player --server-url http://cms.local:8080   Player only
+              python3 install.py --mode player --server-url https://cms.local:8080   Player only
               python3 install.py --update                                Update existing install
               sudo python3 install.py --uninstall                        Remove TinySignage
               sudo python3 install.py --non-interactive --display-name "Lobby TV"   Scripted Pi
@@ -3009,7 +3009,7 @@ def main():
     )
     parser.add_argument(
         "--server-url",
-        help="CMS server URL for player-only installs (e.g. http://192.168.1.50:8080)",
+        help="CMS server URL for player-only installs (e.g. https://192.168.1.50:8080)",
     )
     parser.add_argument(
         "--display-name",

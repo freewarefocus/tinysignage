@@ -37,7 +37,7 @@ For scripted installs:
 python install.py --mode cms --non-interactive
 
 # Player only, pointing at a remote CMS
-python install.py --mode player --server-url http://192.168.1.50:8080
+python install.py --mode player --server-url https://192.168.1.50:8080
 ```
 
 ## Run
