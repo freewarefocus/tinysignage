@@ -17,7 +17,7 @@
     const HEARTBEAT_INTERVAL = 60000; // 60s between heartbeats
     const MAX_VIDEO_DURATION = 300;   // 5 min cap for videos with duration=0
     const PRELOAD_AHEAD = 1;          // Number of assets to preload ahead
-    const PLAYER_VERSION = '0.9.0';
+    const PLAYER_VERSION = '0.9.1';
     const CAPABILITY_REPORT_INTERVAL = 3600000; // 60 min
     const HEALTH_CHECK_INTERVAL = 30000;        // 30s between health checks
     const RAF_STALE_THRESHOLD = 10000;           // 10s = DOM frozen
@@ -103,8 +103,20 @@
     };
 
     // Base URL for split deployment — read from <meta name="server-url"> or localStorage
+    function _isLoopbackUrl(url) {
+        try {
+            const h = new URL(url).hostname;
+            return h === 'localhost' || h === '::1' || h.startsWith('127.');
+        } catch { return false; }
+    }
     const serverMeta = document.querySelector('meta[name="server-url"]');
-    const metaUrl = (serverMeta ? serverMeta.content : '').replace(/\/+$/, '');
+    let metaUrl = (serverMeta ? serverMeta.content : '').replace(/\/+$/, '');
+    // If the CMS injected a loopback server-url but we loaded from a remote
+    // host, the meta tag is stale — ignore it and use our actual origin.
+    if (metaUrl && _isLoopbackUrl(metaUrl) && !_isLoopbackUrl(window.location.origin)) {
+        PlayerLog.warn('Ignoring loopback meta server-url on remote player: ' + metaUrl);
+        metaUrl = '';
+    }
     const baseUrl = metaUrl || (localStorage.getItem('tinysignage_server_url') || '').replace(/\/+$/, '');
 
     function apiUrl(path) {
