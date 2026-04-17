@@ -53,6 +53,52 @@ python -m app.server
 - **CMS**: `http://localhost:8080/cms`
 - **Player**: `http://localhost:8080/player` — open in a browser and press **F11** for fullscreen
 
+## Connecting remote devices (CMS-only installs)
+
+If you installed in CMS-only mode, your player devices (Raspberry Pi, another PC, etc.) need to reach this machine over the network. Three things to get right:
+
+### Find your IP address
+
+Open PowerShell and run:
+
+```powershell
+ipconfig
+```
+
+Look for **IPv4 Address** under your active adapter (Wi-Fi or Ethernet). It looks like `192.168.1.50`.
+
+You can also find it in **Settings → Network & Internet** — click your connection and look for "IPv4 address".
+
+Your server URL for remote devices is:
+
+```
+https://<your-ip>:8080
+```
+
+For example: `https://192.168.1.50:8080`
+
+### Allow through Windows Firewall
+
+The first time you start TinySignage, Windows shows a firewall prompt. Click **Allow access** and make sure **Private networks** is checked.
+
+If you missed the prompt or clicked "Cancel":
+
+1. Open **Windows Security → Firewall & network protection**
+2. Click **Allow an app through firewall**
+3. Click **Change settings**, then **Allow another app → Browse**
+4. Navigate to your TinySignage folder and select `venv\Scripts\python.exe`
+5. Check the **Private** box, then click **OK**
+
+> **Private vs Public networks:** Windows blocks more traffic on Public networks. If your home or office network is set to Public, remote devices won't be able to connect even with the firewall rule above. To switch: **Settings → Network & Internet → Wi-Fi** (or Ethernet) → click your network → set **Network profile type** to **Private network**.
+
+### Browser certificate warning
+
+When you open the CMS from another PC's browser using `https://192.168.1.50:8080`, you'll see a "Your connection is not private" warning. This is normal — TinySignage uses a self-signed certificate.
+
+Click **Advanced → Proceed** to continue. The browser remembers your choice so you won't see the warning again.
+
+Player devices (Raspberry Pi, kiosk PCs) handle this automatically — no action needed on their end.
+
 ## Optional: FFmpeg for video thumbnails
 
 Video uploads work without FFmpeg — you just won't get thumbnail previews in the CMS.
@@ -143,8 +189,14 @@ Press **F11** in your browser. For a dedicated display, use Chrome's kiosk mode:
 chrome --kiosk http://localhost:8080/player
 ```
 
-**Firewall prompt on first run:**
-Windows Firewall may ask to allow Python/uvicorn through the firewall. Allow it on "Private networks" if you want to access the CMS from other devices on your network.
+**Remote devices can't reach the CMS:**
+Check that the server is running, then verify:
+1. Your firewall allows Python on private networks — see [Allow through Windows Firewall](#allow-through-windows-firewall) above
+2. Your network profile is set to **Private**, not Public (**Settings → Network & Internet** → click your connection → Network profile type)
+3. You're using the correct IP address — run `ipconfig` and look for **IPv4 Address**
+
+**Antivirus blocks or slows TinySignage:**
+Some antivirus software (Windows Defender, Norton, McAfee, etc.) may quarantine `venv\Scripts\python.exe` or flag the server as suspicious. Check your antivirus quarantine list and restore any blocked files. If uploads are slow or files disappear from `media\`, add the TinySignage folder to your antivirus exclusion list.
 
 ---
 

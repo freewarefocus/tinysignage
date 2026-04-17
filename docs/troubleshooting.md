@@ -164,7 +164,7 @@ Some cameras embed EXIF orientation data. Pillow reads EXIF data for thumbnails,
 ## Network issues
 
 **Can't access CMS from another device on the network:**
-Make sure the server is bound to `0.0.0.0` (not `127.0.0.1`). Check your firewall settings. On Windows, allow Python through the firewall. On macOS, allow incoming connections when prompted.
+Make sure the server is bound to `0.0.0.0` (not `127.0.0.1`). Check your firewall settings. On Windows, allow Python through the firewall and make sure your network is set to Private, not Public — see [Windows firewall setup](install-windows.md#allow-through-windows-firewall) for step-by-step instructions. On macOS, allow incoming connections when prompted.
 
 **Can't reach `tinysignage.local` (Raspberry Pi):**
 mDNS (Avahi) may not be running, or your client device does not support `.local` discovery. Use the Pi's IP address instead:
