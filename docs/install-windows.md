@@ -49,9 +49,9 @@ venv\Scripts\activate
 python -m app.server
 ```
 
-- **Setup wizard**: `http://localhost:8080/setup` (first run only)
-- **CMS**: `http://localhost:8080/cms`
-- **Player**: `http://localhost:8080/player` — open in a browser and press **F11** for fullscreen
+- **Setup wizard**: `https://127.0.0.1:8080/setup` (first run only)
+- **CMS**: `https://127.0.0.1:8080/cms`
+- **Player**: `https://127.0.0.1:8080/player` — open in a browser and press **F11** for fullscreen
 
 ## Connecting remote devices (CMS-only installs)
 
@@ -131,7 +131,7 @@ If you skipped startup setup during install, re-run `python install.py` to gener
 To also open the player in kiosk mode, add this line to `start-tinysignage.bat` after the `python -m app.server` line (in a separate `start` command):
 
 ```batch
-start "" "chrome" --kiosk http://localhost:8080/player
+start "" "chrome" --kiosk https://127.0.0.1:8080/player
 ```
 
 ## Optional: Docker
@@ -193,7 +193,7 @@ python -m app.server
 Press **F11** in your browser. For a dedicated display, use Chrome's kiosk mode:
 
 ```powershell
-chrome --kiosk http://localhost:8080/player
+chrome --kiosk https://127.0.0.1:8080/player
 ```
 
 **Remote devices can't reach the CMS:**

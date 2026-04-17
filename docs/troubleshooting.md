@@ -72,7 +72,7 @@ Then start TinySignage with `python -m app.server`.
 Expected on first visit when HTTPS is enabled with a self-signed certificate. Click **Advanced → Proceed to localhost (unsafe)** once; the browser remembers the exception. The warning does not mean your connection is unencrypted — it only means the certificate is not signed by a public certificate authority. To verify the certificate, open **CMS → Settings → Network & Security → Technical details** and compare the SHA-256 fingerprint against `openssl x509 -in certs/cert.pem -noout -fingerprint -sha256`.
 
 **Plain `http://localhost:8080` stops responding after enabling HTTPS:**
-This is intentional. TinySignage is HTTPS-only when `server.https.enabled: true` — there is no HTTP→HTTPS redirect. Use `https://localhost:8080` instead. To go back to HTTP, edit `config.yaml` and set `server.https.enabled: false`, then restart.
+This is intentional. TinySignage is HTTPS-only when `server.https.enabled: true` — there is no HTTP→HTTPS redirect. Use `https://127.0.0.1:8080` instead. To go back to HTTP, edit `config.yaml` and set `server.https.enabled: false`, then restart.
 
 **Player can't connect after enabling HTTPS:**
 The kiosk launcher (`launcher.py`) auto-detects the cert and passes the right Chromium flags to accept it. If you see a cert warning in the kiosk browser, make sure:
@@ -124,7 +124,7 @@ This deletes the browser profile and returns the player to the registration scre
 
 **Player stuck on "Connecting..." or shows red status dot:**
 The player cannot reach the backend. Verify:
-1. The backend is running (`curl http://localhost:8080/health` should return `{"status": "ok"}`)
+1. The backend is running (`curl -k https://127.0.0.1:8080/health` should return `{"status": "ok"}`)
 2. The player URL is correct (the port and hostname must match the running server)
 3. No firewall is blocking the connection
 
@@ -134,7 +134,7 @@ The player polls every 30 seconds. Wait at least 30 seconds. If content still do
 **Player won't go fullscreen:**
 Use the browser's fullscreen shortcut: **F11** (most browsers), **Ctrl+Cmd+F** (Safari on macOS). For a dedicated display, use Chrome's kiosk mode:
 ```bash
-chrome --kiosk http://localhost:8080/player
+chrome --kiosk https://127.0.0.1:8080/player
 ```
 
 **Video plays but no sound:**

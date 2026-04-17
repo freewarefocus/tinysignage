@@ -16,7 +16,7 @@ cd tinysignage
 docker compose up -d
 ```
 
-Wait about 30 seconds for the first build. When it finishes, TinySignage is running at `http://localhost:8080`.
+Wait about 30 seconds for the first build. When it finishes, TinySignage is running at `https://127.0.0.1:8080`.
 
 For Docker details (data persistence, updating, resource limits), see [Install with Docker](install-docker.md).
 
@@ -24,7 +24,7 @@ For Docker details (data persistence, updating, resource limits), see [Install w
 
 ## Run the setup wizard
 
-Open `http://localhost:8080/setup` in your browser.
+Open `https://127.0.0.1:8080/setup` in your browser.
 
 <!-- ![Setup wizard screenshot](images/setup-wizard.png) -->
 
@@ -56,7 +56,7 @@ Click into your new playlist. Click **Add Media** and select the image you uploa
 
 ## Open the player
 
-Open `http://localhost:8080/player` in a new browser tab (or on a different screen). Press **F11** for fullscreen.
+Open `https://127.0.0.1:8080/player` in a new browser tab (or on a different screen). Press **F11** for fullscreen.
 
 <!-- ![Player fullscreen screenshot](images/player-fullscreen.png) -->
 

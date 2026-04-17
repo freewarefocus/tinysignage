@@ -63,9 +63,9 @@ source venv/bin/activate
 python -m app.server
 ```
 
-- **Setup wizard**: `http://localhost:8080/setup` (first run only)
-- **CMS**: `http://localhost:8080/cms`
-- **Player**: `http://localhost:8080/player` — open in a browser and press **Ctrl+Cmd+F** for fullscreen
+- **Setup wizard**: `https://127.0.0.1:8080/setup` (first run only)
+- **CMS**: `https://127.0.0.1:8080/cms`
+- **Player**: `https://127.0.0.1:8080/player` — open in a browser and press **Ctrl+Cmd+F** for fullscreen
 
 ## Optional: FFmpeg for video thumbnails
 
@@ -163,7 +163,7 @@ macOS may ask to allow incoming connections. Click "Allow" if you want to access
 In Safari, use **Ctrl+Cmd+F**. In Chrome, use **Cmd+Ctrl+F** or **F11** (if your keyboard has function keys). For a dedicated display, use Chrome's kiosk mode:
 
 ```bash
-open -a "Google Chrome" --args --kiosk http://localhost:8080/player
+open -a "Google Chrome" --args --kiosk https://127.0.0.1:8080/player
 ```
 
 ---

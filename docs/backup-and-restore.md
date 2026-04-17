@@ -31,8 +31,8 @@ An admin user can export a backup from the CMS admin interface.
 ### From the API
 
 ```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-     http://localhost:8080/api/backup/export \
+curl -k -H "Authorization: Bearer YOUR_TOKEN" \
+     https://127.0.0.1:8080/api/backup/export \
      -o backup.zip
 ```
 
@@ -45,10 +45,10 @@ The response is a ZIP file download. Store it somewhere safe.
 ### From the API
 
 ```bash
-curl -X POST \
+curl -k -X POST \
      -H "Authorization: Bearer YOUR_TOKEN" \
      -F "file=@backup.zip" \
-     http://localhost:8080/api/backup/import
+     https://127.0.0.1:8080/api/backup/import
 ```
 
 This replaces the current database and media files with the backup contents. Existing data is overwritten.

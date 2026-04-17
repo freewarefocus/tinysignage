@@ -166,7 +166,7 @@ Reset requires local command-line access to the device -- there is no remote res
 
 The player reads a `server_url` from a `<meta name="server-url">` tag injected by the backend. When set (via `server_url` in `config.yaml`), all API calls and media URLs use this as the base URL instead of the current origin.
 
-If `server_url` is empty or not set in `config.yaml`, the backend falls back to the request's own origin (e.g., `http://localhost:8080`). This means the player always has a valid server URL, even on a fresh install before the setup wizard runs.
+If `server_url` is empty or not set in `config.yaml`, the backend falls back to the request's own origin (e.g., `https://127.0.0.1:8080`). This means the player always has a valid server URL, even on a fresh install before the setup wizard runs.
 
 This enables running the server on one machine and the player on another, even across different networks.
 

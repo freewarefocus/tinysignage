@@ -2935,7 +2935,7 @@ def install_desktop(plat, install_dir, non_interactive, mode="both", server_url=
 
     # Set server_url so the player knows where to connect
     if mode == "both":
-        update_config_yaml(install_dir, server_url=f"https://localhost:{port}")
+        update_config_yaml(install_dir, server_url=f"https://127.0.0.1:{port}")
 
     print()
 
@@ -2957,10 +2957,10 @@ def install_desktop(plat, install_dir, non_interactive, mode="both", server_url=
     else:
         print("  Start: source venv/bin/activate && python -m app.server")
     print()
-    print(f"  Setup wizard: http://localhost:{port}/setup  (first run)")
-    print(f"  CMS:          http://localhost:{port}/cms")
+    print(f"  Setup wizard: https://127.0.0.1:{port}/setup  (first run)")
+    print(f"  CMS:          https://127.0.0.1:{port}/cms")
     if mode == "both":
-        print(f"  Player:       http://localhost:{port}/player")
+        print(f"  Player:       https://127.0.0.1:{port}/player")
     elif mode == "cms":
         print()
         print("  Point your player devices at this machine's address during their install.")

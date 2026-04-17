@@ -19,9 +19,9 @@ docker compose up -d
 
 The first build takes about a minute (two-stage: Node builds the Vue CMS, then Python runtime). Subsequent starts are instant.
 
-- **Setup wizard**: `http://localhost:8080/setup` (first run only)
-- **CMS**: `http://localhost:8080/cms`
-- **Player**: `http://localhost:8080/player`
+- **Setup wizard**: `https://127.0.0.1:8080/setup` (first run only)
+- **CMS**: `https://127.0.0.1:8080/cms`
+- **Player**: `https://127.0.0.1:8080/player`
 
 ## Data persistence
 
@@ -77,7 +77,7 @@ ports:
   - "9090:8080"
 ```
 
-Then access TinySignage at `http://localhost:9090`.
+Then access TinySignage at `https://127.0.0.1:9090`.
 
 ## Logs
 
