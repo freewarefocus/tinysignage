@@ -10,12 +10,13 @@ A backup ZIP archive contains:
 
 - **SQLite database** -- all configuration, playlists, devices, schedules, users, and settings
 - **Media files** -- all uploaded images, videos, and thumbnails
+- **config.yaml** -- server configuration (HTTPS, device_id, server_url, etc.)
+- **TLS certificates** -- if HTTPS is enabled, the `certs/` directory is included
 
-The ZIP is a complete snapshot. Restoring it gives you an identical installation.
+The ZIP is a complete snapshot. Restoring it on a fresh install gives you an identical installation -- no manual reconfiguration needed.
 
 ## What is not included
 
-- `config.yaml` -- back this up separately if you have custom settings
 - Log files
 - The Python environment and application code
 

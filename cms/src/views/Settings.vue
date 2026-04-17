@@ -273,9 +273,6 @@ async function confirmImport() {
     if (fileInput.value) {
       fileInput.value.value = ''
     }
-
-    // Reload settings since the database was replaced
-    await loadSettings()
   } catch (e) {
     toast.add({ severity: 'error', summary: 'Restore Failed', detail: e.message, life: 8000 })
   } finally {

@@ -27,6 +27,7 @@ _config_path = Path("config.yaml")
 _config = yaml.safe_load(_config_path.read_text())
 _db_path = Path(_config["storage"]["db_path"]).resolve()
 _media_dir = Path(_config["storage"]["media_dir"]).resolve()
+_certs_dir = Path("certs").resolve()
 
 
 @router.get("/export")
@@ -67,10 +68,26 @@ async def export_backup(
         "media_dir": "media",
     }
 
+    if _config_path.exists():
+        manifest["config_file"] = "config.yaml"
+    if _certs_dir.exists() and any(_certs_dir.iterdir()):
+        manifest["certs_dir"] = "certs"
+
     try:
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("manifest.json", json.dumps(manifest, indent=2))
             zf.write(backup_db_path, "signage.db")
+
+            if _config_path.exists():
+                zf.write(_config_path, "config.yaml")
+
+            if _certs_dir.exists():
+                for file_path in _certs_dir.rglob("*"):
+                    if file_path.is_file():
+                        arcname = (
+                            Path("certs") / file_path.relative_to(_certs_dir)
+                        ).as_posix()
+                        zf.write(file_path, arcname)
 
             if _media_dir.exists():
                 for file_path in _media_dir.rglob("*"):
@@ -256,6 +273,23 @@ async def _process_import(
                 raise HTTPException(
                     status_code=500, detail="Database restore failed"
                 )
+
+            # Restore config.yaml (if present in backup)
+            extracted_config = tmpdir_path / "config.yaml"
+            if extracted_config.exists():
+                shutil.copy2(extracted_config, _config_path)
+                log.info("Restored config.yaml")
+
+            # Restore certs/ (if present in backup)
+            extracted_certs = tmpdir_path / "certs"
+            if extracted_certs.exists():
+                _certs_dir.mkdir(parents=True, exist_ok=True)
+                for item in extracted_certs.rglob("*"):
+                    if item.is_file():
+                        dest = _certs_dir / item.relative_to(extracted_certs)
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(item, dest)
+                log.info("Restored certs/")
 
             # Replace media files.
             # Clear contents without removing the directory itself —
