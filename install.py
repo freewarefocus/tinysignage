@@ -1246,10 +1246,15 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
         _enable_pi_autologin(lite)
 
     # Watchdog service — monitors CMS and/or player externally
-    venv_python = f"{install_dir}/venv/bin/python"
+    # Player-only installs have no venv — use system python3 (watchdog
+    # only needs stdlib + pyyaml, both available as system packages).
+    if mode == "player":
+        wd_python = "/usr/bin/python3"
+    else:
+        wd_python = f"{install_dir}/venv/bin/python"
     with open("/etc/systemd/system/signage-watchdog.service", "w") as f:
         f.write(SYSTEMD_WATCHDOG.format(
-            install_dir=install_dir, user=SERVICE_USER, python=venv_python,
+            install_dir=install_dir, user=SERVICE_USER, python=wd_python,
         ))
     services.append("signage-watchdog")
 
@@ -2139,10 +2144,15 @@ def do_update(plat, install_dir, skip_pull=False):
         # fixes (e.g. removal of NoNewPrivileges that blocked sudo).
         wd_unit = "/etc/systemd/system/signage-watchdog.service"
         wd_existed = os.path.isfile(wd_unit)
-        venv_python = get_venv_python(install_dir)
+        # Player-only has no venv — use system python3 (watchdog needs
+        # only stdlib + pyyaml).
+        if mode == "player":
+            wd_python = "/usr/bin/python3"
+        else:
+            wd_python = get_venv_python(install_dir)
         with open(wd_unit, "w") as f:
             f.write(SYSTEMD_WATCHDOG.format(
-                install_dir=install_dir, user=SERVICE_USER, python=venv_python,
+                install_dir=install_dir, user=SERVICE_USER, python=wd_python,
             ))
         run_cmd(["systemctl", "daemon-reload"])
         if not wd_existed:
@@ -2150,6 +2160,12 @@ def do_update(plat, install_dir, skip_pull=False):
             info("Installed signage-watchdog service (new in this update)")
         else:
             info("Updated signage-watchdog service unit")
+
+        # Self-heal: ensure logs/ exists (player-only installs missed this)
+        logs_dir = os.path.join(install_dir, "logs")
+        if not os.path.isdir(logs_dir):
+            run_as_user(SERVICE_USER, ["mkdir", "-p", logs_dir])
+            info("Created missing logs/ directory for watchdog")
 
         # Self-heal: migrate cage-based Lite installs to X11 + matchbox
         player_unit_path = "/etc/systemd/system/signage-player.service"
@@ -2778,6 +2794,10 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
         step(1, total, "Creating directories...")
         run_as_user(SERVICE_USER, [
             "mkdir", "-p", os.path.join(install_dir, "data", "browser-profile"),
+        ])
+        # logs/ is needed by the watchdog service (ReadWritePaths + log_file)
+        run_as_user(SERVICE_USER, [
+            "mkdir", "-p", os.path.join(install_dir, "logs"),
         ])
 
         step(2, total, "Configuring CMS server connection...")
