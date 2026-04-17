@@ -261,6 +261,10 @@ def launch(config_path: str | None = None):
     device_id = config.get("device_id", "")
     if display_name and not device_id:
         url += f"?name={urllib.parse.quote(display_name, safe='')}"
+    elif display_name and device_id:
+        print(f"WARNING: display_name '{display_name}' set but device_id already "
+              f"present — skipping ?name= auto-registration. If this is a "
+              f"player-only install, remove device_id from config.yaml.")
 
     is_pi = Path("/proc/device-tree/model").exists()  # Rough Pi detection
 

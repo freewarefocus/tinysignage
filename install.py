@@ -1624,9 +1624,10 @@ def _apply_nested_update(lines, path_parts, value):
     return lines[:insert_at] + [new_line] + lines[insert_at:]
 
 
-def update_config_yaml(install_dir, display_name=None, server_url=None):
+def update_config_yaml(install_dir, display_name=None, server_url=None,
+                       clear_device_id=False):
     """Update config.yaml fields (stdlib only — no PyYAML dependency)."""
-    if not display_name and not server_url:
+    if not display_name and not server_url and not clear_device_id:
         return
     config_path = os.path.join(install_dir, "config.yaml")
     updates = {}
@@ -1634,6 +1635,8 @@ def update_config_yaml(install_dir, display_name=None, server_url=None):
         updates["server_url"] = server_url
     if display_name:
         updates["display_name"] = display_name
+    if clear_device_id:
+        updates["device_id"] = ""
     _update_yaml_file(config_path, **updates)
     if display_name:
         info(f"Set display_name to: {display_name}")
@@ -2778,7 +2781,8 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
         ])
 
         step(2, total, "Configuring CMS server connection...")
-        update_config_yaml(install_dir, display_name=display_name, server_url=server_url)
+        update_config_yaml(install_dir, display_name=display_name,
+                           server_url=server_url, clear_device_id=True)
         run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}",
                  os.path.join(install_dir, "config.yaml")])
 
