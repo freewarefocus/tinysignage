@@ -175,7 +175,7 @@ export const DESIGNER_TEMPLATES = [
             color: '#a78bfa',
             fontWeight: 400,
             align: 'center',
-            fontFamily: 'sans-serif',
+            fontFamily: "'Montserrat', sans-serif",
           },
         },
         {
@@ -188,7 +188,7 @@ export const DESIGNER_TEMPLATES = [
             color: '#ffffff',
             fontWeight: 700,
             align: 'center',
-            fontFamily: 'sans-serif',
+            fontFamily: "'Playfair Display', serif",
           },
         },
       ],

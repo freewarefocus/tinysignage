@@ -139,6 +139,15 @@ async def root():
     return RedirectResponse(url="/cms", status_code=302)
 
 
+@app.get("/sw.js")
+async def service_worker():
+    return FileResponse(
+        Path("app/static/sw.js"),
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/"},
+    )
+
+
 @app.get("/player")
 async def player_page(request: Request):
     config = yaml.safe_load(_config_path.read_text())

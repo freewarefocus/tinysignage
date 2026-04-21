@@ -2238,6 +2238,17 @@
 
     initDebugOverlay();
 
+    // --- Service Worker (offline page caching) ---
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then(function (reg) {
+                PlayerLog.info('Service worker registered (scope: ' + reg.scope + ')');
+            })
+            .catch(function (err) {
+                PlayerLog.warn('Service worker registration failed: ' + err.message);
+            });
+    }
+
     // --- Go ---
     init();
 })();

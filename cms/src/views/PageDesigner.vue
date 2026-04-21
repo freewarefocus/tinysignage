@@ -258,9 +258,7 @@
             <div class="prop-field">
               <label>Font family</label>
               <select v-model="selected.props.fontFamily" @focus="onPropFocus" @change="onPropChange">
-                <option value="sans-serif">Sans-serif</option>
-                <option value="serif">Serif</option>
-                <option value="monospace">Monospace</option>
+                <option v-for="f in FONT_FAMILIES" :key="f.value" :value="f.value" :style="f.generic ? '' : `font-family:${f.value}`">{{ f.label }}</option>
               </select>
             </div>
           </template>
@@ -370,6 +368,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client.js'
 import { DESIGNER_TEMPLATES } from '../presets/designerTemplates.js'
+import { FONT_FAMILIES, generateFontFaceCSS, generateUsedFontFaceCSS } from '../presets/fontRegistry.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -821,8 +820,10 @@ function renderElementHtml(el) {
 }
 
 function renderHtml() {
+  const fontCSS = generateUsedFontFaceCSS(elements.value)
   const body = elements.value.map(renderElementHtml).join('\n')
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+${fontCSS}
 html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:${canvasBg.value};font-family:system-ui,sans-serif;}
 </style></head><body>${body}</body></html>`
 }
@@ -927,6 +928,12 @@ function onWindowResize() {
 }
 
 onMounted(async () => {
+  // Inject @font-face rules so bundled fonts render in the designer canvas
+  const fontStyle = document.createElement('style')
+  fontStyle.id = 'designer-fonts'
+  fontStyle.textContent = generateFontFaceCSS()
+  document.head.appendChild(fontStyle)
+
   // Push initial empty snapshot so undo can return to start
   await Promise.all([loadWidgets(), loadImageAssets()])
   if (route.params.assetId) {
@@ -947,6 +954,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  document.getElementById('designer-fonts')?.remove()
   window.removeEventListener('mousemove', onWindowMouseMove)
   window.removeEventListener('mouseup', onWindowMouseUp)
   window.removeEventListener('keydown', onKeyDown)
