@@ -923,18 +923,21 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
     last_memory_log = start_time + grace - memory_log_interval
     last_reboot_check_day = -1  # Track which weekday we last triggered a reboot
 
+    mem_log_label = f"{memory_log_interval}s" if memory_log_enabled else "disabled"
+
     if reboot_day is not None:
         day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         day_label = day_names[reboot_day] if 0 <= reboot_day <= 6 else f"day={reboot_day}"
         log.info(
-            "Watchdog started: platform=%s, mode=%s, interval=%ds, grace=%ds, mem_log=%ds, "
-            "reboot=%s@%02d:00",
-            plat, mode, interval, grace, memory_log_interval, day_label, reboot_hour,
+            "Watchdog started: platform=%s, mode=%s, interval=%ds, grace=%ds, "
+            "browser_mem_limit=%dMB, mem_log=%s, reboot=%s@%02d:00",
+            plat, mode, interval, grace, mem_limit, mem_log_label, day_label, reboot_hour,
         )
     else:
         log.info(
-            "Watchdog started: platform=%s, mode=%s, interval=%ds, grace=%ds, mem_log=%ds",
-            plat, mode, interval, grace, memory_log_interval,
+            "Watchdog started: platform=%s, mode=%s, interval=%ds, grace=%ds, "
+            "browser_mem_limit=%dMB, mem_log=%s",
+            plat, mode, interval, grace, mem_limit, mem_log_label,
         )
 
     while True:
