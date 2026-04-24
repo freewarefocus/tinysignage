@@ -271,8 +271,12 @@ def launch(config_path: str | None = None):
     # Wait for the backend to be reachable before launching the kiosk.
     # Avoids the cold-boot race where the browser loads its connection-error
     # page because signage-app.service hasn't bound :8080 yet.
-    print(f"Waiting for {url} to become ready...")
-    _wait_for_url(url)
+    # If the browser profile already exists, the SW cache and localStorage
+    # have content from a previous session — use a shorter timeout so the
+    # player reaches cached content quickly when the CMS is down.
+    wait_timeout = 10 if BROWSER_PROFILE_DIR.exists() else 60
+    print(f"Waiting for {url} to become ready (timeout {wait_timeout}s)...")
+    _wait_for_url(url, timeout=wait_timeout)
 
     if is_pi:
         _ensure_pi_cache_dir()

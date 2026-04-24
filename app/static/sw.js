@@ -1,8 +1,8 @@
 // TinySignage Service Worker — full offline support for the player
-// Player page & assets: network-first with precaching on install
+// Player page & assets: cache-first with background update (stale-while-revalidate)
 // Media files: cache-first (immutable UUID filenames)
 
-var CACHE_NAME = 'tinysignage-player-v2';
+var CACHE_NAME = 'tinysignage-player-v3';
 
 // --- Install: precache player page, then activate immediately ---
 self.addEventListener('install', function (event) {
@@ -35,7 +35,7 @@ self.addEventListener('activate', function (event) {
     );
 });
 
-// --- Fetch: network-first for player, cache-first for media ---
+// --- Fetch: cache-first for player (stale-while-revalidate), cache-first for media ---
 self.addEventListener('fetch', function (event) {
     var url = new URL(event.request.url);
 
@@ -68,46 +68,56 @@ self.addEventListener('fetch', function (event) {
         return;
     }
 
-    // Player page & assets: network-first
+    // Player page & assets: cache-first with background update (stale-while-revalidate)
+    // Serves cached version instantly, then silently updates cache for next load.
     event.respondWith(
-        fetch(event.request).then(function (response) {
-            if (response.ok) {
-                var responseClone = response.clone();
-                caches.open(CACHE_NAME).then(function (cache) {
-                    cache.put(event.request, responseClone);
+        caches.open(CACHE_NAME).then(function (cache) {
+            return cache.match(event.request, { ignoreSearch: true }).then(function (cached) {
+                // Always try to update cache in the background
+                var networkUpdate = fetch(event.request).then(function (response) {
+                    if (response.ok) cache.put(event.request, response.clone());
+                    return response;
                 });
-            }
-            return response;
-        }).catch(function () {
-            // Network failed — try the cache
-            return caches.match(event.request, { ignoreSearch: true }).then(function (cached) {
+
                 if (cached) {
+                    // Serve stale immediately; background update is fire-and-forget
+                    networkUpdate.catch(function () {});
                     return cached;
                 }
-                // Nothing in cache for /player — return a minimal offline page
-                if (isPlayerPage) {
-                    return new Response(
-                        '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-                        '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-                        '<title>TinySignage</title>' +
-                        '<style>' +
-                        'body{margin:0;background:#111;color:#888;font-family:sans-serif;' +
-                        'display:flex;align-items:center;justify-content:center;height:100vh}' +
-                        'div{text-align:center}' +
-                        'h2{color:#aaa;font-weight:400;margin-bottom:.5em}' +
-                        'p{font-size:.9em}' +
-                        '</style></head><body>' +
-                        '<div><h2>Connecting to server\u2026</h2>' +
-                        '<p>Waiting for the CMS to become reachable.</p>' +
-                        '<script>setTimeout(function(){location.reload()},10000)</script>' +
-                        '</div></body></html>',
-                        {
-                            status: 200,
-                            headers: { 'Content-Type': 'text/html; charset=utf-8' }
-                        }
-                    );
-                }
-                return new Response('', { status: 503, statusText: 'Offline' });
+
+                // No cache — race network against a short timeout
+                return Promise.race([
+                    networkUpdate.catch(function () { return null; }),
+                    new Promise(function (resolve) {
+                        setTimeout(function () { resolve(null); }, 3000);
+                    })
+                ]).then(function (response) {
+                    if (response) return response;
+                    // Network failed or timed out — serve offline fallback
+                    if (isPlayerPage) {
+                        return new Response(
+                            '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+                            '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+                            '<title>TinySignage</title>' +
+                            '<style>' +
+                            'body{margin:0;background:#111;color:#888;font-family:sans-serif;' +
+                            'display:flex;align-items:center;justify-content:center;height:100vh}' +
+                            'div{text-align:center}' +
+                            'h2{color:#aaa;font-weight:400;margin-bottom:.5em}' +
+                            'p{font-size:.9em}' +
+                            '</style></head><body>' +
+                            '<div><h2>Connecting to server\u2026</h2>' +
+                            '<p>Waiting for the CMS to become reachable.</p>' +
+                            '<script>setTimeout(function(){location.reload()},10000)</script>' +
+                            '</div></body></html>',
+                            {
+                                status: 200,
+                                headers: { 'Content-Type': 'text/html; charset=utf-8' }
+                            }
+                        );
+                    }
+                    return new Response('', { status: 503, statusText: 'Offline' });
+                });
             });
         })
     );
