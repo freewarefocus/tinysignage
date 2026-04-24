@@ -30,7 +30,7 @@ watchdog:
   startup_grace: 60
   mode: auto
   cms_fail_threshold: 3
-  browser_memory_limit_mb: 1024
+  browser_memory_limit_mb: 0
   browser_fail_threshold: 2
   log_file: ./logs/watchdog.log
   memory_log_enabled: false

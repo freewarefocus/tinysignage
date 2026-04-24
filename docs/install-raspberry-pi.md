@@ -171,7 +171,7 @@ No action needed — the installer configures both automatically.
 The installer also sets up the `signage-watchdog` systemd service, an independent process that monitors the CMS and browser from the outside. It:
 
 - **Checks CMS health** every 30 seconds via `GET /health`. Restarts the CMS after 3 consecutive failures.
-- **Monitors browser memory** (Chromium RSS). Restarts the browser if memory exceeds 1024 MB (configurable).
+- **Monitors browser memory** (Chromium RSS). Restarts the browser if memory exceeds the auto-scaled limit (1100 MB on 2 GB models, configurable).
 - **Detects missing browser process** and restarts it after 2 consecutive checks.
 - **Logs periodic memory snapshots** (every 30 minutes) for diagnosing slow leaks.
 - **Optional weekly reboot** — a safety net against kernel/GPU memory accumulation. Disabled by default. Enable via `config.yaml`:

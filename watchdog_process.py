@@ -122,7 +122,7 @@ def load_config() -> dict:
         if sys_mem:
             total = sys_mem["total_mb"]
             if total < 3072:       # 2 GB
-                cfg["browser_memory_limit_mb"] = 1024
+                cfg["browser_memory_limit_mb"] = 1100
             elif total < 6144:     # 4 GB
                 cfg["browser_memory_limit_mb"] = 1280
             else:                  # 8 GB+

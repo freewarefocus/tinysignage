@@ -101,7 +101,7 @@ def _player_memory_max_mb(ram_mb):
         return 2688
     if ram_mb >= 3072:                     # 4 GB
         return 1920
-    return 1152                            # 2 GB
+    return 1280                            # 2 GB
 
 
 def _build_player_unit(lite, standalone, install_dir, user, memory_max_mb=1152):
