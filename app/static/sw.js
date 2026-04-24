@@ -1,11 +1,21 @@
-// TinySignage Service Worker — offline page caching for the player
-// Network-first: always prefer live server, fall back to cache when offline.
+// TinySignage Service Worker — full offline support for the player
+// Player page & assets: network-first with precaching on install
+// Media files: cache-first (immutable UUID filenames)
 
-var CACHE_NAME = 'tinysignage-player-v1';
+var CACHE_NAME = 'tinysignage-player-v2';
 
-// --- Install: activate immediately, no precaching ---
+// --- Install: precache player page, then activate immediately ---
 self.addEventListener('install', function (event) {
-    self.skipWaiting();
+    event.waitUntil(
+        caches.open(CACHE_NAME).then(function (cache) {
+            return cache.add('/player').catch(function () {
+                // Precache may fail on very first install — that's OK,
+                // player.js will populate the cache from the page side.
+            });
+        }).then(function () {
+            return self.skipWaiting();
+        })
+    );
 });
 
 // --- Activate: clean old caches, take control of all clients ---
@@ -25,21 +35,42 @@ self.addEventListener('activate', function (event) {
     );
 });
 
-// --- Fetch: network-first for player files, passthrough for everything else ---
+// --- Fetch: network-first for player, cache-first for media ---
 self.addEventListener('fetch', function (event) {
     var url = new URL(event.request.url);
 
-    // Only intercept player page and its static assets
     var isPlayerPage = url.pathname === '/player';
     var isPlayerAsset = url.pathname.match(/^\/static\/player\./);
+    var isMedia = url.pathname.match(/^\/media\//);
 
-    if (!isPlayerPage && !isPlayerAsset) {
+    if (!isPlayerPage && !isPlayerAsset && !isMedia) {
         return; // passthrough — let browser handle normally
     }
 
+    // Media files: cache-first (immutable content-addressed filenames)
+    if (isMedia) {
+        event.respondWith(
+            caches.match(event.request).then(function (cached) {
+                if (cached) {
+                    return cached;
+                }
+                return fetch(event.request).then(function (response) {
+                    if (response.ok) {
+                        var responseClone = response.clone();
+                        caches.open(CACHE_NAME).then(function (cache) {
+                            cache.put(event.request, responseClone);
+                        });
+                    }
+                    return response;
+                });
+            })
+        );
+        return;
+    }
+
+    // Player page & assets: network-first
     event.respondWith(
         fetch(event.request).then(function (response) {
-            // Got a response from the network — cache it and return
             if (response.ok) {
                 var responseClone = response.clone();
                 caches.open(CACHE_NAME).then(function (cache) {
@@ -49,7 +80,7 @@ self.addEventListener('fetch', function (event) {
             return response;
         }).catch(function () {
             // Network failed — try the cache
-            return caches.match(event.request).then(function (cached) {
+            return caches.match(event.request, { ignoreSearch: true }).then(function (cached) {
                 if (cached) {
                     return cached;
                 }
@@ -76,9 +107,49 @@ self.addEventListener('fetch', function (event) {
                         }
                     );
                 }
-                // For uncached player assets, return a network error
                 return new Response('', { status: 503, statusText: 'Offline' });
             });
         })
     );
+});
+
+// --- Message handler: receive media URLs from player.js ---
+self.addEventListener('message', function (event) {
+    var data = event.data;
+    if (!data || !data.type) return;
+
+    if (data.type === 'CACHE_MEDIA') {
+        var urls = data.urls || [];
+        if (urls.length === 0) return;
+        event.waitUntil(
+            caches.open(CACHE_NAME).then(function (cache) {
+                return Promise.all(urls.map(function (url) {
+                    return cache.match(url).then(function (existing) {
+                        if (existing) return; // already cached
+                        return cache.add(url).catch(function () {
+                            // Individual media fetch may fail — skip it
+                        });
+                    });
+                }));
+            })
+        );
+    }
+
+    if (data.type === 'CLEANUP_MEDIA') {
+        var activeUrls = data.urls || [];
+        var activeSet = {};
+        activeUrls.forEach(function (u) { activeSet[u] = true; });
+        event.waitUntil(
+            caches.open(CACHE_NAME).then(function (cache) {
+                return cache.keys().then(function (requests) {
+                    return Promise.all(requests.filter(function (req) {
+                        var path = new URL(req.url).pathname;
+                        return path.match(/^\/media\//) && !activeSet[path];
+                    }).map(function (req) {
+                        return cache.delete(req);
+                    }));
+                });
+            })
+        );
+    }
 });

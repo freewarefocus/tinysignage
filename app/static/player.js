@@ -469,6 +469,26 @@
         }
     }
 
+    function cacheMediaInSW(data) {
+        if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
+        var mediaUrls = [];
+        function extractUrls(items) {
+            (items || []).forEach(function (i) {
+                if (i.asset && i.asset.uri && i.asset.asset_type !== 'url') {
+                    mediaUrls.push('/media/' + i.asset.uri);
+                }
+            });
+        }
+        extractUrls(data.items);
+        if (data.zones) {
+            data.zones.forEach(function (z) { extractUrls(z.items); });
+        }
+        if (mediaUrls.length > 0) {
+            navigator.serviceWorker.controller.postMessage({ type: 'CACHE_MEDIA', urls: mediaUrls });
+            navigator.serviceWorker.controller.postMessage({ type: 'CLEANUP_MEDIA', urls: mediaUrls });
+        }
+    }
+
     // --- Polling ---
     function schedulePoll() {
         if (pollTimer) clearTimeout(pollTimer);
@@ -580,6 +600,7 @@
                 settings = data.settings || {};
                 applySettings(settings);
                 cachePlaylist(data);
+                cacheMediaInSW(data);
 
                 // --- Multi-zone handling ---
                 if (data.zones && data.zones.length > 0) {
@@ -1507,8 +1528,8 @@
             return;
         }
 
-        // Scheduled restart
-        if (serverRestartHour !== null && uptimeMs > MIN_UPTIME_FOR_SCHEDULED_RESTART) {
+        // Scheduled restart (skip when offline — reload would disrupt cached playback)
+        if (serverRestartHour !== null && uptimeMs > MIN_UPTIME_FOR_SCHEDULED_RESTART && online) {
             const currentHour = new Date().getHours();
             if (currentHour === serverRestartHour) {
                 PlayerLog.info('Health: scheduled restart (hour=' + serverRestartHour + ')');
@@ -2243,6 +2264,18 @@
         navigator.serviceWorker.register('/sw.js', { scope: '/' })
             .then(function (reg) {
                 PlayerLog.info('Service worker registered (scope: ' + reg.scope + ')');
+                // Proactively populate cache on first visit so SW cache is never empty
+                if (typeof caches !== 'undefined') {
+                    caches.open('tinysignage-player-v2').then(function (cache) {
+                        cache.add(window.location.pathname);
+                        // Cache player CSS/JS assets
+                        var links = document.querySelectorAll('link[rel="stylesheet"][href*="/static/player"], script[src*="/static/player"]');
+                        for (var i = 0; i < links.length; i++) {
+                            var href = links[i].href || links[i].src;
+                            if (href) cache.add(href);
+                        }
+                    });
+                }
             })
             .catch(function (err) {
                 PlayerLog.warn('Service worker registration failed: ' + err.message);
