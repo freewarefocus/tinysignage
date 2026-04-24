@@ -42,6 +42,9 @@ def main() -> None:
     https_cfg = server_cfg.get("https", {}) or {}
     https_enabled = bool(https_cfg.get("enabled", False))
 
+    # 0.0.0.0 / :: are valid bind addresses but not browsable URLs
+    display_host = "localhost" if host in ("0.0.0.0", "::") else host
+
     ssl_kwargs: dict = {}
     if https_enabled:
         cert_file = Path(https_cfg.get("cert_file", "./certs/cert.pem"))
@@ -89,12 +92,12 @@ def main() -> None:
         ssl_kwargs["ssl_certfile"] = str(cert_file)
         ssl_kwargs["ssl_keyfile"] = str(key_file)
         print(
-            f"TinySignage: HTTPS enabled on https://{host}:{port}",
+            f"TinySignage: HTTPS enabled on https://{display_host}:{port}",
             file=sys.stderr,
         )
     else:
         print(
-            f"TinySignage: HTTP mode on http://{host}:{port}",
+            f"TinySignage: HTTP mode on http://{display_host}:{port}",
             file=sys.stderr,
         )
 
