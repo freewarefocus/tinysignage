@@ -162,7 +162,7 @@ The process watchdog is installed automatically on all platforms (systemd servic
 |---------|---------|
 | **CMS health check** | HTTP GET `/health` every 30s (configurable). Restarts the CMS after N consecutive failures (default 3) |
 | **Browser process check** | Finds chromium/chrome PID via `/proc` (Linux), `pgrep` (macOS), or PowerShell (Windows). Restarts after N consecutive failures (default 2) |
-| **Browser memory limit** | Reads RSS memory of the browser process. Kills and restarts the browser if RSS exceeds `browser_memory_limit_mb` (auto-scaled by RAM; 1100 MB on 2 GB Pi) |
+| **Browser memory limit** | Reads RSS memory of the browser process. Kills and restarts the browser if RSS exceeds `browser_memory_limit_mb` (auto-scaled by RAM; 1280 MB on 2 GB Pi) |
 | **Scheduled weekly reboot** | Full OS reboot via `sudo systemctl reboot` (Linux/Pi only). Configured by day-of-week and hour. Disabled by default. Safety net against slow kernel/GPU memory accumulation that per-process restarts cannot catch |
 | **Memory snapshots** | Periodic RSS report for all TinySignage processes (CMS, browser, GPIO bridge, watchdog self) plus system memory. Default interval: 30 minutes |
 | **Platform detection** | Auto-detects docker, pi, linux, macos, or windows. Adapts process discovery and restart commands per platform |

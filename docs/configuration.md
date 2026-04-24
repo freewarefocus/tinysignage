@@ -79,7 +79,7 @@ watchdog:
 | `watchdog` | `startup_grace` | integer | `60` | Seconds after startup before checks begin (gives the CMS time to initialize) |
 | `watchdog` | `mode` | string | `auto` | What to monitor: `auto` (detect from installed services), `cms`, `player`, or `both` |
 | `watchdog` | `cms_fail_threshold` | integer | `3` | Consecutive CMS health check failures before restart |
-| `watchdog` | `browser_memory_limit_mb` | integer | `0` | Browser RSS memory limit in MB. `0` = auto-scale based on system RAM (1100 MB on 2 GB, 1280 MB on 4 GB, 1792 MB on 8 GB+) |
+| `watchdog` | `browser_memory_limit_mb` | integer | `0` | Browser RSS memory limit in MB. `0` = auto-scale based on system RAM (1280 MB on 2 GB, 1536 MB on 4 GB, 2048 MB on 8 GB+) |
 | `watchdog` | `browser_fail_threshold` | integer | `2` | Consecutive browser-not-found checks before restart |
 | `watchdog` | `log_file` | string | `./logs/watchdog.log` | Watchdog log file path (rotating, 5 MB x 3 backups) |
 | `watchdog` | `memory_log_interval` | integer | `1800` | Seconds between memory snapshot log entries. Set to `0` to disable |

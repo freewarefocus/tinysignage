@@ -98,10 +98,10 @@ def _player_memory_max_mb(ram_mb):
     preventing OOM on smaller ones.
     """
     if ram_mb is None or ram_mb >= 6144:   # 8 GB+
-        return 2688
+        return 2944
     if ram_mb >= 3072:                     # 4 GB
-        return 1920
-    return 1280                            # 2 GB
+        return 2176
+    return 1536                            # 2 GB
 
 
 def _build_player_unit(lite, standalone, install_dir, user, memory_max_mb=1152):
