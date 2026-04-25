@@ -274,7 +274,7 @@ def launch(config_path: str | None = None):
     # If the browser profile already exists, the SW cache and localStorage
     # have content from a previous session — use a shorter timeout so the
     # player reaches cached content quickly when the CMS is down.
-    wait_timeout = 10 if BROWSER_PROFILE_DIR.exists() else 60
+    wait_timeout = 10 if BROWSER_PROFILE_DIR.exists() else 10
     print(f"Waiting for {url} to become ready (timeout {wait_timeout}s)...")
     _wait_for_url(url, timeout=wait_timeout)
 

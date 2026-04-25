@@ -20,6 +20,7 @@
     const PLAYER_VERSION = '0.9.1';
     const CAPABILITY_REPORT_INTERVAL = 3600000; // 60 min
     const HEALTH_CHECK_INTERVAL = 30000;        // 30s between health checks
+    const FETCH_TIMEOUT = 5000;                  // 5s timeout for server requests
     const RAF_STALE_THRESHOLD = 10000;           // 10s = DOM frozen
     const MEMORY_GRACE_PERIOD = 300000;          // 5 min after reload, skip memory checks
     const MIN_UPTIME_FOR_SCHEDULED_RESTART = 3600000; // 1hr
@@ -205,12 +206,19 @@
         return headers;
     }
 
+    function timedFetch(url, options = {}, timeout = FETCH_TIMEOUT) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        if (!options.signal) options.signal = controller.signal;
+        return fetch(url, options).finally(() => clearTimeout(timeoutId));
+    }
+
     function authFetch(url, options = {}) {
         if (deviceToken) {
             options.headers = options.headers || {};
             options.headers['Authorization'] = 'Bearer ' + deviceToken;
         }
-        return fetch(url, options);
+        return timedFetch(url, options);
     }
 
     function storeCredentials(id, token, name) {
@@ -351,7 +359,7 @@
         // server_url is configured (which may resolve to a network IP via mDNS).
         try {
             const localOrigin = window.location.origin;  // e.g. http://localhost:8080
-            const resp = await fetch(localOrigin + '/api/player/bootstrap', { method: 'POST' });
+            const resp = await timedFetch(localOrigin + '/api/player/bootstrap', { method: 'POST' });
             if (!resp.ok) return false;
             const data = await resp.json();
             if (data.device_id && data.token) {
@@ -396,7 +404,7 @@
         if (autoName) {
             const serverUrl = baseUrl || window.location.origin;
             try {
-                const resp = await fetch(registrationApiUrl(serverUrl, '/api/devices/register'), {
+                const resp = await timedFetch(registrationApiUrl(serverUrl, '/api/devices/register'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: autoName }),
@@ -631,6 +639,12 @@
         } catch (e) {
             PlayerLog.warn('Poll failed: ' + e.message);
             setOnlineStatus(false);
+            if (playlist.length === 0) {
+                const server = baseUrl || window.location.origin;
+                updateSplashStatus(
+                    'Could not reach server at ' + server + '\nWill keep trying every ' + (POLL_INTERVAL / 1000) + ' seconds.'
+                );
+            }
         } finally {
             pollInProgress = false;
         }
@@ -1486,6 +1500,11 @@
         var ipEl = document.getElementById('splash-ip');
         if (nameEl) nameEl.textContent = deviceName || '';
         if (ipEl) ipEl.textContent = playerIp || '';
+    }
+
+    function updateSplashStatus(message) {
+        var el = document.getElementById('splash-status');
+        if (el) el.textContent = message;
     }
 
     function hideSplash() {
