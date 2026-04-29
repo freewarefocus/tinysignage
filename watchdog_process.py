@@ -309,6 +309,32 @@ def _find_all_browser_pids_linux() -> list[int]:
     return pids
 
 
+def _has_renderer_process_linux() -> bool:
+    """Check if a Chromium renderer subprocess exists.
+
+    When the renderer is killed (OOM, GPU fault) the main browser process
+    survives and shows "Aw Snap", but no --type=renderer process remains.
+    Detecting this lets the watchdog restart the browser when player.js
+    (which ran in the dead renderer) can no longer self-heal.
+    """
+    try:
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                comm = (entry / "comm").read_text().strip()
+                if comm not in BROWSER_NAMES_LINUX:
+                    continue
+                cmdline = (entry / "cmdline").read_text()
+                if "--type=renderer" in cmdline:
+                    return True
+            except (OSError, ValueError):
+                continue
+    except OSError:
+        pass
+    return False
+
+
 
 def _find_pid_macos(match: str) -> int | None:
     """Use ps to find a process matching a string."""
@@ -914,6 +940,7 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
 
     cms_fails = 0
     browser_fails = 0
+    renderer_absent = 0   # consecutive checks with browser alive but no renderer
     check_count = 0
     # Log a status heartbeat every STATUS_INTERVAL checks (~5 min at default 30s)
     STATUS_INTERVAL = 10
@@ -991,10 +1018,39 @@ def watchdog_loop(cfg: dict, plat: str, mode: str, *, once: bool = False):
                                 rss, mem_limit,
                             )
                             restart_browser(plat)
+                            renderer_absent = 0
                             if not once:
                                 log.info("Cooldown 30s after browser restart")
                                 time.sleep(30)
                                 continue
+
+                    # Renderer crash detection (Linux/Pi only).
+                    # When the renderer subprocess is killed (OOM, GPU fault),
+                    # the main browser process survives showing "Aw Snap" but
+                    # player.js is dead and cannot self-heal via RAF probe.
+                    if platform.system() == "Linux" and elapsed > grace:
+                        if not _has_renderer_process_linux():
+                            renderer_absent += 1
+                            if renderer_absent >= 2:
+                                log.warning(
+                                    "Browser alive but no renderer for %d checks "
+                                    "— restarting (likely renderer crash / Aw Snap)",
+                                    renderer_absent,
+                                )
+                                restart_browser(plat)
+                                renderer_absent = 0
+                                if not once:
+                                    log.info("Cooldown 30s after renderer-crash restart")
+                                    time.sleep(30)
+                                    continue
+                            else:
+                                log.info(
+                                    "No renderer process detected (%d/2)"
+                                    " — will restart if persistent",
+                                    renderer_absent,
+                                )
+                        else:
+                            renderer_absent = 0
 
                 else:
                     # Browser not found — but only count as failure after grace
