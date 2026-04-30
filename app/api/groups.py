@@ -4,9 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.audit import record as audit
-from app.auth import require_admin, require_viewer
+from app.auth import get_user_group_ids, require_admin, require_viewer
 from app.database import get_session
-from app.models import ApiToken, Device, DeviceGroup, DeviceGroupMembership, Override, Playlist, Schedule
+from app.models import (
+    ApiToken, Device, DeviceGroup, DeviceGroupMembership,
+    Override, Playlist, PlaylistGroupMembership, Schedule,
+    User, UserGroupMembership,
+)
 
 router = APIRouter()
 
@@ -31,19 +35,39 @@ def _group_to_dict(group: DeviceGroup, include_members: bool = False) -> dict:
             for m in group.memberships
             if m.device
         ]
+        result["playlists"] = [
+            {
+                "id": pm.playlist.id,
+                "name": pm.playlist.name,
+            }
+            for pm in (group.playlist_memberships or [])
+            if pm.playlist
+        ]
+        result["users"] = [
+            {
+                "id": um.user.id,
+                "username": um.user.username,
+                "display_name": um.user.display_name,
+                "role": um.user.role,
+            }
+            for um in (group.user_memberships or [])
+            if um.user
+        ]
     return result
 
 
 @router.get("/groups")
 async def list_groups(
-    _admin: ApiToken = Depends(require_viewer),
+    token: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
-    result = await session.execute(
-        select(DeviceGroup).options(
-            selectinload(DeviceGroup.memberships).selectinload(DeviceGroupMembership.device)
-        )
+    query = select(DeviceGroup).options(
+        selectinload(DeviceGroup.memberships).selectinload(DeviceGroupMembership.device)
     )
+    user_groups = await get_user_group_ids(token, session)
+    if user_groups is not None:
+        query = query.where(DeviceGroup.id.in_(user_groups))
+    result = await session.execute(query)
     groups = result.scalars().all()
     return [_group_to_dict(g) for g in groups]
 
@@ -77,14 +101,19 @@ async def create_group(
 @router.get("/groups/{group_id}")
 async def get_group(
     group_id: str,
-    _admin: ApiToken = Depends(require_viewer),
+    token: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
+    user_groups = await get_user_group_ids(token, session)
+    if user_groups is not None and group_id not in user_groups:
+        raise HTTPException(status_code=403, detail="Access denied: not in your group(s)")
     result = await session.execute(
         select(DeviceGroup)
         .where(DeviceGroup.id == group_id)
         .options(
-            selectinload(DeviceGroup.memberships).selectinload(DeviceGroupMembership.device)
+            selectinload(DeviceGroup.memberships).selectinload(DeviceGroupMembership.device),
+            selectinload(DeviceGroup.playlist_memberships).selectinload(PlaylistGroupMembership.playlist),
+            selectinload(DeviceGroup.user_memberships).selectinload(UserGroupMembership.user),
         )
     )
     group = result.scalars().first()
@@ -251,3 +280,99 @@ async def assign_playlist_to_group(
                 token=_admin, request=request)
     await session.commit()
     return {"ok": True, "updated_count": updated}
+
+
+# --- Playlist membership in group ---
+
+@router.post("/groups/{group_id}/playlists")
+async def add_playlist_to_group(
+    group_id: str,
+    body: dict,
+    request: Request,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    playlist_id = body.get("playlist_id")
+    if not playlist_id:
+        raise HTTPException(status_code=400, detail="playlist_id is required")
+    group = await session.get(DeviceGroup, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    playlist = await session.get(Playlist, playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+    existing = await session.get(PlaylistGroupMembership, (playlist_id, group_id))
+    if existing:
+        raise HTTPException(status_code=409, detail="Playlist already in group")
+    session.add(PlaylistGroupMembership(playlist_id=playlist_id, group_id=group_id))
+    await audit(session, action="add_playlist", entity_type="group", entity_id=group_id,
+                details={"playlist_id": playlist_id, "playlist_name": playlist.name},
+                token=_admin, request=request)
+    await session.commit()
+    return {"ok": True}
+
+
+@router.delete("/groups/{group_id}/playlists/{playlist_id}")
+async def remove_playlist_from_group(
+    group_id: str,
+    playlist_id: str,
+    request: Request,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    membership = await session.get(PlaylistGroupMembership, (playlist_id, group_id))
+    if not membership:
+        raise HTTPException(status_code=404, detail="Playlist not in group")
+    await audit(session, action="remove_playlist", entity_type="group", entity_id=group_id,
+                details={"playlist_id": playlist_id}, token=_admin, request=request)
+    await session.delete(membership)
+    await session.commit()
+    return {"ok": True}
+
+
+# --- User membership in group ---
+
+@router.post("/groups/{group_id}/users")
+async def add_user_to_group(
+    group_id: str,
+    body: dict,
+    request: Request,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    user_id = body.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id is required")
+    group = await session.get(DeviceGroup, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    user = await session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    existing = await session.get(UserGroupMembership, (user_id, group_id))
+    if existing:
+        raise HTTPException(status_code=409, detail="User already in group")
+    session.add(UserGroupMembership(user_id=user_id, group_id=group_id))
+    await audit(session, action="add_user", entity_type="group", entity_id=group_id,
+                details={"user_id": user_id, "username": user.username},
+                token=_admin, request=request)
+    await session.commit()
+    return {"ok": True}
+
+
+@router.delete("/groups/{group_id}/users/{user_id}")
+async def remove_user_from_group(
+    group_id: str,
+    user_id: str,
+    request: Request,
+    _admin: ApiToken = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    membership = await session.get(UserGroupMembership, (user_id, group_id))
+    if not membership:
+        raise HTTPException(status_code=404, detail="User not in group")
+    await audit(session, action="remove_user", entity_type="group", entity_id=group_id,
+                details={"user_id": user_id}, token=_admin, request=request)
+    await session.delete(membership)
+    await session.commit()
+    return {"ok": True}

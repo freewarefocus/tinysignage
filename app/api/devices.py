@@ -16,6 +16,7 @@ from app.api.schedules import evaluate_schedule_for_device
 from app.audit import record as audit
 from app.auth import (
     generate_token,
+    get_user_group_ids,
     hash_token,
     require_admin,
     require_device,
@@ -60,10 +61,21 @@ def _get_server_url(request: Request = None) -> str:
 
 @router.get("/devices")
 async def list_devices(
-    _admin: ApiToken = Depends(require_viewer),
+    token: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
-    result = await session.execute(select(Device))
+    user_groups = await get_user_group_ids(token, session)
+    if user_groups is not None:
+        # Scoped: only devices in the user's groups
+        query = (
+            select(Device)
+            .join(DeviceGroupMembership, DeviceGroupMembership.device_id == Device.id)
+            .where(DeviceGroupMembership.group_id.in_(user_groups))
+            .distinct()
+        )
+    else:
+        query = select(Device)
+    result = await session.execute(query)
     devices = result.scalars().all()
     return [_device_to_dict(d) for d in devices]
 

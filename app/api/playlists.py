@@ -6,11 +6,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.audit import record as audit
-from app.auth import require_editor, require_token, require_viewer
+from app.auth import check_group_access, get_user_group_ids, require_editor, require_token, require_viewer
 from app.database import get_session
-from app.models import ApiToken, Asset, AssetTag, Device, LayoutZone, Override, Playlist, PlaylistItem, Schedule, Tag
+from app.models import ApiToken, Asset, AssetTag, Device, LayoutZone, Override, Playlist, PlaylistGroupMembership, PlaylistItem, Schedule, Tag
 
 router = APIRouter()
+
+
+async def _playlist_group_ids(playlist_id: str, session) -> list[str]:
+    result = await session.execute(
+        select(PlaylistGroupMembership.group_id).where(PlaylistGroupMembership.playlist_id == playlist_id)
+    )
+    return [row[0] for row in result.all()]
 
 
 def _playlist_hash(items: list[PlaylistItem]) -> str:
@@ -68,15 +75,27 @@ def _item_to_dict(item: PlaylistItem) -> dict:
 
 @router.get("/playlists")
 async def list_playlists(
-    _admin: ApiToken = Depends(require_viewer),
+    token: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
-    result = await session.execute(
-        select(Playlist).options(
+    user_groups = await get_user_group_ids(token, session)
+    if user_groups is not None:
+        query = (
+            select(Playlist)
+            .join(PlaylistGroupMembership, PlaylistGroupMembership.playlist_id == Playlist.id)
+            .where(PlaylistGroupMembership.group_id.in_(user_groups))
+            .distinct()
+            .options(
+                selectinload(Playlist.items).selectinload(PlaylistItem.asset)
+                .selectinload(Asset.asset_tags).selectinload(AssetTag.tag)
+            )
+        )
+    else:
+        query = select(Playlist).options(
             selectinload(Playlist.items).selectinload(PlaylistItem.asset)
             .selectinload(Asset.asset_tags).selectinload(AssetTag.tag)
         )
-    )
+    result = await session.execute(query)
     playlists = result.scalars().all()
     return [_playlist_summary(p) for p in playlists]
 
@@ -105,7 +124,7 @@ def _playlist_summary(p: Playlist) -> dict:
 async def create_playlist(
     body: dict,
     request: Request,
-    _admin: ApiToken = Depends(require_editor),
+    token: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     name = body.get("name")
@@ -114,8 +133,13 @@ async def create_playlist(
     playlist = Playlist(name=name)
     session.add(playlist)
     await session.flush()
+    # Auto-join to creator's groups (if scoped)
+    user_groups = await get_user_group_ids(token, session)
+    if user_groups:
+        for gid in user_groups:
+            session.add(PlaylistGroupMembership(playlist_id=playlist.id, group_id=gid))
     await audit(session, action="create", entity_type="playlist", entity_id=playlist.id,
-                details={"name": name}, token=_admin, request=request)
+                details={"name": name}, token=token, request=request)
     await session.commit()
     await session.refresh(playlist)
     return {
@@ -133,7 +157,7 @@ async def create_playlist(
 @router.get("/playlists/{playlist_id}")
 async def get_playlist(
     playlist_id: str,
-    _admin: ApiToken = Depends(require_viewer),
+    token: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
@@ -147,6 +171,7 @@ async def get_playlist(
     playlist = result.scalars().first()
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
+    await check_group_access(token, session, await _playlist_group_ids(playlist_id, session))
     return {
         "id": playlist.id,
         "name": playlist.name,
@@ -171,12 +196,13 @@ async def update_playlist(
     playlist_id: str,
     body: dict,
     request: Request,
-    _admin: ApiToken = Depends(require_editor),
+    token: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     playlist = await session.get(Playlist, playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
+    await check_group_access(token, session, await _playlist_group_ids(playlist_id, session))
     if "mode" in body and body["mode"] not in ("simple", "advanced"):
         raise HTTPException(status_code=400, detail="mode must be 'simple' or 'advanced'")
     allowed = {"name", "transition_type", "transition_duration", "default_duration", "shuffle", "object_fit", "effect", "mode", "trigger_flow_id"}
@@ -185,7 +211,7 @@ async def update_playlist(
             setattr(playlist, key, value)
     await audit(session, action="update", entity_type="playlist", entity_id=playlist_id,
                 details={"name": playlist.name, "changes": {k: v for k, v in body.items() if k in allowed}},
-                token=_admin, request=request)
+                token=token, request=request)
     await session.commit()
     await session.refresh(playlist)
     return {
@@ -207,12 +233,13 @@ async def update_playlist(
 async def delete_playlist(
     playlist_id: str,
     request: Request,
-    _admin: ApiToken = Depends(require_editor),
+    token: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     playlist = await session.get(Playlist, playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
+    await check_group_access(token, session, await _playlist_group_ids(playlist_id, session))
     if playlist.is_default:
         raise HTTPException(status_code=400, detail="Cannot delete the default playlist")
 
@@ -279,7 +306,7 @@ async def delete_playlist(
         )
 
     await audit(session, action="delete", entity_type="playlist", entity_id=playlist_id,
-                details={"name": playlist.name}, token=_admin, request=request)
+                details={"name": playlist.name}, token=token, request=request)
     await session.delete(playlist)
     await session.commit()
     return {"ok": True}
@@ -310,12 +337,13 @@ async def add_item_to_playlist(
     playlist_id: str,
     body: dict,
     request: Request,
-    _admin: ApiToken = Depends(require_editor),
+    token: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     playlist = await session.get(Playlist, playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
+    await check_group_access(token, session, await _playlist_group_ids(playlist_id, session))
 
     asset_id = body.get("asset_id")
     if not asset_id:
@@ -338,7 +366,7 @@ async def add_item_to_playlist(
     session.add(item)
     await audit(session, action="add_item", entity_type="playlist", entity_id=playlist_id,
                 details={"asset_id": asset_id, "asset_name": asset.name},
-                token=_admin, request=request)
+                token=token, request=request)
     await session.commit()
 
     # Re-fetch with asset and tags loaded
@@ -359,9 +387,10 @@ async def remove_item_from_playlist(
     playlist_id: str,
     item_id: str,
     request: Request,
-    _admin: ApiToken = Depends(require_editor),
+    token: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
+    await check_group_access(token, session, await _playlist_group_ids(playlist_id, session))
     result = await session.execute(
         select(PlaylistItem).where(
             PlaylistItem.id == item_id,
@@ -372,7 +401,7 @@ async def remove_item_from_playlist(
     if not item:
         raise HTTPException(status_code=404, detail="Playlist item not found")
     await audit(session, action="remove_item", entity_type="playlist", entity_id=playlist_id,
-                details={"asset_id": item.asset_id}, token=_admin, request=request)
+                details={"asset_id": item.asset_id}, token=token, request=request)
     await session.delete(item)
     await session.commit()
     return {"ok": True}
@@ -384,9 +413,10 @@ async def update_playlist_item(
     item_id: str,
     body: dict,
     request: Request,
-    _admin: ApiToken = Depends(require_editor),
+    token: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
+    await check_group_access(token, session, await _playlist_group_ids(playlist_id, session))
     result = await session.execute(
         select(PlaylistItem).where(
             PlaylistItem.id == item_id,
@@ -406,7 +436,7 @@ async def update_playlist_item(
 
     await audit(session, action="update_item", entity_type="playlist", entity_id=playlist_id,
                 details={"item_id": item_id, "changes": changes},
-                token=_admin, request=request)
+                token=token, request=request)
     await session.commit()
 
     # Re-fetch with asset and tags loaded
@@ -427,10 +457,11 @@ async def reorder_playlist_items(
     playlist_id: str,
     body: dict,
     request: Request,
-    _admin: ApiToken = Depends(require_editor),
+    token: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     """Reorder items. Body: {"item_ids": ["id1", "id2", ...]} in desired order."""
+    await check_group_access(token, session, await _playlist_group_ids(playlist_id, session))
     item_ids = body.get("item_ids", [])
     for order, item_id in enumerate(item_ids):
         result = await session.execute(
@@ -443,7 +474,7 @@ async def reorder_playlist_items(
         if item:
             item.order = order
     await audit(session, action="reorder", entity_type="playlist", entity_id=playlist_id,
-                details={"item_count": len(item_ids)}, token=_admin, request=request)
+                details={"item_count": len(item_ids)}, token=token, request=request)
     await session.commit()
     return {"ok": True}
 

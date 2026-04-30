@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
-from app.models import ApiToken
+from app.models import ApiToken, UserGroupMembership
 
 TOKEN_PREFIX = "ts_"
 
@@ -114,3 +114,32 @@ async def require_device(
     if token.role != "device":
         raise HTTPException(status_code=403, detail="Device token required")
     return token
+
+
+async def get_user_group_ids(token: ApiToken, session: AsyncSession) -> list[str] | None:
+    """Returns None if unrestricted (admin, or no group assignments).
+    Returns list of group_ids if user is scoped."""
+    if token.role == "admin":
+        return None
+    if not token.user_id:
+        return None
+    result = await session.execute(
+        select(UserGroupMembership.group_id)
+        .where(UserGroupMembership.user_id == token.user_id)
+    )
+    group_ids = [row[0] for row in result.all()]
+    if not group_ids:
+        return None  # backwards compat: no assignments = unrestricted
+    return group_ids
+
+
+async def check_group_access(token: ApiToken, session: AsyncSession, entity_group_ids: list[str]) -> None:
+    """Raises 403 if scoped user has no overlap with entity's groups."""
+    user_groups = await get_user_group_ids(token, session)
+    if user_groups is None:
+        return  # unrestricted
+    if not entity_group_ids:
+        # Entity in no groups — only visible to unrestricted users
+        raise HTTPException(status_code=403, detail="Access denied: resource is not in your group(s)")
+    if not set(user_groups) & set(entity_group_ids):
+        raise HTTPException(status_code=403, detail="Access denied: resource is not in your group(s)")

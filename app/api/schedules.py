@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.audit import record as audit
-from app.auth import require_editor, require_viewer
+from app.auth import get_user_group_ids, require_editor, require_viewer
 from app.database import get_session
 from app.models import (
     ApiToken,
@@ -16,6 +16,7 @@ from app.models import (
     DeviceGroup,
     DeviceGroupMembership,
     Playlist,
+    PlaylistGroupMembership,
     Schedule,
 )
 
@@ -183,7 +184,7 @@ def _schedule_to_dict(schedule: Schedule) -> dict:
 
 @router.get("/schedules")
 async def list_schedules(
-    _admin: ApiToken = Depends(require_viewer),
+    token: ApiToken = Depends(require_viewer),
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
@@ -193,14 +194,44 @@ async def list_schedules(
         )
     )
     schedules = result.scalars().all()
-    return [_schedule_to_dict(s) for s in schedules]
+    user_groups = await get_user_group_ids(token, session)
+    if user_groups is None:
+        return [_schedule_to_dict(s) for s in schedules]
+    # Scoped: filter to schedules targeting user's groups/devices, or "all"
+    user_group_set = set(user_groups)
+    # Get device IDs in user's groups
+    dev_result = await session.execute(
+        select(DeviceGroupMembership.device_id)
+        .where(DeviceGroupMembership.group_id.in_(user_groups))
+    )
+    user_device_ids = {row[0] for row in dev_result.all()}
+    # Get playlist IDs in user's groups
+    pl_result = await session.execute(
+        select(PlaylistGroupMembership.playlist_id)
+        .where(PlaylistGroupMembership.group_id.in_(user_groups))
+    )
+    user_playlist_ids = {row[0] for row in pl_result.all()}
+    filtered = []
+    for s in schedules:
+        # Must reference an accessible playlist
+        if s.playlist_id not in user_playlist_ids:
+            continue
+        # Target must be accessible
+        if s.target_type == "all":
+            pass
+        elif s.target_type == "group" and s.target_id not in user_group_set:
+            continue
+        elif s.target_type == "device" and s.target_id not in user_device_ids:
+            continue
+        filtered.append(_schedule_to_dict(s))
+    return filtered
 
 
 @router.post("/schedules", status_code=201)
 async def create_schedule(
     body: dict,
     request: Request,
-    _admin: ApiToken = Depends(require_editor),
+    token: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     name = body.get("name", "").strip()
@@ -214,6 +245,17 @@ async def create_schedule(
     playlist = await session.get(Playlist, playlist_id)
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
+
+    # Verify scoped user can access this playlist
+    user_groups = await get_user_group_ids(token, session)
+    if user_groups is not None:
+        pl_result = await session.execute(
+            select(PlaylistGroupMembership.group_id)
+            .where(PlaylistGroupMembership.playlist_id == playlist_id)
+        )
+        pl_groups = {row[0] for row in pl_result.all()}
+        if not set(user_groups) & pl_groups:
+            raise HTTPException(status_code=403, detail="Access denied: playlist is not in your group(s)")
 
     target_type = body.get("target_type", "all")
     if target_type not in ("device", "group", "all"):
@@ -230,6 +272,21 @@ async def create_schedule(
     elif target_type == "group" and target_id:
         if not await session.get(DeviceGroup, target_id):
             raise HTTPException(status_code=404, detail="Target group not found")
+
+    # Verify scoped user can access target
+    if user_groups is not None:
+        if target_type == "all":
+            raise HTTPException(status_code=403, detail="Scoped users cannot create schedules targeting all devices")
+        if target_type == "group" and target_id not in user_groups:
+            raise HTTPException(status_code=403, detail="Access denied: target group is not in your group(s)")
+        if target_type == "device" and target_id:
+            dev_gm = await session.execute(
+                select(DeviceGroupMembership.group_id)
+                .where(DeviceGroupMembership.device_id == target_id)
+            )
+            dev_groups = {row[0] for row in dev_gm.all()}
+            if not set(user_groups) & dev_groups:
+                raise HTTPException(status_code=403, detail="Access denied: target device is not in your group(s)")
 
     _validate_time_format(body.get("start_time"), "start_time")
     _validate_time_format(body.get("end_time"), "end_time")
@@ -262,7 +319,7 @@ async def create_schedule(
     await session.flush()
     await audit(session, action="create", entity_type="schedule", entity_id=schedule.id,
                 details={"name": name, "playlist_id": playlist_id, "target_type": target_type},
-                token=_admin, request=request)
+                token=token, request=request)
     await session.commit()
 
     # Re-fetch with relationships loaded
@@ -430,12 +487,22 @@ async def update_schedule(
     schedule_id: str,
     body: dict,
     request: Request,
-    _admin: ApiToken = Depends(require_editor),
+    token: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     schedule = await session.get(Schedule, schedule_id)
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
+    # Verify access via schedule's playlist groups
+    user_groups = await get_user_group_ids(token, session)
+    if user_groups is not None:
+        pl_result = await session.execute(
+            select(PlaylistGroupMembership.group_id)
+            .where(PlaylistGroupMembership.playlist_id == schedule.playlist_id)
+        )
+        pl_groups = {row[0] for row in pl_result.all()}
+        if not set(user_groups) & pl_groups:
+            raise HTTPException(status_code=403, detail="Access denied: schedule is not in your group(s)")
 
     if "start_time" in body:
         _validate_time_format(body["start_time"], "start_time")
@@ -488,7 +555,7 @@ async def update_schedule(
 
     await audit(session, action="update", entity_type="schedule", entity_id=schedule_id,
                 details={"name": schedule.name, "changes": {k: v for k, v in body.items()}},
-                token=_admin, request=request)
+                token=token, request=request)
     await session.commit()
 
     # Re-fetch with relationships loaded
@@ -508,14 +575,24 @@ async def update_schedule(
 async def delete_schedule(
     schedule_id: str,
     request: Request,
-    _admin: ApiToken = Depends(require_editor),
+    token: ApiToken = Depends(require_editor),
     session: AsyncSession = Depends(get_session),
 ):
     schedule = await session.get(Schedule, schedule_id)
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
+    # Verify access
+    user_groups = await get_user_group_ids(token, session)
+    if user_groups is not None:
+        pl_result = await session.execute(
+            select(PlaylistGroupMembership.group_id)
+            .where(PlaylistGroupMembership.playlist_id == schedule.playlist_id)
+        )
+        pl_groups = {row[0] for row in pl_result.all()}
+        if not set(user_groups) & pl_groups:
+            raise HTTPException(status_code=403, detail="Access denied: schedule is not in your group(s)")
     await audit(session, action="delete", entity_type="schedule", entity_id=schedule_id,
-                details={"name": schedule.name}, token=_admin, request=request)
+                details={"name": schedule.name}, token=token, request=request)
     await session.delete(schedule)
     await session.commit()
     return {"ok": True}

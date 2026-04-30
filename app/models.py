@@ -204,6 +204,9 @@ class Playlist(Base):
     )
     devices: Mapped[list["Device"]] = relationship(back_populates="playlist")
     trigger_flow: Mapped["TriggerFlow | None"] = relationship(foreign_keys=[trigger_flow_id])
+    group_memberships: Mapped[list["PlaylistGroupMembership"]] = relationship(
+        back_populates="playlist", cascade="all, delete-orphan"
+    )
 
 
 class TriggerFlow(Base):
@@ -280,6 +283,12 @@ class DeviceGroup(Base):
     memberships: Mapped[list["DeviceGroupMembership"]] = relationship(
         back_populates="group", cascade="all, delete-orphan"
     )
+    user_memberships: Mapped[list["UserGroupMembership"]] = relationship(
+        back_populates="group", cascade="all, delete-orphan"
+    )
+    playlist_memberships: Mapped[list["PlaylistGroupMembership"]] = relationship(
+        back_populates="group", cascade="all, delete-orphan"
+    )
 
 
 class DeviceGroupMembership(Base):
@@ -294,6 +303,34 @@ class DeviceGroupMembership(Base):
 
     device: Mapped["Device"] = relationship()
     group: Mapped["DeviceGroup"] = relationship(back_populates="memberships")
+
+
+class UserGroupMembership(Base):
+    __tablename__ = "user_group_memberships"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    group_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("device_groups.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    user: Mapped["User"] = relationship(back_populates="group_memberships")
+    group: Mapped["DeviceGroup"] = relationship(back_populates="user_memberships")
+
+
+class PlaylistGroupMembership(Base):
+    __tablename__ = "playlist_group_memberships"
+
+    playlist_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("playlists.id", ondelete="CASCADE"), primary_key=True
+    )
+    group_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("device_groups.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    playlist: Mapped["Playlist"] = relationship(back_populates="group_memberships")
+    group: Mapped["DeviceGroup"] = relationship(back_populates="playlist_memberships")
 
 
 class User(Base):
@@ -315,6 +352,10 @@ class User(Base):
     last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     theme_preference: Mapped[str] = mapped_column(
         String(20), nullable=False, default="dark", server_default="dark"
+    )
+
+    group_memberships: Mapped[list["UserGroupMembership"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
     )
 
 

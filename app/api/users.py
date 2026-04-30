@@ -17,7 +17,7 @@ from app.auth import (
     verify_password,
 )
 from app.database import get_session
-from app.models import ApiToken, User
+from app.models import ApiToken, User, UserGroupMembership
 
 log = logging.getLogger("tinysignage.users")
 
@@ -27,8 +27,8 @@ VALID_ROLES = ("admin", "editor", "viewer")
 SESSION_EXPIRY_DAYS = 30
 
 
-def _user_dict(user: User) -> dict:
-    return {
+def _user_dict(user: User, group_ids: list[str] | None = None) -> dict:
+    d = {
         "id": user.id,
         "username": user.username,
         "display_name": user.display_name,
@@ -38,6 +38,16 @@ def _user_dict(user: User) -> dict:
         "last_login": user.last_login.isoformat() if user.last_login else None,
         "theme_preference": user.theme_preference,
     }
+    if group_ids is not None:
+        d["group_ids"] = group_ids
+    return d
+
+
+async def _fetch_user_group_ids(user_id: str, session: AsyncSession) -> list[str]:
+    result = await session.execute(
+        select(UserGroupMembership.group_id).where(UserGroupMembership.user_id == user_id)
+    )
+    return [row[0] for row in result.all()]
 
 
 @router.post("/auth/login")
@@ -95,9 +105,10 @@ async def login(body: dict, request: Request, session: AsyncSession = Depends(ge
 
     log.info("User %s logged in", user.username)
 
+    group_ids = await _fetch_user_group_ids(user.id, session)
     return {
         "token": plaintext,
-        "user": _user_dict(user),
+        "user": _user_dict(user, group_ids=group_ids),
     }
 
 
@@ -124,7 +135,8 @@ async def get_current_user(
     if token.user_id:
         user = await session.get(User, token.user_id)
         if user:
-            return _user_dict(user)
+            group_ids = await _fetch_user_group_ids(user.id, session)
+            return _user_dict(user, group_ids=group_ids)
     # API token without user — return token info
     return {
         "id": None,
@@ -134,6 +146,7 @@ async def get_current_user(
         "is_active": True,
         "created_at": token.created_at.isoformat() if token.created_at else None,
         "last_login": None,
+        "group_ids": [],
     }
 
 
@@ -144,7 +157,17 @@ async def list_users(
 ):
     """List all user accounts (admin only)."""
     result = await session.execute(select(User).order_by(User.created_at))
-    return [_user_dict(u) for u in result.scalars().all()]
+    users = result.scalars().all()
+    # Batch-load all user group memberships
+    all_user_ids = [u.id for u in users]
+    gm_result = await session.execute(
+        select(UserGroupMembership).where(UserGroupMembership.user_id.in_(all_user_ids))
+    )
+    memberships = gm_result.scalars().all()
+    groups_by_user: dict[str, list[str]] = {}
+    for m in memberships:
+        groups_by_user.setdefault(m.user_id, []).append(m.group_id)
+    return [_user_dict(u, group_ids=groups_by_user.get(u.id, [])) for u in users]
 
 
 @router.post("/users", status_code=201)

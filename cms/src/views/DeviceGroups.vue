@@ -110,6 +110,62 @@
             >Add</button>
           </div>
         </div>
+
+        <!-- Playlists in group -->
+        <div class="detail-section">
+          <label>Playlists in Group ({{ selectedGroup.playlists?.length || 0 }})</label>
+          <div v-if="!selectedGroup.playlists?.length" class="empty-hint">
+            No playlists assigned to this group.
+          </div>
+          <div v-else class="member-list">
+            <div v-for="p in selectedGroup.playlists" :key="p.id" class="member-row">
+              <span class="member-name">{{ p.name }}</span>
+              <button v-if="isAdmin" class="btn-icon" @click="removePlaylistFromGroup(p.id)" title="Remove">
+                <i class="pi pi-times"></i>
+              </button>
+            </div>
+          </div>
+          <div v-if="isAdmin" class="push-row" style="margin-top: 0.4rem;">
+            <select v-model="addPlaylistId" class="select-input">
+              <option value="">Add playlist...</option>
+              <option v-for="pl in availablePlaylists" :key="pl.id" :value="pl.id">
+                {{ pl.name }}
+              </option>
+            </select>
+            <button class="btn-primary btn-sm" @click="addPlaylistToGroup" :disabled="!addPlaylistId">Add</button>
+          </div>
+        </div>
+
+        <!-- Users in group (admin only) -->
+        <div v-if="isAdmin" class="detail-section">
+          <label>Users in Group ({{ selectedGroup.users?.length || 0 }})</label>
+          <p class="empty-hint" style="margin-bottom:0.4rem;">
+            Assign users to limit their access to this group's content. Users with no groups see everything.
+          </p>
+          <div v-if="!selectedGroup.users?.length" class="empty-hint">
+            No users assigned.
+          </div>
+          <div v-else class="member-list">
+            <div v-for="u in selectedGroup.users" :key="u.id" class="member-row">
+              <div class="member-info">
+                <span class="member-name">{{ u.display_name || u.username }}</span>
+                <span class="member-status" style="color:#7c83ff;">{{ u.role }}</span>
+              </div>
+              <button class="btn-icon" @click="removeUserFromGroup(u.id)" title="Remove">
+                <i class="pi pi-times"></i>
+              </button>
+            </div>
+          </div>
+          <div class="push-row" style="margin-top: 0.4rem;">
+            <select v-model="addUserId" class="select-input">
+              <option value="">Add user...</option>
+              <option v-for="u in availableUsers" :key="u.id" :value="u.id">
+                {{ u.display_name || u.username }} ({{ u.role }})
+              </option>
+            </select>
+            <button class="btn-primary btn-sm" @click="addUserToGroup" :disabled="!addUserId">Add</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -153,6 +209,7 @@ import { api } from '../api/client.js'
 const groups = ref([])
 const devices = ref([])
 const playlists = ref([])
+const allUsers = ref([])
 const loading = ref(true)
 const showCreate = ref(false)
 const newName = ref('')
@@ -163,10 +220,26 @@ const selectedGroup = ref(null)
 const pushPlaylistId = ref('')
 const pushMessage = ref('')
 const addDeviceId = ref('')
+const addPlaylistId = ref('')
+const addUserId = ref('')
+
+const isAdmin = computed(() => {
+  try { return JSON.parse(localStorage.getItem('tinysignage_user') || '{}').role === 'admin' } catch { return false }
+})
 
 const availableDevices = computed(() => {
   const memberIds = new Set((selectedGroup.value?.members || []).map(m => m.device_id))
   return devices.value.filter(d => !memberIds.has(d.id))
+})
+
+const availablePlaylists = computed(() => {
+  const inGroup = new Set((selectedGroup.value?.playlists || []).map(p => p.id))
+  return playlists.value.filter(p => !inGroup.has(p.id))
+})
+
+const availableUsers = computed(() => {
+  const inGroup = new Set((selectedGroup.value?.users || []).map(u => u.id))
+  return allUsers.value.filter(u => !inGroup.has(u.id) && u.role !== 'admin')
 })
 
 watch(showCreate, async (val) => {
@@ -202,12 +275,18 @@ async function createGroup() {
   await loadGroups()
 }
 
+async function loadUsers() {
+  try { allUsers.value = await api.get('/users') } catch { /* non-admin won't have access */ }
+}
+
 async function openGroup(g) {
   const detail = await api.get(`/groups/${g.id}`)
   selectedGroup.value = detail
   pushPlaylistId.value = ''
   pushMessage.value = ''
   addDeviceId.value = ''
+  addPlaylistId.value = ''
+  addUserId.value = ''
 }
 
 function closeDetail() {
@@ -251,8 +330,36 @@ async function removeMember(deviceId) {
   await Promise.all([loadGroups(), openGroup(selectedGroup.value)])
 }
 
+async function addPlaylistToGroup() {
+  if (!addPlaylistId.value || !selectedGroup.value) return
+  await api.post(`/groups/${selectedGroup.value.id}/playlists`, { playlist_id: addPlaylistId.value })
+  addPlaylistId.value = ''
+  await openGroup(selectedGroup.value)
+}
+
+async function removePlaylistFromGroup(playlistId) {
+  if (!selectedGroup.value) return
+  await api.delete(`/groups/${selectedGroup.value.id}/playlists/${playlistId}`)
+  await openGroup(selectedGroup.value)
+}
+
+async function addUserToGroup() {
+  if (!addUserId.value || !selectedGroup.value) return
+  await api.post(`/groups/${selectedGroup.value.id}/users`, { user_id: addUserId.value })
+  addUserId.value = ''
+  await openGroup(selectedGroup.value)
+}
+
+async function removeUserFromGroup(userId) {
+  if (!selectedGroup.value) return
+  await api.delete(`/groups/${selectedGroup.value.id}/users/${userId}`)
+  await openGroup(selectedGroup.value)
+}
+
 onMounted(async () => {
-  await Promise.all([loadGroups(), loadDevices(), loadPlaylists()])
+  const loads = [loadGroups(), loadDevices(), loadPlaylists()]
+  if (isAdmin.value) loads.push(loadUsers())
+  await Promise.all(loads)
 })
 </script>
 

@@ -86,6 +86,19 @@
               <i class="pi pi-info-circle"></i>
               This is the only admin account. Its role and status cannot be changed until another admin exists.
             </p>
+            <template v-if="form.role !== 'admin' && allGroups.length">
+              <label>Group Access</label>
+              <div class="group-checkboxes">
+                <label v-for="g in allGroups" :key="g.id" class="group-check-label">
+                  <input type="checkbox" :value="g.id" v-model="form.group_ids" />
+                  {{ g.name }}
+                </label>
+              </div>
+              <p class="info-text" style="margin-top:0.2rem;">
+                <i class="pi pi-info-circle"></i>
+                Assign groups to limit access. Leave empty for unrestricted access.
+              </p>
+            </template>
             <label>New Password (leave blank to keep current)</label>
             <input v-model="form.password" type="password" minlength="8" placeholder="Min. 8 characters" />
             <template v-if="form.password">
@@ -129,12 +142,13 @@ import { ref, computed, onMounted } from 'vue'
 import { api } from '../api/client'
 
 const users = ref([])
+const allGroups = ref([])
 const loading = ref(true)
 const showCreate = ref(false)
 const editUser = ref(null)
 const deleteTarget = ref(null)
 const formError = ref('')
-const form = ref({ username: '', display_name: '', role: 'viewer', password: '', passwordConfirm: '', is_active: true })
+const form = ref({ username: '', display_name: '', role: 'viewer', password: '', passwordConfirm: '', is_active: true, group_ids: [] })
 
 const currentUserId = computed(() => {
   try { return JSON.parse(localStorage.getItem('tinysignage_user') || '{}').id } catch { return null }
@@ -170,11 +184,15 @@ function formatDate(iso) {
   return new Date(iso.endsWith('Z') ? iso : iso + 'Z').toLocaleString()
 }
 
+async function loadGroups() {
+  try { allGroups.value = await api.get('/groups') } catch { /* ignore */ }
+}
+
 function closeDialog() {
   showCreate.value = false
   editUser.value = null
   formError.value = ''
-  form.value = { username: '', display_name: '', role: 'viewer', password: '', passwordConfirm: '', is_active: true }
+  form.value = { username: '', display_name: '', role: 'viewer', password: '', passwordConfirm: '', is_active: true, group_ids: [] }
 }
 
 async function createUser() {
@@ -201,6 +219,7 @@ function startEdit(user) {
     role: user.role,
     password: '',
     is_active: user.is_active,
+    group_ids: [...(user.group_ids || [])],
   }
 }
 
@@ -216,6 +235,16 @@ async function saveEdit() {
   }
   try {
     await api.put(`/users/${editUser.value.id}`, body)
+    // Sync group memberships
+    const userId = editUser.value.id
+    const oldGroups = new Set(editUser.value.group_ids || [])
+    const newGroups = new Set(form.value.group_ids || [])
+    const toAdd = [...newGroups].filter(g => !oldGroups.has(g))
+    const toRemove = [...oldGroups].filter(g => !newGroups.has(g))
+    await Promise.all([
+      ...toAdd.map(gid => api.post(`/groups/${gid}/users`, { user_id: userId })),
+      ...toRemove.map(gid => api.delete(`/groups/${gid}/users/${userId}`)),
+    ])
     closeDialog()
     await loadUsers()
   } catch (e) {
@@ -235,7 +264,9 @@ async function doDelete() {
   } catch { /* toast handles it */ }
 }
 
-onMounted(loadUsers)
+onMounted(async () => {
+  await Promise.all([loadUsers(), loadGroups()])
+})
 </script>
 
 <style scoped>
@@ -458,5 +489,31 @@ select:disabled {
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.group-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 150px;
+  overflow-y: auto;
+  background: #0f1117;
+  border: 1px solid #3a3a5a;
+  border-radius: 4px;
+  padding: 0.5rem;
+}
+
+.group-check-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #ddd;
+  cursor: pointer;
+  margin: 0;
+}
+
+.group-check-label input[type="checkbox"] {
+  margin: 0;
 }
 </style>
