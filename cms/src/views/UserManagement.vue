@@ -77,6 +77,19 @@
             <option value="editor">Editor</option>
             <option value="viewer">Viewer</option>
           </select>
+          <template v-if="form.role !== 'admin' && allGroups.length">
+            <label>Group Access</label>
+            <div class="group-checkboxes">
+              <label v-for="g in allGroups" :key="g.id" class="group-check-label">
+                <input type="checkbox" :value="g.id" v-model="form.group_ids" />
+                {{ g.name }}
+              </label>
+            </div>
+            <p class="info-text" style="margin-top:0.2rem;">
+              <i class="pi pi-info-circle"></i>
+              Assign groups to limit access. Leave empty for unrestricted access.
+            </p>
+          </template>
           <template v-if="editUser">
             <label :class="{ 'label-disabled': isLastAdminEdit }">
               <input type="checkbox" v-model="form.is_active" :disabled="isLastAdminEdit" />
@@ -86,19 +99,6 @@
               <i class="pi pi-info-circle"></i>
               This is the only admin account. Its role and status cannot be changed until another admin exists.
             </p>
-            <template v-if="form.role !== 'admin' && allGroups.length">
-              <label>Group Access</label>
-              <div class="group-checkboxes">
-                <label v-for="g in allGroups" :key="g.id" class="group-check-label">
-                  <input type="checkbox" :value="g.id" v-model="form.group_ids" />
-                  {{ g.name }}
-                </label>
-              </div>
-              <p class="info-text" style="margin-top:0.2rem;">
-                <i class="pi pi-info-circle"></i>
-                Assign groups to limit access. Leave empty for unrestricted access.
-              </p>
-            </template>
             <label>New Password (leave blank to keep current)</label>
             <input v-model="form.password" type="password" minlength="8" placeholder="Min. 8 characters" />
             <template v-if="form.password">
@@ -198,12 +198,19 @@ function closeDialog() {
 async function createUser() {
   formError.value = ''
   try {
-    await api.post('/users', {
+    const newUser = await api.post('/users', {
       username: form.value.username,
       display_name: form.value.display_name,
       password: form.value.password,
       role: form.value.role,
     })
+    // Sync group memberships for the new user
+    const groupIds = form.value.group_ids || []
+    if (groupIds.length) {
+      await Promise.all(
+        groupIds.map(gid => api.post(`/groups/${gid}/users`, { user_id: newUser.id }))
+      )
+    }
     closeDialog()
     await loadUsers()
   } catch (e) {
@@ -218,6 +225,7 @@ function startEdit(user) {
     display_name: user.display_name || '',
     role: user.role,
     password: '',
+    passwordConfirm: '',
     is_active: user.is_active,
     group_ids: [...(user.group_ids || [])],
   }
