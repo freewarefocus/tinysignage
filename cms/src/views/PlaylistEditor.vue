@@ -180,6 +180,12 @@
           <button v-if="canEdit" class="btn-flow" @click="showCreateFlow = true" title="Create new flow">
             <i class="pi pi-plus"></i>
           </button>
+          <button v-if="canEdit && selectedFlowId" class="btn-flow" @click="startRenameFlow" title="Rename flow">
+            <i class="pi pi-pencil"></i>
+          </button>
+          <button v-if="canEdit && selectedFlowId" class="btn-flow danger" @click="startDeleteFlow" title="Delete flow">
+            <i class="pi pi-trash"></i>
+          </button>
           <button v-if="canEdit && selectedFlowId" class="btn-flow detach" @click="detachFlow" title="Detach flow from playlist">
             <i class="pi pi-times"></i>
           </button>
@@ -190,6 +196,25 @@
           <input v-model="newFlowName" placeholder="Flow name" class="setting-number" @keydown.enter="createFlow" />
           <button class="btn-sm" @click="createFlow">Create</button>
           <button class="btn-sm secondary" @click="showCreateFlow = false; newFlowName = ''">Cancel</button>
+        </div>
+
+        <!-- Rename flow inline form -->
+        <div v-if="showRenameFlow" class="inline-form">
+          <input v-model="renameFlowName" placeholder="New name" class="setting-number" @keydown.enter="renameFlow" />
+          <button class="btn-sm" @click="renameFlow">Save</button>
+          <button class="btn-sm secondary" @click="showRenameFlow = false">Cancel</button>
+        </div>
+
+        <!-- Delete flow confirmation dialog -->
+        <div v-if="deleteFlowTarget" class="dialog-overlay" @click.self="deleteFlowTarget = null">
+          <div class="dialog">
+            <h3>Delete Trigger Flow</h3>
+            <p>Delete <strong>{{ deleteFlowTarget.name }}</strong>? Any playlists using this flow will be detached.</p>
+            <div class="dialog-actions">
+              <button class="btn-danger" @click="confirmDeleteFlow">Delete</button>
+              <button class="btn-secondary" @click="deleteFlowTarget = null">Cancel</button>
+            </div>
+          </div>
         </div>
 
         <!-- Flow content (when assigned) -->
@@ -564,6 +589,9 @@ const showBranchForm = ref(false)
 const editingBranchId = ref(null)
 const showCreateFlow = ref(false)
 const newFlowName = ref('')
+const showRenameFlow = ref(false)
+const renameFlowName = ref('')
+const deleteFlowTarget = ref(null)
 const keyModifiers = ref({ shift: false, ctrl: false, alt: false })
 const branchForm = ref(getDefaultBranchForm())
 
@@ -750,9 +778,52 @@ async function detachFlow() {
   await assignFlow()
 }
 
+function startRenameFlow() {
+  if (!currentFlow.value) return
+  renameFlowName.value = currentFlow.value.name
+  showRenameFlow.value = true
+}
+
+async function renameFlow() {
+  const name = renameFlowName.value.trim()
+  if (!name) return
+  if (availableFlows.value.some(f => f.name.toLowerCase() === name.toLowerCase() && f.id !== selectedFlowId.value)) {
+    alert(`A trigger flow named "${name}" already exists`)
+    return
+  }
+  await api.patch(`/trigger-flows/${selectedFlowId.value}`, { name })
+  showRenameFlow.value = false
+  await loadFlows()
+  await loadFlow(selectedFlowId.value)
+}
+
+function startDeleteFlow() {
+  if (!currentFlow.value) return
+  if (currentFlow.value.branches && currentFlow.value.branches.length > 0) {
+    alert('Remove all branches before deleting this flow')
+    return
+  }
+  deleteFlowTarget.value = currentFlow.value
+}
+
+async function confirmDeleteFlow() {
+  if (!deleteFlowTarget.value) return
+  await api.delete(`/trigger-flows/${deleteFlowTarget.value.id}`)
+  deleteFlowTarget.value = null
+  selectedFlowId.value = ''
+  currentFlow.value = null
+  await loadFlows()
+  await api.patch(`/playlists/${playlist.value.id}`, { trigger_flow_id: null })
+  await loadPlaylist()
+}
+
 async function createFlow() {
   const name = newFlowName.value.trim()
   if (!name) return
+  if (availableFlows.value.some(f => f.name.toLowerCase() === name.toLowerCase())) {
+    alert(`A trigger flow named "${name}" already exists`)
+    return
+  }
   const flow = await api.post('/trigger-flows', { name })
   newFlowName.value = ''
   showCreateFlow.value = false
@@ -1485,6 +1556,8 @@ h3 { margin-bottom: 0.8rem; color: #ddd; font-size: 1rem; }
 }
 
 .btn-flow:hover { background: #3d3560; }
+.btn-flow.danger { color: #e57373; background: #2d1f1f; }
+.btn-flow.danger:hover { background: #3d2525; }
 .btn-flow.detach { color: #999; background: #252836; }
 .btn-flow.detach:hover { color: #fff; background: #3a3a5a; }
 

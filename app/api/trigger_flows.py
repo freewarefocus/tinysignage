@@ -82,6 +82,13 @@ async def create_flow(
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
 
+    # Check for duplicate name (case-insensitive)
+    existing = await session.execute(
+        select(TriggerFlow).where(func.lower(TriggerFlow.name) == name.strip().lower())
+    )
+    if existing.scalars().first():
+        raise HTTPException(status_code=409, detail=f"A trigger flow named '{name.strip()}' already exists")
+
     flow = TriggerFlow(
         name=name,
         description=body.get("description"),
@@ -136,6 +143,18 @@ async def update_flow(
     if not flow:
         raise HTTPException(status_code=404, detail="Trigger flow not found")
 
+    # Check for duplicate name (case-insensitive, excluding current flow)
+    if "name" in body and body["name"]:
+        new_name = body["name"].strip()
+        existing = await session.execute(
+            select(TriggerFlow).where(
+                func.lower(TriggerFlow.name) == new_name.lower(),
+                TriggerFlow.id != flow_id,
+            )
+        )
+        if existing.scalars().first():
+            raise HTTPException(status_code=409, detail=f"A trigger flow named '{new_name}' already exists")
+
     allowed = {"name", "description"}
     for key, value in body.items():
         if key in allowed:
@@ -164,6 +183,13 @@ async def delete_flow(
     flow = await session.get(TriggerFlow, flow_id)
     if not flow:
         raise HTTPException(status_code=404, detail="Trigger flow not found")
+
+    # Require empty branches before deletion
+    branch_count = await session.scalar(
+        select(func.count(TriggerBranch.id)).where(TriggerBranch.flow_id == flow_id)
+    )
+    if branch_count > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete a flow that has branches. Remove all branches first.")
 
     # Clear trigger_flow_id on any playlists referencing this flow
     result = await session.execute(
