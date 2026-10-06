@@ -1105,7 +1105,7 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
     if mode in ("both", "player"):
         if mode == "player":
             packages.append("python3-yaml")  # launcher.py needs PyYAML
-        packages.append("chromium")
+        packages.extend(["chromium", "python3-dev"])
         if lite:
             info("Detected Pi OS Lite — will install X11 kiosk (matchbox)")
             packages.extend(["xserver-xorg", "xinit",
@@ -1408,6 +1408,36 @@ def create_directories(install_dir):
     """Create media/, db/, logs/, certs/ directories."""
     for d in ["media", "media/thumbs", "db", "logs", "certs"]:
         os.makedirs(os.path.join(install_dir, d), exist_ok=True)
+
+
+def generate_bridge_certs(install_dir):
+    """Generate self-signed TLS cert/key for the GPIO bridge (WSS).
+
+    Idempotent — skips if both files already exist. Uses openssl CLI
+    so it works outside of any Python venv.
+    """
+    cert_dir = os.path.join(install_dir, "certs")
+    cert_path = os.path.join(cert_dir, "cert.pem")
+    key_path = os.path.join(cert_dir, "key.pem")
+
+    if os.path.isfile(cert_path) and os.path.isfile(key_path):
+        info("TLS certificates already exist — skipping generation.")
+        return
+
+    os.makedirs(cert_dir, exist_ok=True)
+    run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}", cert_dir])
+
+    run_cmd([
+        "openssl", "req", "-x509", "-newkey", "rsa:2048",
+        "-keyout", key_path, "-out", cert_path,
+        "-days", "3650", "-nodes",
+        "-subj", "/CN=localhost",
+    ])
+    run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}", cert_path])
+    run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}", key_path])
+    os.chmod(cert_path, 0o644)
+    os.chmod(key_path, 0o640)
+    info("Generated self-signed TLS certificate for bridge WSS.")
 
 
 def generate_config_env(install_dir):
@@ -2778,7 +2808,7 @@ def _uninstall_desktop(plat, install_dir, keep_data):
 # Main install flows
 # =========================================================================
 
-def install_pi(install_dir, display_name, non_interactive, mode="both", server_url=None, port=DEFAULT_PORT):
+def install_pi(install_dir, display_name, non_interactive, mode="both", server_url=None, port=DEFAULT_PORT, install_bridge=False):
     """Full Raspberry Pi install."""
     if os.geteuid() != 0:
         error_exit("Pi install requires root. Run: sudo python3 install.py")
@@ -2820,7 +2850,8 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
     if mode == "player":
         # Player-only: minimal setup, no backend needed
         print("=== Player Setup ===\n")
-        total = 2
+        needs_certs = server_url and server_url.startswith("https://")
+        total = 3 if needs_certs else 2
 
         step(1, total, "Creating directories...")
         run_as_user(SERVICE_USER, [
@@ -2831,7 +2862,11 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
             "mkdir", "-p", os.path.join(install_dir, "logs"),
         ])
 
-        step(2, total, "Configuring CMS server connection...")
+        if needs_certs:
+            step(2, total, "Generating TLS certificates for GPIO bridge...")
+            generate_bridge_certs(install_dir)
+
+        step(total, total, "Configuring CMS server connection...")
         update_config_yaml(install_dir, display_name=display_name,
                            server_url=server_url, clear_device_id=True)
         run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}",
@@ -2891,6 +2926,21 @@ def install_pi(install_dir, display_name, non_interactive, mode="both", server_u
 
         step(6, total, "Initializing database...")
         run_as_user(SERVICE_USER, [venv_python, "-c", DB_INIT_SCRIPT], cwd=install_dir)
+
+    # Optional GPIO bridge install (Pi player/both modes only)
+    if mode in ("both", "player"):
+        bridge_installer = os.path.join(install_dir, "tinysignage-bridge", "install.py")
+        if os.path.isfile(bridge_installer):
+            do_bridge = install_bridge  # explicit CLI flag
+            if not do_bridge and not non_interactive:
+                print()
+                print("The GPIO Bridge connects physical arcade buttons and USB gamepads")
+                print("to TinySignage. Skip this if you don't have buttons wired up.\n")
+                do_bridge = prompt_yn("Install the GPIO bridge?", default=False)
+            if do_bridge:
+                print("\n=== GPIO Bridge ===\n")
+                bridge_args = ["python3", bridge_installer, "--non-interactive"]
+                run_cmd(bridge_args)
 
     # Success
     print()
@@ -3078,6 +3128,10 @@ def main():
         "--non-interactive", action="store_true",
         help="skip all prompts, use defaults",
     )
+    parser.add_argument(
+        "--install-bridge", action="store_true",
+        help="also install the GPIO bridge (Pi only, for arcade buttons / gamepads)",
+    )
     args = parser.parse_args()
 
     if args.update and args.uninstall:
@@ -3118,7 +3172,8 @@ def main():
     port = args.port
 
     if plat == "pi":
-        install_pi(install_dir, args.display_name, args.non_interactive, mode, server_url, port)
+        install_pi(install_dir, args.display_name, args.non_interactive, mode, server_url, port,
+                   install_bridge=args.install_bridge)
     else:
         install_desktop(plat, install_dir, args.non_interactive, mode, server_url, port)
 

@@ -149,14 +149,81 @@ def error_exit(message):
 # =========================================================================
 
 def detect_tls():
-    """Check if the main TinySignage server has TLS enabled."""
+    """Check if TLS is needed for the bridge WebSocket.
+
+    Two independent signals (either one → TLS needed):
+    1. Split deployment: server_url in config.yaml starts with https://
+    2. Co-located: server.https.enabled is true in config.yaml
+    """
     try:
         with open(MAIN_CONFIG, "r") as f:
-            for line in f:
-                if "enabled: true" in line:
-                    return True
+            lines = f.readlines()
     except FileNotFoundError:
-        pass
+        return False
+
+    # Signal 1: server_url starts with https://
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("server_url:"):
+            value = stripped.split(":", 1)[1].strip().strip('"').strip("'")
+            if value.startswith("https://"):
+                return True
+
+    # Signal 2: server.https.enabled — look for "enabled: true" only
+    # under a "server:" → "https:" section (indentation-aware)
+    in_server = False
+    in_https = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip())
+        if indent == 0:
+            in_server = stripped.startswith("server:")
+            in_https = False
+        elif in_server and indent <= 4 and stripped.startswith("https:"):
+            in_https = True
+        elif in_server and in_https and stripped.startswith("enabled:"):
+            value = stripped.split(":", 1)[1].strip()
+            if value == "true":
+                return True
+            in_https = False  # found the key, stop looking
+
+    return False
+
+
+def ensure_bridge_certs():
+    """Generate self-signed TLS cert/key if missing. Returns True on success."""
+    cert_path = os.path.join(CERT_DIR, "cert.pem")
+    key_path = os.path.join(CERT_DIR, "key.pem")
+
+    if os.path.isfile(cert_path) and os.path.isfile(key_path):
+        info("TLS certificates already exist.")
+        return True
+
+    os.makedirs(CERT_DIR, exist_ok=True)
+
+    result = run_cmd([
+        "openssl", "req", "-x509", "-newkey", "rsa:2048",
+        "-keyout", key_path, "-out", cert_path,
+        "-days", "3650", "-nodes",
+        "-subj", "/CN=localhost",
+    ], check=False, capture=True)
+
+    if result and result.returncode == 0:
+        run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}", cert_path], check=False)
+        run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}", key_path], check=False)
+        os.chmod(cert_path, 0o644)
+        os.chmod(key_path, 0o640)
+        info("Generated self-signed TLS certificate for bridge WSS.")
+        return True
+
+    warn("Failed to generate TLS certificates.")
+    warn("The bridge will fall back to plain ws:// (may not work with HTTPS player).")
+    # Clean up partial files
+    for p in (cert_path, key_path):
+        if os.path.isfile(p):
+            os.remove(p)
     return False
 
 
@@ -290,10 +357,10 @@ def install_system_packages():
     """Step 1: apt-get python3-lgpio."""
     step(1, TOTAL_STEPS, "Installing system packages...")
     run_cmd(
-        ["apt-get", "install", "-y", "-qq", "python3-lgpio"],
+        ["apt-get", "install", "-y", "-qq", "python3-lgpio", "python3-dev"],
         capture=True,
     )
-    info("python3-lgpio installed (GPIO pin factory for Pi 5).")
+    info("python3-lgpio + python3-dev installed.")
 
 
 def setup_python_env():
@@ -360,28 +427,30 @@ def setup_hardware_access():
 
 
 def configure_connection(pins_preset, joystick_enabled):
-    """Step 4: TLS detect, write config.yaml."""
+    """Step 4: TLS detect, generate certs if needed, write config.yaml."""
     step(4, TOTAL_STEPS, "Configuring connection security...")
 
     tls_enabled = detect_tls()
     if tls_enabled:
-        info("TLS enabled (matching main server HTTPS).")
-        # Ensure cert permissions
-        if os.path.isdir(CERT_DIR):
-            for pem in ("cert.pem", "key.pem"):
-                path = os.path.join(CERT_DIR, pem)
-                if os.path.isfile(path):
-                    run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}", path],
-                            check=False)
-            cert = os.path.join(CERT_DIR, "cert.pem")
-            key = os.path.join(CERT_DIR, "key.pem")
-            if os.path.isfile(cert):
-                os.chmod(cert, 0o644)
-            if os.path.isfile(key):
-                os.chmod(key, 0o600)
-            info("Cert access verified for bridge TLS.")
+        info("TLS needed (player loads over HTTPS).")
+        cert_path = os.path.join(CERT_DIR, "cert.pem")
+        key_path = os.path.join(CERT_DIR, "key.pem")
+
+        if os.path.isfile(cert_path) and os.path.isfile(key_path):
+            # Certs exist (pre-generated by main installer or previous run)
+            run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}", cert_path],
+                    check=False)
+            run_cmd(["chown", f"{SERVICE_USER}:{SERVICE_USER}", key_path],
+                    check=False)
+            os.chmod(cert_path, 0o644)
+            os.chmod(key_path, 0o640)
+            info("Existing TLS certificates verified.")
+        else:
+            # Generate certs — bridge must be self-sufficient
+            if not ensure_bridge_certs():
+                tls_enabled = False
     else:
-        info("TLS disabled (main server not using HTTPS).")
+        info("TLS disabled (player loads over HTTP).")
 
     # Stop service before overwriting config (if already running)
     run_cmd(
