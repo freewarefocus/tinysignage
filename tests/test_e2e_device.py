@@ -117,7 +117,8 @@ async def test_device_goes_offline_via_watchdog(client, session, engine):
         result = await wd_session.execute(select(Device))
         devices = result.scalars().all()
         for d in devices:
-            last_contact = d.last_heartbeat or d.last_seen
+            timestamps = [t for t in (d.last_heartbeat, d.last_seen) if t]
+            last_contact = max(timestamps) if timestamps else None
             if last_contact:
                 seconds_since = (now - last_contact).total_seconds()
                 if seconds_since > 120 and d.status == "online":

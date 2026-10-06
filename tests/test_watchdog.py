@@ -104,3 +104,22 @@ async def test_falls_back_to_last_seen(engine, session):
 
     await session.refresh(device)
     assert device.status == "offline"
+
+
+async def test_fresh_last_seen_overrides_stale_heartbeat(engine, session):
+    """Stale last_heartbeat but fresh last_seen -> stays 'online'."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    device = await create_device(
+        session, status="online",
+        last_heartbeat=now - timedelta(seconds=300),
+        last_seen=now - timedelta(seconds=30),
+    )
+    await session.commit()
+
+    test_session_maker = async_sessionmaker(engine, expire_on_commit=False)
+    with patch("app.watchdog.async_session", test_session_maker):
+        watchdog = Watchdog()
+        await watchdog._check_devices()
+
+    await session.refresh(device)
+    assert device.status == "online"

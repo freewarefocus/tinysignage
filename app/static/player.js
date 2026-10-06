@@ -522,6 +522,15 @@
                     PlayerLog.info('Re-bootstrap succeeded, retrying poll');
                     return;  // Next scheduled poll will use the new token
                 }
+                // Remote device: keep credentials and retry on next poll.
+                // A transient 401 (server restart, migration) will resolve
+                // on its own; wiping credentials would brick the device
+                // since there's no local bootstrap to recover from.
+                if (baseUrl) {
+                    PlayerLog.warn('Remote device — keeping credentials, will retry');
+                    setOnlineStatus(false);
+                    return;
+                }
                 localStorage.removeItem('tinysignage_device_id');
                 localStorage.removeItem('tinysignage_device_token');
                 deviceId = '';

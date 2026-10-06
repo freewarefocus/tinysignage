@@ -37,9 +37,10 @@ class Watchdog:
             devices = result.scalars().all()
 
             for device in devices:
-                # Use last_heartbeat if available, fall back to last_seen
+                # Use whichever timestamp is more recent
                 # (polling updates last_seen; heartbeat updates both)
-                last_contact = device.last_heartbeat or device.last_seen
+                timestamps = [t for t in (device.last_heartbeat, device.last_seen) if t]
+                last_contact = max(timestamps) if timestamps else None
                 if last_contact:
                     seconds_since = (now - last_contact).total_seconds()
                     if seconds_since > STALE_THRESHOLD and device.status == "online":
