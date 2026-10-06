@@ -1230,3 +1230,112 @@ html[data-theme="light"] .upload-progress {
 html[data-theme="light"] .upload-error {
   color: #d32f2f;
 }
+
+/* ---- PlaylistEditor.vue: TriggerFlow ---- */
+
+html[data-theme="light"] .trigger-panel {
+  background: #ffffff;
+  border-color: #e0e0e0;
+}
+html[data-theme="light"] .trigger-panel-header {
+  color: #5a61d6;
+}
+html[data-theme="light"] .trigger-placeholder {
+  color: #888;
+}
+html[data-theme="light"] .preset-intro {
+  color: #888;
+}
+html[data-theme="light"] .preset-card {
+  background: #f8f9fb;
+  border-color: #e0e0e0;
+}
+html[data-theme="light"] .preset-card:hover {
+  border-color: #5a61d6;
+  box-shadow: 0 0 0 1px rgba(90,97,214,0.2);
+}
+html[data-theme="light"] .preset-icon {
+  color: #5a61d6;
+}
+html[data-theme="light"] .preset-name {
+  color: #333;
+}
+html[data-theme="light"] .preset-desc {
+  color: #888;
+}
+html[data-theme="light"] .flow-select {
+  background: #f8f9fb;
+  border-color: #ccc;
+  color: #333;
+}
+html[data-theme="light"] .flow-select:focus {
+  border-color: #5a61d6;
+}
+html[data-theme="light"] .btn-flow {
+  background: #eef0ff;
+  color: #5a61d6;
+}
+html[data-theme="light"] .btn-flow:hover {
+  background: #dde0f5;
+}
+html[data-theme="light"] .btn-flow.danger {
+  color: #d32f2f;
+  background: #fce4ec;
+}
+html[data-theme="light"] .btn-flow.danger:hover {
+  background: #f8d7da;
+}
+html[data-theme="light"] .btn-flow.detach {
+  color: #888;
+  background: #f0f1f5;
+}
+html[data-theme="light"] .btn-flow.detach:hover {
+  color: #333;
+  background: #e0e1e8;
+}
+html[data-theme="light"] .btn-add-branch {
+  background: #eef0ff;
+  color: #5a61d6;
+}
+html[data-theme="light"] .btn-add-branch:hover {
+  background: #dde0f5;
+}
+html[data-theme="light"] .branch-row {
+  background: #f8f9fb;
+  border-color: #e0e0e0;
+}
+html[data-theme="light"] .branch-playlist {
+  color: #333;
+}
+html[data-theme="light"] .branch-trigger-icon {
+  color: #5a61d6;
+}
+html[data-theme="light"] .branch-type-label {
+  color: #888;
+}
+html[data-theme="light"] .branch-arrow {
+  color: #999;
+}
+html[data-theme="light"] .branch-priority {
+  color: #555;
+  background: #eef0ff;
+}
+html[data-theme="light"] .branch-form {
+  background: #f8f9fb;
+  border-color: #e0e0e0;
+}
+html[data-theme="light"] .branch-form h4 {
+  color: #5a61d6;
+}
+html[data-theme="light"] .config-label {
+  color: #5a61d6;
+}
+html[data-theme="light"] .config-hint {
+  color: #999;
+}
+html[data-theme="light"] .check-label {
+  color: #555;
+}
+html[data-theme="light"] .check-label input[type="checkbox"] {
+  accent-color: #5a61d6;
+}
