@@ -410,9 +410,9 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-h2 { color: #fff; }
-h3 { color: #fff; margin-bottom: 0.5rem; }
-h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
+h2 { color: var(--text-primary); }
+h3 { color: var(--text-primary); margin-bottom: 0.5rem; }
+h4 { color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem; }
 
 .page-header {
   display: flex;
@@ -425,7 +425,7 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background: #7c83ff;
+  background: var(--accent);
   color: #fff;
   border: none;
   padding: 0.5rem 1rem;
@@ -433,13 +433,13 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
   cursor: pointer;
   font-size: 0.85rem;
 }
-.btn-primary:hover { background: #6b72ee; }
+.btn-primary:hover { background: var(--accent-hover); }
 .btn-primary:disabled { opacity: 0.5; cursor: default; }
 .btn-primary.btn-sm { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
 
 .btn-secondary {
-  background: #3a3a5a;
-  color: #ccc;
+  background: var(--border-strong);
+  color: var(--text-secondary);
   border: none;
   padding: 0.5rem 1rem;
   border-radius: 6px;
@@ -451,12 +451,12 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
 .btn-icon {
   background: none;
   border: none;
-  color: #888;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 0.3rem;
   border-radius: 4px;
 }
-.btn-icon:hover { color: #fff; }
+.btn-icon:hover { color: var(--text-primary); }
 
 .btn-danger {
   display: flex;
@@ -476,9 +476,9 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
 .loading, .empty {
   text-align: center;
   padding: 3rem;
-  color: #666;
+  color: var(--text-faint);
 }
-.empty strong { color: #7c83ff; }
+.empty strong { color: var(--accent); }
 
 /* Dialog */
 .dialog-overlay {
@@ -492,12 +492,12 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
 }
 
 .dialog {
-  background: #1a1d27;
+  background: var(--bg-surface);
   border-radius: 10px;
   padding: 1.5rem;
   width: 420px;
   max-width: 90vw;
-  border: 1px solid #2a2d3a;
+  border: 1px solid var(--border);
 }
 
 .editor-dialog {
@@ -513,24 +513,24 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
   align-items: center;
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid #2a2d3a;
+  border-bottom: 1px solid var(--border);
 }
 
 .dialog input, .dialog select {
   width: 100%;
-  background: #0f1117;
-  border: 1px solid #3a3a5a;
-  color: #eee;
+  background: var(--bg-page);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
   outline: none;
   font-size: 0.9rem;
   margin-bottom: 0.75rem;
 }
-.dialog input:focus, .dialog select:focus { border-color: #7c83ff; }
+.dialog input:focus, .dialog select:focus { border-color: var(--accent); }
 
 .dialog p {
-  color: #aaa;
+  color: var(--text-secondary);
   font-size: 0.9rem;
   margin-bottom: 0.75rem;
   line-height: 1.5;
@@ -550,14 +550,14 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
 }
 
 .layout-card {
-  background: #1a1d27;
+  background: var(--bg-surface);
   border-radius: 8px;
   padding: 1rem 1.2rem;
   cursor: pointer;
   border: 1px solid transparent;
   transition: border-color 0.15s;
 }
-.layout-card:hover { border-color: #7c83ff; }
+.layout-card:hover { border-color: var(--accent); }
 
 .card-header {
   display: flex;
@@ -565,9 +565,9 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
   align-items: center;
   margin-bottom: 0.4rem;
 }
-.card-name { font-size: 1rem; font-weight: 500; color: #fff; }
-.card-count { font-size: 0.8rem; color: #888; }
-.card-desc { font-size: 0.85rem; color: #999; margin-bottom: 0.5rem; }
+.card-name { font-size: 1rem; font-weight: 500; color: var(--text-primary); }
+.card-count { font-size: 0.8rem; color: var(--text-muted); }
+.card-desc { font-size: 0.85rem; color: var(--text-tertiary); margin-bottom: 0.5rem; }
 
 .card-actions {
   display: flex;
@@ -580,15 +580,15 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
   position: relative;
   width: 100%;
   height: 80px;
-  background: #0f1117;
+  background: var(--bg-page);
   border-radius: 4px;
   overflow: hidden;
 }
 
 .mini-zone {
   position: absolute;
-  background: rgba(124, 131, 255, 0.3);
-  border: 1px solid rgba(124, 131, 255, 0.6);
+  background: rgba(var(--accent-rgb), 0.3);
+  border: 1px solid rgba(var(--accent-rgb), 0.6);
   border-radius: 2px;
 }
 
@@ -602,7 +602,7 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
   width: 100%;
   aspect-ratio: 16 / 9;
   background: #0a0b10;
-  border: 2px solid #2a2d3a;
+  border: 2px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
   cursor: default;
@@ -611,8 +611,8 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
 
 .preview-zone {
   position: absolute;
-  background: rgba(124, 131, 255, 0.15);
-  border: 2px solid rgba(124, 131, 255, 0.5);
+  background: rgba(var(--accent-rgb), 0.15);
+  border: 2px solid rgba(var(--accent-rgb), 0.5);
   border-radius: 4px;
   cursor: move;
   transition: border-color 0.15s;
@@ -625,8 +625,8 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
 }
 
 .preview-zone.selected {
-  border-color: #7c83ff;
-  background: rgba(124, 131, 255, 0.25);
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.25);
 }
 
 .preview-zone.dragging {
@@ -642,14 +642,14 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
 
 .zone-type-badge {
   font-size: 0.6rem;
-  color: #7c83ff;
+  color: var(--accent);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .zone-playlist-label {
   font-size: 0.6rem;
-  color: #888;
+  color: var(--text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow: hidden;
@@ -664,7 +664,7 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
   width: 14px;
   height: 14px;
   cursor: se-resize;
-  background: linear-gradient(135deg, transparent 50%, #7c83ff 50%);
+  background: linear-gradient(135deg, transparent 50%, var(--accent) 50%);
   border-radius: 0 0 2px 0;
 }
 
@@ -675,7 +675,7 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
 
 /* Zone properties */
 .zone-props {
-  background: #0f1117;
+  background: var(--bg-page);
   border-radius: 6px;
   padding: 1rem;
   margin-bottom: 1rem;
@@ -691,7 +691,7 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
 .prop-field label {
   display: block;
   font-size: 0.7rem;
-  color: #666;
+  color: var(--text-faint);
   text-transform: uppercase;
   letter-spacing: 0.3px;
   margin-bottom: 0.2rem;
@@ -699,20 +699,20 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
 
 .prop-field input, .prop-field select {
   width: 100%;
-  background: #1a1d27;
-  border: 1px solid #3a3a5a;
-  color: #eee;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   padding: 0.35rem 0.5rem;
   border-radius: 4px;
   font-size: 0.85rem;
   outline: none;
   margin-bottom: 0;
 }
-.prop-field input:focus, .prop-field select:focus { border-color: #7c83ff; }
+.prop-field input:focus, .prop-field select:focus { border-color: var(--accent); }
 
 /* Zone list */
 .zone-list {
-  border-top: 1px solid #2a2d3a;
+  border-top: 1px solid var(--border);
   padding-top: 0.75rem;
 }
 
@@ -725,11 +725,11 @@ h4 { color: #ccc; margin-bottom: 0.5rem; font-size: 0.9rem; }
   cursor: pointer;
   transition: background 0.1s;
 }
-.zone-list-item:hover { background: #1e2130; }
-.zone-list-item.active { background: #252840; }
+.zone-list-item:hover { background: var(--border); }
+.zone-list-item.active { background: var(--bg-raised); }
 
-.zone-list-name { color: #ddd; font-size: 0.85rem; font-weight: 500; flex: 1; }
-.zone-list-type { color: #7c83ff; font-size: 0.75rem; text-transform: uppercase; }
-.zone-list-pl { color: #888; font-size: 0.8rem; }
+.zone-list-name { color: var(--text); font-size: 0.85rem; font-weight: 500; flex: 1; }
+.zone-list-type { color: var(--accent); font-size: 0.75rem; text-transform: uppercase; }
+.zone-list-pl { color: var(--text-muted); font-size: 0.8rem; }
 
 </style>

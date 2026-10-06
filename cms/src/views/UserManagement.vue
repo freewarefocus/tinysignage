@@ -287,7 +287,7 @@ onMounted(async () => {
 
 .page-header h2 {
   font-size: 1.3rem;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .users-table {
@@ -301,13 +301,13 @@ onMounted(async () => {
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #888;
-  border-bottom: 1px solid #2a2d3a;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
 }
 
 .users-table td {
   padding: 0.7rem 0.8rem;
-  border-bottom: 1px solid #1e2130;
+  border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
 }
 
@@ -320,7 +320,7 @@ onMounted(async () => {
   text-transform: capitalize;
 }
 
-.role-admin { background: #7c83ff22; color: #7c83ff; }
+.role-admin { background: rgba(var(--accent-rgb),0.13); color: var(--accent); }
 .role-editor { background: #4caf5022; color: #4caf50; }
 .role-viewer { background: #ff980022; color: #ff9800; }
 
@@ -329,7 +329,7 @@ onMounted(async () => {
 }
 
 .status-badge.active { color: #4caf50; }
-.status-badge.inactive { color: #888; }
+.status-badge.inactive { color: var(--text-muted); }
 
 .actions {
   display: flex;
@@ -338,19 +338,19 @@ onMounted(async () => {
 
 .btn-icon {
   background: none;
-  border: 1px solid #3a3a5a;
-  color: #ccc;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
   padding: 0.3rem 0.5rem;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.8rem;
 }
 
-.btn-icon:hover { background: #252836; color: #fff; }
+.btn-icon:hover { background: var(--bg-raised); color: var(--text-primary); }
 .btn-icon.btn-danger:hover { background: #ef535033; color: #ef5350; }
 
 .btn-primary {
-  background: #7c83ff;
+  background: var(--accent);
   color: #fff;
   border: none;
   padding: 0.5rem 1rem;
@@ -362,11 +362,11 @@ onMounted(async () => {
   gap: 0.4rem;
 }
 
-.btn-primary:hover { background: #6b72e8; }
+.btn-primary:hover { background: var(--accent-hover); }
 
 .btn-secondary {
-  background: #2a2d3a;
-  color: #ccc;
+  background: var(--border);
+  color: var(--text-secondary);
   border: none;
   padding: 0.5rem 1rem;
   border-radius: 6px;
@@ -395,8 +395,8 @@ onMounted(async () => {
 }
 
 .modal {
-  background: #1a1d27;
-  border: 1px solid #2a2d3a;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1.5rem;
   width: 100%;
@@ -404,14 +404,14 @@ onMounted(async () => {
 }
 
 .modal h3 {
-  color: #fff;
+  color: var(--text-primary);
   margin-bottom: 1rem;
 }
 
 .modal label {
   display: block;
   font-size: 0.85rem;
-  color: #aaa;
+  color: var(--text-secondary);
   margin-bottom: 0.3rem;
   margin-top: 0.5rem;
 }
@@ -419,9 +419,9 @@ onMounted(async () => {
 .modal input[type="text"],
 .modal input[type="password"] {
   width: 100%;
-  background: #0f1117;
-  border: 1px solid #3a3a5a;
-  color: #eee;
+  background: var(--bg-page);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   padding: 0.5rem;
   border-radius: 4px;
   font-size: 0.9rem;
@@ -430,7 +430,7 @@ onMounted(async () => {
 .modal input[type="text"]:focus,
 .modal input[type="password"]:focus {
   outline: none;
-  border-color: #7c83ff;
+  border-color: var(--accent);
 }
 
 .modal input[type="checkbox"] {
@@ -439,9 +439,9 @@ onMounted(async () => {
 
 .modal select {
   width: 100%;
-  background: #0f1117;
-  border: 1px solid #3a3a5a;
-  color: #eee;
+  background: var(--bg-page);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   padding: 0.5rem;
   border-radius: 4px;
   font-size: 0.9rem;
@@ -461,7 +461,7 @@ onMounted(async () => {
 }
 
 .loading {
-  color: #888;
+  color: var(--text-muted);
   padding: 2rem;
   text-align: center;
 }
@@ -483,7 +483,7 @@ select:disabled {
   display: flex;
   align-items: flex-start;
   gap: 0.4rem;
-  color: #7c83ff;
+  color: var(--accent);
   font-size: 0.8rem;
   margin: 0.3rem 0 0.5rem;
   line-height: 1.4;
@@ -505,8 +505,8 @@ button:disabled {
   gap: 0.3rem;
   max-height: 150px;
   overflow-y: auto;
-  background: #0f1117;
-  border: 1px solid #3a3a5a;
+  background: var(--bg-page);
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
   padding: 0.5rem;
 }
@@ -516,7 +516,7 @@ button:disabled {
   align-items: center;
   gap: 0.4rem;
   font-size: 0.85rem;
-  color: #ddd;
+  color: var(--text);
   cursor: pointer;
   margin: 0;
 }

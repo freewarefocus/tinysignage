@@ -184,8 +184,8 @@ onMounted(loadPlaylists)
 </script>
 
 <style scoped>
-h2 { color: #fff; }
-h3 { color: #fff; margin-bottom: 1rem; }
+h2 { color: var(--text-primary); }
+h3 { color: var(--text-primary); margin-bottom: 1rem; }
 
 .page-header {
   display: flex;
@@ -198,7 +198,7 @@ h3 { color: #fff; margin-bottom: 1rem; }
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background: #7c83ff;
+  background: var(--accent);
   color: #fff;
   border: none;
   padding: 0.5rem 1rem;
@@ -208,12 +208,12 @@ h3 { color: #fff; margin-bottom: 1rem; }
   transition: background 0.15s;
 }
 
-.btn-primary:hover { background: #6b72ee; }
+.btn-primary:hover { background: var(--accent-hover); }
 .btn-primary:disabled { opacity: 0.5; cursor: default; }
 
 .btn-secondary {
-  background: #3a3a5a;
-  color: #ccc;
+  background: var(--border-strong);
+  color: var(--text-secondary);
   border: none;
   padding: 0.5rem 1rem;
   border-radius: 6px;
@@ -236,21 +236,21 @@ h3 { color: #fff; margin-bottom: 1rem; }
 .btn-icon {
   background: none;
   border: none;
-  color: #888;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 0.3rem;
   border-radius: 4px;
   transition: color 0.15s;
 }
 
-.btn-icon:hover { color: #fff; }
+.btn-icon:hover { color: var(--text-primary); }
 .btn-icon:disabled { opacity: 0.3; cursor: default; }
-.btn-icon:disabled:hover { color: #888; }
+.btn-icon:disabled:hover { color: var(--text-muted); }
 
 .loading, .empty {
   text-align: center;
   padding: 3rem;
-  color: #666;
+  color: var(--text-faint);
 }
 
 .playlist-grid {
@@ -260,7 +260,7 @@ h3 { color: #fff; margin-bottom: 1rem; }
 }
 
 .playlist-card {
-  background: #1a1d27;
+  background: var(--bg-surface);
   border-radius: 8px;
   padding: 1rem 1.2rem;
   cursor: pointer;
@@ -269,8 +269,8 @@ h3 { color: #fff; margin-bottom: 1rem; }
 }
 
 .playlist-card:hover {
-  border-color: #7c83ff;
-  background: #1e2130;
+  border-color: var(--accent);
+  background: var(--border);
 }
 
 .card-header {
@@ -291,15 +291,15 @@ h3 { color: #fff; margin-bottom: 1rem; }
 .card-name {
   font-size: 1rem;
   font-weight: 500;
-  color: #fff;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .default-badge {
-  background: #252836;
-  color: #7c83ff;
+  background: var(--bg-raised);
+  color: var(--accent);
   font-size: 0.65rem;
   padding: 2px 6px;
   border-radius: 3px;
@@ -310,7 +310,7 @@ h3 { color: #fff; margin-bottom: 1rem; }
 
 .mode-badge {
   background: #2d2545;
-  color: #a78bfa;
+  color: var(--accent-soft);
   font-size: 0.65rem;
   padding: 2px 6px;
   border-radius: 3px;
@@ -328,9 +328,9 @@ h3 { color: #fff; margin-bottom: 1rem; }
 .inline-edit {
   flex: 1;
   min-width: 0;
-  background: #0f1117;
-  border: 1px solid #7c83ff;
-  color: #eee;
+  background: var(--bg-page);
+  border: 1px solid var(--accent);
+  color: var(--text);
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
   outline: none;
@@ -347,14 +347,14 @@ h3 { color: #fff; margin-bottom: 1rem; }
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  color: #999;
+  color: var(--text-tertiary);
   font-size: 0.85rem;
 }
 
 .card-stat i { font-size: 0.8rem; }
 
 .card-meta {
-  color: #666;
+  color: var(--text-faint);
   font-size: 0.8rem;
 }
 
@@ -370,19 +370,19 @@ h3 { color: #fff; margin-bottom: 1rem; }
 }
 
 .dialog {
-  background: #1a1d27;
+  background: var(--bg-surface);
   border-radius: 10px;
   padding: 1.5rem;
   width: 380px;
   max-width: 90vw;
-  border: 1px solid #2a2d3a;
+  border: 1px solid var(--border);
 }
 
 .dialog input {
   width: 100%;
-  background: #0f1117;
-  border: 1px solid #3a3a5a;
-  color: #eee;
+  background: var(--bg-page);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
   outline: none;
@@ -390,10 +390,10 @@ h3 { color: #fff; margin-bottom: 1rem; }
   margin-bottom: 1rem;
 }
 
-.dialog input:focus { border-color: #7c83ff; }
+.dialog input:focus { border-color: var(--accent); }
 
 .dialog p {
-  color: #aaa;
+  color: var(--text-secondary);
   font-size: 0.9rem;
   margin-bottom: 1rem;
   line-height: 1.5;

@@ -152,14 +152,14 @@ function onDragEnd(e) {
   align-items: flex-start;
   gap: 0.75rem;
   padding: 0.5rem 0.75rem;
-  background: #1a1d27;
+  background: var(--bg-surface);
   border-radius: 6px;
   cursor: grab;
   transition: background 0.15s;
 }
 
 .playlist-row:hover {
-  background: #22252f;
+  background: var(--bg-inset);
 }
 
 .playlist-row.dragging {
@@ -167,7 +167,7 @@ function onDragEnd(e) {
 }
 
 .drag-handle {
-  color: #555;
+  color: var(--text-ghost);
   cursor: grab;
   padding-top: 0.4rem;
 }
@@ -178,7 +178,7 @@ function onDragEnd(e) {
   flex-shrink: 0;
   border-radius: 4px;
   overflow: hidden;
-  background: #0f1117;
+  background: var(--bg-page);
   margin-top: 0.15rem;
 }
 
@@ -197,7 +197,7 @@ function onDragEnd(e) {
 }
 
 .thumb-placeholder i {
-  color: #444;
+  color: var(--text-ghost);
   font-size: 1rem;
 }
 
@@ -218,7 +218,7 @@ function onDragEnd(e) {
 
 .row-name {
   font-size: 0.9rem;
-  color: #eee;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -229,12 +229,12 @@ function onDragEnd(e) {
   flex-wrap: wrap;
   gap: 0.35rem;
   font-size: 0.75rem;
-  color: #888;
+  color: var(--text-muted);
   margin-top: 2px;
 }
 
 .type-badge {
-  background: #252836;
+  background: var(--bg-raised);
   padding: 1px 5px;
   border-radius: 3px;
   text-transform: uppercase;
@@ -267,16 +267,16 @@ function onDragEnd(e) {
 
 .control-group label {
   font-size: 0.6rem;
-  color: #666;
+  color: var(--text-faint);
   text-transform: uppercase;
   letter-spacing: 0.3px;
   white-space: nowrap;
 }
 
 .control-group select {
-  background: #0f1117;
-  border: 1px solid #2a2d3a;
-  color: #aaa;
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   font-size: 0.7rem;
   padding: 2px 4px;
   border-radius: 4px;
@@ -284,13 +284,13 @@ function onDragEnd(e) {
   cursor: pointer;
 }
 
-.control-group select:focus { border-color: #7c83ff; }
+.control-group select:focus { border-color: var(--accent); }
 
 .num-input {
   width: 42px;
-  background: #0f1117;
-  border: 1px solid #2a2d3a;
-  color: #aaa;
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   font-size: 0.7rem;
   padding: 2px 4px;
   border-radius: 4px;
@@ -298,7 +298,7 @@ function onDragEnd(e) {
   text-align: center;
 }
 
-.num-input:focus { border-color: #7c83ff; }
+.num-input:focus { border-color: var(--accent); }
 
 .row-actions {
   padding-top: 0.3rem;
@@ -306,8 +306,8 @@ function onDragEnd(e) {
 
 .btn-remove {
   background: none;
-  border: 1px solid #3a3a5a;
-  color: #888;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
   width: 28px;
   height: 28px;
   border-radius: 4px;
@@ -325,8 +325,8 @@ function onDragEnd(e) {
 
 .btn-reset {
   background: none;
-  border: 1px solid #3a3a5a;
-  color: #888;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
   width: 28px;
   height: 28px;
   border-radius: 4px;
@@ -338,7 +338,7 @@ function onDragEnd(e) {
 }
 
 .btn-reset:hover {
-  color: #7c83ff;
-  border-color: #7c83ff;
+  color: var(--accent);
+  border-color: var(--accent);
 }
 </style>

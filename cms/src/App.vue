@@ -230,12 +230,43 @@ onUnmounted(() => {
 </script>
 
 <style>
+:root {
+  /* Backgrounds */
+  --bg-page: #0f1117;
+  --bg-surface: #1a1d27;
+  --bg-raised: #252836;
+  --bg-hover: #2f3348;
+  --bg-inset: #23242a;
+  --bg-accent: rgba(124,131,255,0.08);
+  /* Borders */
+  --border: #2a2d3a;
+  --border-strong: #3a3a5a;
+  /* Text */
+  --text-primary: #ffffff;
+  --text: #e0e0e0;
+  --text-secondary: #ccc;
+  --text-tertiary: #999;
+  --text-muted: #888;
+  --text-faint: #666;
+  --text-ghost: #555;
+  /* Accent */
+  --accent: #7c83ff;
+  --accent-hover: #6b72ee;
+  --accent-rgb: 124,131,255;
+  --accent-soft: #a78bfa;
+  --accent-soft-hover: #3d3560;
+  /* Scrollbar */
+  --scrollbar-track: #1a1d27;
+  --scrollbar-thumb: #3a3a5a;
+  --scrollbar-thumb-hover: #555;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
   font-family: system-ui, -apple-system, sans-serif;
-  background: #0f1117;
-  color: #e0e0e0;
+  background: var(--bg-page);
+  color: var(--text);
 }
 
 .app-layout {
@@ -245,8 +276,8 @@ body {
 
 .sidebar {
   width: 220px;
-  background: #1a1d27;
-  border-right: 1px solid #2a2d3a;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -254,7 +285,7 @@ body {
 
 .sidebar-header {
   padding: 1.2rem 1rem;
-  border-bottom: 1px solid #2a2d3a;
+  border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -263,7 +294,7 @@ body {
 .sidebar-header h1 {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .emergency-btn {
@@ -274,15 +305,15 @@ body {
   height: 32px;
   border-radius: 6px;
   background: rgba(153, 153, 153, 0.15);
-  color: #999;
+  color: var(--text-tertiary);
   text-decoration: none;
   transition: background 0.15s, color 0.15s;
   font-size: 0.95rem;
 }
 
 .emergency-btn:hover {
-  background: #252836;
-  color: #fff;
+  background: var(--bg-raised);
+  color: var(--text-primary);
 }
 
 .emergency-btn.override-active {
@@ -323,21 +354,21 @@ nav {
   align-items: center;
   gap: 0.75rem;
   padding: 0.7rem 1rem;
-  color: #999;
+  color: var(--text-tertiary);
   text-decoration: none;
   font-size: 0.9rem;
   transition: background 0.15s, color 0.15s;
 }
 
 .nav-item:hover {
-  background: #252836;
-  color: #fff;
+  background: var(--bg-raised);
+  color: var(--text-primary);
 }
 
 .nav-item.active {
-  background: #252836;
-  color: #7c83ff;
-  border-right: 3px solid #7c83ff;
+  background: var(--bg-raised);
+  color: var(--accent);
+  border-right: 3px solid var(--accent);
 }
 
 .nav-item i {
@@ -347,7 +378,7 @@ nav {
 }
 
 .sidebar-footer {
-  border-top: 1px solid #2a2d3a;
+  border-top: 1px solid var(--border);
   padding: 0.5rem 0;
 }
 
@@ -356,7 +387,7 @@ nav {
   align-items: center;
   justify-content: space-between;
   padding: 0.6rem 1rem;
-  border-top: 1px solid #2a2d3a;
+  border-top: 1px solid var(--border);
   margin-top: 0.3rem;
 }
 
@@ -368,7 +399,7 @@ nav {
 
 .user-name {
   font-size: 0.85rem;
-  color: #ddd;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -376,14 +407,14 @@ nav {
 
 .user-role {
   font-size: 0.7rem;
-  color: #888;
+  color: var(--text-muted);
   text-transform: capitalize;
 }
 
 .logout-btn {
   background: none;
   border: none;
-  color: #888;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 0.3rem;
   border-radius: 4px;
@@ -413,7 +444,7 @@ nav {
   padding: 0.55rem 0.5rem;
   background: none;
   border: none;
-  color: #999;
+  color: var(--text-tertiary);
   cursor: pointer;
   font-size: 0.9rem;
   border-radius: 4px;
@@ -421,8 +452,8 @@ nav {
 }
 
 .theme-toggle-btn:hover {
-  background: #252836;
-  color: #fff;
+  background: var(--bg-raised);
+  color: var(--text-primary);
 }
 
 .theme-toggle-btn i {
@@ -431,5 +462,5 @@ nav {
   text-align: center;
 }
 
-.form-hint { color: #666; font-size: 0.75rem; margin: 0.2rem 0 0.5rem; }
+.form-hint { color: var(--text-faint); font-size: 0.75rem; margin: 0.2rem 0 0.5rem; }
 </style>

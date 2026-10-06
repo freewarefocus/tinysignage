@@ -215,7 +215,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-h2 { margin-bottom: 1.5rem; color: #fff; }
+h2 { margin-bottom: 1.5rem; color: var(--text-primary); }
 
 .filters {
   display: flex;
@@ -226,18 +226,18 @@ h2 { margin-bottom: 1.5rem; color: #fff; }
 }
 
 .filter-select {
-  background: #1a1d27;
-  border: 1px solid #3a3a5a;
-  color: #eee;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   padding: 0.4rem 0.5rem;
   border-radius: 4px;
   font-size: 0.85rem;
 }
 
 .search-input {
-  background: #1a1d27;
-  border: 1px solid #3a3a5a;
-  color: #eee;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   padding: 0.4rem 0.7rem;
   border-radius: 4px;
   font-size: 0.85rem;
@@ -245,9 +245,9 @@ h2 { margin-bottom: 1.5rem; color: #fff; }
 }
 
 .filter-date {
-  background: #1a1d27;
-  border: 1px solid #3a3a5a;
-  color: #eee;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   padding: 0.35rem 0.5rem;
   border-radius: 4px;
   font-size: 0.82rem;
@@ -255,7 +255,7 @@ h2 { margin-bottom: 1.5rem; color: #fff; }
 }
 
 .date-sep {
-  color: #888;
+  color: var(--text-muted);
   font-size: 0.85rem;
 }
 
@@ -272,15 +272,15 @@ h2 { margin-bottom: 1.5rem; color: #fff; }
   cursor: default;
 }
 .btn-secondary {
-  background: #2a2d3a;
-  color: #ccc;
+  background: var(--border);
+  color: var(--text-secondary);
 }
 .btn-secondary:hover:not(:disabled) {
-  background: #3a3d4a;
+  background: var(--bg-hover);
 }
 
 .status-msg {
-  color: #888;
+  color: var(--text-muted);
   font-size: 0.9rem;
   padding: 1rem 0;
 }
@@ -292,14 +292,14 @@ h2 { margin-bottom: 1.5rem; color: #fff; }
 }
 .log-table th {
   text-align: left;
-  color: #888;
+  color: var(--text-muted);
   font-weight: 500;
   padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid #2a2d3a;
+  border-bottom: 1px solid var(--border);
 }
 .log-table td {
   padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid #1a1d27;
+  border-bottom: 1px solid var(--bg-surface);
   vertical-align: top;
 }
 
@@ -308,11 +308,11 @@ h2 { margin-bottom: 1.5rem; color: #fff; }
   transition: background 0.1s;
 }
 .log-row:hover {
-  background: #1e2130;
+  background: var(--border);
 }
 
 .ts {
-  color: #888;
+  color: var(--text-muted);
   font-size: 0.8rem;
   white-space: nowrap;
 }
@@ -323,12 +323,12 @@ h2 { margin-bottom: 1.5rem; color: #fff; }
 }
 
 .entity-type {
-  color: #aaa;
+  color: var(--text-secondary);
   text-transform: capitalize;
 }
 
 .details-summary {
-  color: #ccc;
+  color: var(--text-secondary);
   max-width: 300px;
   white-space: nowrap;
   overflow: hidden;
@@ -361,11 +361,11 @@ h2 { margin-bottom: 1.5rem; color: #fff; }
 }
 
 .detail-row td {
-  background: #12141c;
+  background: var(--bg-page);
   padding: 0.8rem 1rem;
 }
 .detail-json {
-  color: #ccc;
+  color: var(--text-secondary);
   font-family: 'Cascadia Code', 'Fira Code', monospace;
   font-size: 0.8rem;
   white-space: pre-wrap;
@@ -374,7 +374,7 @@ h2 { margin-bottom: 1.5rem; color: #fff; }
   line-height: 1.5;
 }
 .detail-meta {
-  color: #888;
+  color: var(--text-muted);
   font-size: 0.8rem;
 }
 
@@ -383,7 +383,7 @@ h2 { margin-bottom: 1.5rem; color: #fff; }
 }
 
 .total-count {
-  color: #888;
+  color: var(--text-muted);
   font-size: 0.8rem;
   margin-top: 0.5rem;
 }

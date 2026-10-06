@@ -80,11 +80,11 @@ async function handleLogin() {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: #0f1117;
+  background: var(--bg-page);
 }
 
 .login-card {
-  background: #1a1d27;
+  background: var(--bg-surface);
   padding: 2.5rem;
   border-radius: 12px;
   width: 100%;
@@ -93,12 +93,12 @@ async function handleLogin() {
 
 .login-card h1 {
   font-size: 1.5rem;
-  color: #fff;
+  color: var(--text-primary);
   margin-bottom: 0.3rem;
 }
 
 .subtitle {
-  color: #888;
+  color: var(--text-muted);
   font-size: 0.9rem;
   margin-bottom: 1.5rem;
 }
@@ -106,15 +106,15 @@ async function handleLogin() {
 label {
   display: block;
   font-size: 0.85rem;
-  color: #aaa;
+  color: var(--text-secondary);
   margin-bottom: 0.3rem;
 }
 
 input {
   width: 100%;
-  background: #0f1117;
-  border: 1px solid #3a3a5a;
-  color: #eee;
+  background: var(--bg-page);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   padding: 0.6rem;
   border-radius: 4px;
   margin-bottom: 1rem;
@@ -123,11 +123,11 @@ input {
 
 input:focus {
   outline: none;
-  border-color: #7c83ff;
+  border-color: var(--accent);
 }
 
 button {
-  background: #7c83ff;
+  background: var(--accent);
   color: #fff;
   border: none;
   padding: 0.7rem 2rem;
@@ -138,7 +138,7 @@ button {
 }
 
 button:hover:not(:disabled) {
-  background: #6b72e8;
+  background: var(--accent-hover);
 }
 
 button:disabled {
@@ -153,7 +153,7 @@ button:disabled {
 }
 
 .recovery-hint {
-  color: #666;
+  color: var(--text-faint);
   font-size: 0.78rem;
   text-align: center;
   margin-top: 1.2rem;

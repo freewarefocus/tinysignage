@@ -194,8 +194,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-h2 { margin-bottom: 1.5rem; color: #fff; }
-h3 { color: #fff; font-size: 1rem; }
+h2 { margin-bottom: 1.5rem; color: var(--text-primary); }
+h3 { color: var(--text-primary); font-size: 1rem; }
 
 .log-section {
   margin-bottom: 2.5rem;
@@ -217,9 +217,9 @@ h3 { color: #fff; font-size: 1rem; }
 }
 
 .search-input {
-  background: #1a1d27;
-  border: 1px solid #3a3a5a;
-  color: #eee;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   padding: 0.4rem 0.7rem;
   border-radius: 4px;
   font-size: 0.85rem;
@@ -239,8 +239,8 @@ h3 { color: #fff; font-size: 1rem; }
   cursor: default;
 }
 .btn-secondary {
-  background: #2a2d3a;
-  color: #ccc;
+  background: var(--border);
+  color: var(--text-secondary);
 }
 .btn-secondary:hover:not(:disabled) {
   background: #3a3d4a;
@@ -254,7 +254,7 @@ h3 { color: #fff; font-size: 1rem; }
 }
 
 .status-msg {
-  color: #888;
+  color: var(--text-muted);
   font-size: 0.9rem;
   padding: 1rem 0;
 }
@@ -266,14 +266,14 @@ h3 { color: #fff; font-size: 1rem; }
 }
 .log-table th {
   text-align: left;
-  color: #888;
+  color: var(--text-muted);
   font-weight: 500;
   padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid #2a2d3a;
+  border-bottom: 1px solid var(--border);
 }
 .log-table td {
   padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid #1a1d27;
+  border-bottom: 1px solid var(--bg-surface);
   vertical-align: top;
 }
 
@@ -282,11 +282,11 @@ h3 { color: #fff; font-size: 1rem; }
   transition: background 0.1s;
 }
 .log-row:hover {
-  background: #1e2130;
+  background: var(--border);
 }
 
 .ts {
-  color: #888;
+  color: var(--text-muted);
   font-size: 0.8rem;
   white-space: nowrap;
 }
@@ -317,11 +317,11 @@ h3 { color: #fff; font-size: 1rem; }
 }
 
 .detail-row td {
-  background: #12141c;
+  background: var(--bg-page);
   padding: 0.8rem 1rem;
 }
 .traceback {
-  color: #ccc;
+  color: var(--text-secondary);
   font-family: 'Cascadia Code', 'Fira Code', monospace;
   font-size: 0.8rem;
   white-space: pre-wrap;
@@ -333,13 +333,13 @@ h3 { color: #fff; font-size: 1rem; }
 .btn-icon {
   background: none;
   border: none;
-  color: #888;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 0.2rem;
   font-size: 0.9rem;
 }
 .btn-icon:hover {
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .pagination {
@@ -355,5 +355,5 @@ h3 { color: #fff; font-size: 1rem; }
 }
 .status-dot.online { background: #4caf50; }
 .status-dot.offline { background: #f44336; }
-.status-dot.unknown { background: #888; }
+.status-dot.unknown { background: var(--text-muted); }
 </style>

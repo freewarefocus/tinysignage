@@ -253,7 +253,7 @@ onUnmounted(() => {
 <style scoped>
 .mini-player {
   margin-top: 1.5rem;
-  border-top: 1px solid #2a2d3a;
+  border-top: 1px solid var(--border);
   padding-top: 1rem;
 }
 
@@ -262,18 +262,18 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.6rem;
-  color: #888;
+  color: var(--text-muted);
   font-size: 0.85rem;
 }
 
 .mini-player-label i:first-child {
-  color: #7c83ff;
+  color: var(--accent);
 }
 
 .mp-control {
-  background: #252836;
+  background: var(--bg-raised);
   border: none;
-  color: #999;
+  color: var(--text-tertiary);
   width: 26px;
   height: 26px;
   border-radius: 4px;
@@ -287,14 +287,14 @@ onUnmounted(() => {
 }
 
 .mp-control:hover {
-  background: #2f3348;
-  color: #fff;
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .mp-counter {
   margin-left: auto;
   font-size: 0.75rem;
-  color: #666;
+  color: var(--text-faint);
   font-family: monospace;
 }
 

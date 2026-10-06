@@ -142,14 +142,14 @@ async function removeTag(tag) {
 
 <style scoped>
 .asset-card {
-  background: #1a1d27;
+  background: var(--bg-surface);
   border-radius: 8px;
   overflow: visible;
   transition: box-shadow 0.2s;
 }
 
 .asset-card:hover {
-  box-shadow: 0 0 0 1px #7c83ff;
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .asset-card.disabled {
@@ -159,7 +159,7 @@ async function removeTag(tag) {
 .thumb-wrap {
   position: relative;
   aspect-ratio: 16 / 9;
-  background: #0f1117;
+  background: var(--bg-page);
   border-radius: 8px 8px 0 0;
   overflow: hidden;
 }
@@ -180,7 +180,7 @@ async function removeTag(tag) {
 
 .thumb-placeholder i {
   font-size: 2rem;
-  color: #444;
+  color: var(--text-ghost);
 }
 
 .hover-actions {
@@ -228,7 +228,7 @@ async function removeTag(tag) {
 
 .name {
   font-size: 0.85rem;
-  color: #eee;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -237,9 +237,9 @@ async function removeTag(tag) {
 
 .name-edit input {
   width: 100%;
-  background: #0f1117;
-  border: 1px solid #7c83ff;
-  color: #eee;
+  background: var(--bg-page);
+  border: 1px solid var(--accent);
+  color: var(--text);
   font-size: 0.85rem;
   padding: 2px 4px;
   border-radius: 3px;
@@ -250,12 +250,12 @@ async function removeTag(tag) {
   display: flex;
   gap: 0.5rem;
   font-size: 0.75rem;
-  color: #888;
+  color: var(--text-muted);
   margin-top: 0.3rem;
 }
 
 .type-badge {
-  background: #252836;
+  background: var(--bg-raised);
   padding: 1px 6px;
   border-radius: 3px;
   text-transform: uppercase;
@@ -302,8 +302,8 @@ async function removeTag(tag) {
 
 .add-tag-btn {
   background: none;
-  border: 1px dashed #444;
-  color: #666;
+  border: 1px dashed var(--text-ghost);
+  color: var(--text-faint);
   padding: 0px 5px;
   border-radius: 10px;
   cursor: pointer;
@@ -313,16 +313,16 @@ async function removeTag(tag) {
 }
 
 .add-tag-btn:hover {
-  border-color: #7c83ff;
-  color: #7c83ff;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .tag-picker {
   position: absolute;
   top: 100%;
   left: 0;
-  background: #252836;
-  border: 1px solid #2a2d3a;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.3rem;
   z-index: 10;
@@ -336,14 +336,14 @@ async function removeTag(tag) {
   gap: 0.4rem;
   padding: 0.3rem 0.5rem;
   font-size: 0.8rem;
-  color: #ccc;
+  color: var(--text-secondary);
   cursor: pointer;
   border-radius: 4px;
 }
 
 .tag-option:hover {
-  background: #1a1d27;
-  color: #fff;
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .tag-dot {
@@ -356,7 +356,7 @@ async function removeTag(tag) {
 .no-tags {
   padding: 0.5rem;
   font-size: 0.75rem;
-  color: #666;
+  color: var(--text-faint);
   text-align: center;
 }
 
@@ -365,13 +365,13 @@ async function removeTag(tag) {
   width: 100%;
   background: none;
   border: none;
-  border-top: 1px solid #2a2d3a;
-  color: #888;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
   padding: 0.3rem;
   margin-top: 0.3rem;
   cursor: pointer;
   font-size: 0.75rem;
 }
 
-.tag-picker-close:hover { color: #fff; }
+.tag-picker-close:hover { color: var(--text-primary); }
 </style>

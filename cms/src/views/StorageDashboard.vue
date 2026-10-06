@@ -98,11 +98,11 @@ onMounted(loadStorage)
 </script>
 
 <style scoped>
-h2 { margin-bottom: 1.2rem; color: #fff; }
-h3 { margin: 1.5rem 0 0.8rem; color: #ddd; font-size: 1rem; }
+h2 { margin-bottom: 1.2rem; color: var(--text-primary); }
+h3 { margin: 1.5rem 0 0.8rem; color: var(--text); font-size: 1rem; }
 
 .loading {
-  color: #888;
+  color: var(--text-muted);
   padding: 2rem;
   text-align: center;
 }
@@ -130,14 +130,14 @@ h3 { margin: 1.5rem 0 0.8rem; color: #ddd; font-size: 1rem; }
 }
 
 .summary-card {
-  background: #1a1d27;
+  background: var(--bg-surface);
   border-radius: 8px;
   padding: 1rem 1.2rem;
 }
 
 .card-label {
   font-size: 0.75rem;
-  color: #888;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 0.4rem;
@@ -146,18 +146,18 @@ h3 { margin: 1.5rem 0 0.8rem; color: #ddd; font-size: 1rem; }
 .card-value {
   font-size: 1.3rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .card-sub {
   font-size: 0.8rem;
-  color: #888;
+  color: var(--text-muted);
   margin-top: 0.3rem;
 }
 
 .progress-bar {
   height: 6px;
-  background: #252836;
+  background: var(--bg-raised);
   border-radius: 3px;
   margin-top: 0.6rem;
   overflow: hidden;
@@ -165,7 +165,7 @@ h3 { margin: 1.5rem 0 0.8rem; color: #ddd; font-size: 1rem; }
 
 .progress-fill {
   height: 100%;
-  background: #7c83ff;
+  background: var(--accent);
   border-radius: 3px;
   transition: width 0.3s;
 }
@@ -181,10 +181,10 @@ h3 { margin: 1.5rem 0 0.8rem; color: #ddd; font-size: 1rem; }
 
 .asset-table th {
   text-align: left;
-  color: #888;
+  color: var(--text-muted);
   font-weight: 500;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #2a2d3a;
+  border-bottom: 1px solid var(--border);
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -192,12 +192,12 @@ h3 { margin: 1.5rem 0 0.8rem; color: #ddd; font-size: 1rem; }
 
 .asset-table td {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #1a1d27;
-  color: #ccc;
+  border-bottom: 1px solid var(--bg-surface);
+  color: var(--text-secondary);
 }
 
 .asset-table tr:hover td {
-  background: #1a1d27;
+  background: var(--bg-surface);
 }
 
 .name-col {
@@ -210,7 +210,7 @@ h3 { margin: 1.5rem 0 0.8rem; color: #ddd; font-size: 1rem; }
 .right { text-align: right; }
 
 .type-badge {
-  background: #252836;
+  background: var(--bg-raised);
   padding: 1px 6px;
   border-radius: 3px;
   text-transform: uppercase;
@@ -220,7 +220,7 @@ h3 { margin: 1.5rem 0 0.8rem; color: #ddd; font-size: 1rem; }
 
 .empty-row {
   text-align: center;
-  color: #666;
+  color: var(--text-faint);
   padding: 2rem 0 !important;
 }
 </style>

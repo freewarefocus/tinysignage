@@ -294,8 +294,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-h2 { margin-bottom: 1.5rem; color: #fff; }
-h3 { color: #fff; margin-bottom: 0.5rem; }
+h2 { margin-bottom: 1.5rem; color: var(--text-primary); }
+h3 { color: var(--text-primary); margin-bottom: 0.5rem; }
 
 .settings-form {
   max-width: 400px;
@@ -308,16 +308,16 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 .form-group label {
   display: block;
   font-size: 0.85rem;
-  color: #aaa;
+  color: var(--text-secondary);
   margin-bottom: 0.4rem;
 }
 
 .form-group input[type="number"],
 .form-group select {
   width: 100%;
-  background: #1a1d27;
-  border: 1px solid #3a3a5a;
-  color: #eee;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   padding: 0.5rem 0.6rem;
   border-radius: 4px;
   font-size: 0.9rem;
@@ -326,13 +326,13 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 .form-group input:focus,
 .form-group select:focus {
   outline: none;
-  border-color: #7c83ff;
+  border-color: var(--accent);
 }
 
 .hint-text {
   display: block;
   font-size: 0.75rem;
-  color: #777;
+  color: var(--text-faint);
   margin-top: 0.3rem;
 }
 
@@ -341,11 +341,11 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
   align-items: center;
   gap: 0.5rem;
   cursor: pointer;
-  color: #ccc;
+  color: var(--text-secondary);
 }
 
 .btn-save {
-  background: #7c83ff;
+  background: var(--accent);
   color: #fff;
   border: none;
   padding: 0.6rem 1.5rem;
@@ -359,7 +359,7 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 }
 
 .btn-save:hover {
-  background: #6b72e8;
+  background: var(--accent-hover);
 }
 
 .btn-save:disabled {
@@ -375,7 +375,7 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 
 .section-divider {
   border: none;
-  border-top: 1px solid #2a2d3a;
+  border-top: 1px solid var(--border);
   margin: 2rem 0;
 }
 
@@ -384,12 +384,12 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 }
 
 .network-panel code {
-  background: #1a1d27;
-  border: 1px solid #2a2d3a;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   padding: 0.05rem 0.3rem;
   border-radius: 3px;
   font-size: 0.78rem;
-  color: #bbb;
+  color: var(--text-secondary);
 }
 
 .status-row {
@@ -415,18 +415,18 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 }
 
 .status-warn {
-  color: #aaa;
+  color: var(--text-secondary);
 }
 
 .status-warn .dot {
-  background: #555;
-  border: 1px solid #777;
+  background: var(--text-ghost);
+  border: 1px solid var(--text-faint);
 }
 
 .readonly-value {
-  background: #1a1d27;
-  border: 1px solid #3a3a5a;
-  color: #ccc;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
   padding: 0.5rem 0.6rem;
   border-radius: 4px;
   font-size: 0.85rem;
@@ -436,9 +436,9 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 
 .network-panel input[type="text"][readonly] {
   width: 100%;
-  background: #1a1d27;
-  border: 1px solid #3a3a5a;
-  color: #ccc;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
   padding: 0.5rem 0.6rem;
   border-radius: 4px;
   font-size: 0.78rem;
@@ -450,17 +450,17 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 }
 
 .tech-details summary {
-  color: #888;
+  color: var(--text-muted);
   font-size: 0.82rem;
   cursor: pointer;
 }
 
 .tech-details summary:hover {
-  color: #bbb;
+  color: var(--text-secondary);
 }
 
 .section-desc {
-  color: #999;
+  color: var(--text-tertiary);
   font-size: 0.85rem;
   margin-bottom: 1.2rem;
 }
@@ -479,13 +479,13 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 }
 
 .help-text {
-  color: #777;
+  color: var(--text-faint);
   font-size: 0.8rem;
 }
 
 .btn-import {
-  background: #2a2d3a;
-  color: #ccc;
+  background: var(--border);
+  color: var(--text-secondary);
   border: 1px dashed #4a4d5a;
   padding: 0.6rem 1.5rem;
   border-radius: 4px;
@@ -499,9 +499,9 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 }
 
 .btn-import:hover {
-  background: #353846;
-  border-color: #7c83ff;
-  color: #fff;
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--text-primary);
 }
 
 .btn-import.disabled {
@@ -511,14 +511,14 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 }
 
 .import-confirm {
-  background: #1a1d27;
-  border: 1px solid #3a3a5a;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   padding: 1rem;
 }
 
 .selected-file {
-  color: #ddd;
+  color: var(--text);
   font-size: 0.9rem;
   display: flex;
   align-items: center;
@@ -527,7 +527,7 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 }
 
 .file-size {
-  color: #888;
+  color: var(--text-muted);
   font-size: 0.8rem;
 }
 
@@ -573,8 +573,8 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 
 .btn-cancel {
   background: transparent;
-  color: #aaa;
-  border: 1px solid #3a3a5a;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
   padding: 0.5rem 1.2rem;
   border-radius: 4px;
   cursor: pointer;
@@ -583,8 +583,8 @@ h3 { color: #fff; margin-bottom: 0.5rem; }
 }
 
 .btn-cancel:hover {
-  background: #2a2d3a;
-  color: #fff;
+  background: var(--border);
+  color: var(--text-primary);
 }
 
 .btn-cancel:disabled {

@@ -104,7 +104,7 @@ async function uploadFiles(files) {
 
 <style scoped>
 .upload-zone {
-  border: 2px dashed #3a3a5a;
+  border: 2px dashed var(--border-strong);
   border-radius: 8px;
   padding: 1rem;
   text-align: center;
@@ -115,24 +115,24 @@ async function uploadFiles(files) {
 
 .upload-zone:hover,
 .upload-zone.dragover {
-  border-color: #7c83ff;
-  background: rgba(124, 131, 255, 0.05);
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.05);
 }
 
 .upload-content i {
   font-size: 1.5rem;
-  color: #666;
+  color: var(--text-faint);
   margin-bottom: 0.3rem;
 }
 
 .upload-content p {
-  color: #ccc;
+  color: var(--text-secondary);
   margin-bottom: 0.3rem;
 }
 
 .hint {
   font-size: 0.8rem;
-  color: #666;
+  color: var(--text-faint);
 }
 
 .upload-list {
@@ -146,12 +146,12 @@ async function uploadFiles(files) {
 
 .upload-name {
   font-size: 0.85rem;
-  color: #aaa;
+  color: var(--text-secondary);
 }
 
 .upload-bar {
   height: 4px;
-  background: #2a2d3a;
+  background: var(--border);
   border-radius: 2px;
   overflow: hidden;
   margin-top: 3px;
@@ -159,13 +159,13 @@ async function uploadFiles(files) {
 
 .upload-progress {
   height: 100%;
-  background: #7c83ff;
+  background: var(--accent);
   transition: width 0.2s;
 }
 
 .upload-processing {
   font-size: 0.8rem;
-  color: #7c83ff;
+  color: var(--accent);
   margin-top: 3px;
   animation: pulse 1.2s ease-in-out infinite;
 }
