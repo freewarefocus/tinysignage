@@ -2294,7 +2294,7 @@
                 PlayerLog.info('Service worker registered (scope: ' + reg.scope + ')');
                 // Proactively populate cache on first visit so SW cache is never empty
                 if (typeof caches !== 'undefined') {
-                    caches.open('tinysignage-player-v2').then(function (cache) {
+                    caches.open('tinysignage-player-v4').then(function (cache) { // must match CACHE_NAME in sw.js
                         cache.add(window.location.pathname);
                         // Cache player CSS/JS assets
                         var links = document.querySelectorAll('link[rel="stylesheet"][href*="/static/player"], script[src*="/static/player"]');

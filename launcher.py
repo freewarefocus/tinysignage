@@ -269,12 +269,19 @@ def launch(config_path: str | None = None):
     is_pi = Path("/proc/device-tree/model").exists()  # Rough Pi detection
 
     # Wait for the backend to be reachable before launching the kiosk.
-    # Avoids the cold-boot race where the browser loads its connection-error
-    # page because signage-app.service hasn't bound :8080 yet.
-    # If the browser profile already exists, the SW cache and localStorage
-    # have content from a previous session — use a shorter timeout so the
-    # player reaches cached content quickly when the CMS is down.
-    wait_timeout = 10 if BROWSER_PROFILE_DIR.exists() else 10
+    # Three-tier timeout based on profile existence and CMS location:
+    #  - Remote CMS + existing profile: SW cache has content, don't block long
+    #  - Local CMS + existing profile: server starts fast on same machine
+    #  - First boot (no profile): must reach CMS to load player page initially
+    is_remote = bool(server_url) and not any(
+        h in server_url for h in ('localhost', '127.0.0.1', '://[::1]')
+    )
+    if BROWSER_PROFILE_DIR.exists() and is_remote:
+        wait_timeout = 3
+    elif BROWSER_PROFILE_DIR.exists():
+        wait_timeout = 10
+    else:
+        wait_timeout = 30
     print(f"Waiting for {url} to become ready (timeout {wait_timeout}s)...")
     _wait_for_url(url, timeout=wait_timeout)
 

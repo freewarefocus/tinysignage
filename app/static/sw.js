@@ -2,16 +2,90 @@
 // Player page & assets: cache-first with background update (stale-while-revalidate)
 // Media files: cache-first (immutable UUID filenames)
 
-var CACHE_NAME = 'tinysignage-player-v3';
+var CACHE_NAME = 'tinysignage-player-v4';
+
+// Self-contained offline fallback player — served when the player page is not
+// in cache AND the network is down. Reads playlist from localStorage and plays
+// cached media via the SW media fetch handler. Graceful degradation: no zones,
+// no triggers, no effects — just simple crossfade playback.
+var OFFLINE_FALLBACK_HTML =
+    '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>TinySignage</title>' +
+    '<style>' +
+    '*{margin:0;padding:0;box-sizing:border-box}' +
+    'body{background:#000;overflow:hidden;width:100vw;height:100vh}' +
+    '#player{position:relative;width:100%;height:100%}' +
+    '.layer{position:absolute;top:0;left:0;width:100%;height:100%;' +
+    'opacity:0;transition:opacity 1s ease;display:flex;align-items:center;justify-content:center}' +
+    '.layer.active{opacity:1}' +
+    '.layer img,.layer video{max-width:100%;max-height:100%;object-fit:contain}' +
+    '#splash{position:absolute;top:0;left:0;width:100%;height:100%;' +
+    'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+    'color:#888;font-family:sans-serif;text-align:center}' +
+    '#splash h1{color:#aaa;font-weight:400;font-size:2em;margin-bottom:.5em}' +
+    '#splash p{font-size:.9em}' +
+    '#status-indicator{position:fixed;bottom:8px;right:8px;width:10px;height:10px;' +
+    'border-radius:50%;background:#f44}' +
+    '</style></head><body>' +
+    '<div id="player">' +
+    '<div id="layer-a" class="layer"></div>' +
+    '<div id="layer-b" class="layer"></div>' +
+    '<div id="splash"><h1>TinySignage</h1><p id="splash-status">Loading cached content\u2026</p></div>' +
+    '<div id="status-indicator" title="Offline"></div>' +
+    '</div>' +
+    '<script>' +
+    '(function(){' +
+    'var splash=document.getElementById("splash");' +
+    'var splashStatus=document.getElementById("splash-status");' +
+    'var layerA=document.getElementById("layer-a");' +
+    'var layerB=document.getElementById("layer-b");' +
+    'var layers=[layerA,layerB];' +
+    'var current=0;' +
+    'var playlist,serverUrl,idx=0;' +
+    'try{playlist=JSON.parse(localStorage.getItem("tinysignage_playlist"));}catch(e){}' +
+    'try{serverUrl=localStorage.getItem("tinysignage_server_url")||"";}catch(e){}' +
+    'if(!playlist||!playlist.items||playlist.items.length===0){' +
+    'splashStatus.textContent="No cached content available.";' +
+    'setTimeout(function(){location.reload()},30000);return;}' +
+    'splash.style.display="none";' +
+    'function mediaUrl(item){return serverUrl+"/media/"+item.uri;}' +
+    'function showItem(item){' +
+    'var next=1-current;var layer=layers[next];layer.innerHTML="";' +
+    'var url=mediaUrl(item);' +
+    'var dur=(item.duration||10)*1000;' +
+    'if(item.type==="video"){' +
+    'var v=document.createElement("video");' +
+    'v.src=url;v.autoplay=true;v.playsInline=true;' +
+    'v.addEventListener("ended",function(){advance();});' +
+    'v.addEventListener("error",function(){setTimeout(advance,2000);});' +
+    'layer.appendChild(v);' +
+    '}else{' +
+    'var img=document.createElement("img");' +
+    'img.src=url;' +
+    'img.addEventListener("error",function(){setTimeout(advance,2000);});' +
+    'layer.appendChild(img);' +
+    'setTimeout(advance,dur);' +
+    '}' +
+    'layers[current].classList.remove("active");' +
+    'layer.classList.add("active");' +
+    'current=next;' +
+    '}' +
+    'function advance(){idx=(idx+1)%playlist.items.length;showItem(playlist.items[idx]);}' +
+    'showItem(playlist.items[0]);' +
+    'setTimeout(function(){location.reload()},60000);' +
+    '})();' +
+    '</script></body></html>';
 
 // --- Install: precache player page, then activate immediately ---
 self.addEventListener('install', function (event) {
     event.waitUntil(
         caches.open(CACHE_NAME).then(function (cache) {
-            return cache.add('/player').catch(function () {
-                // Precache may fail on very first install — that's OK,
-                // player.js will populate the cache from the page side.
-            });
+            return Promise.all([
+                cache.add('/player').catch(function () {}),
+                cache.add('/static/player.css').catch(function () {}),
+                cache.add('/static/player.js').catch(function () {})
+            ]);
         }).then(function () {
             return self.skipWaiting();
         })
@@ -93,28 +167,12 @@ self.addEventListener('fetch', function (event) {
                     })
                 ]).then(function (response) {
                     if (response) return response;
-                    // Network failed or timed out — serve offline fallback
+                    // Network failed or timed out — serve functional offline fallback
                     if (isPlayerPage) {
-                        return new Response(
-                            '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-                            '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-                            '<title>TinySignage</title>' +
-                            '<style>' +
-                            'body{margin:0;background:#111;color:#888;font-family:sans-serif;' +
-                            'display:flex;align-items:center;justify-content:center;height:100vh}' +
-                            'div{text-align:center}' +
-                            'h2{color:#aaa;font-weight:400;margin-bottom:.5em}' +
-                            'p{font-size:.9em}' +
-                            '</style></head><body>' +
-                            '<div><h2>Connecting to server\u2026</h2>' +
-                            '<p>Waiting for the CMS to become reachable.</p>' +
-                            '<script>setTimeout(function(){location.reload()},10000)</script>' +
-                            '</div></body></html>',
-                            {
-                                status: 200,
-                                headers: { 'Content-Type': 'text/html; charset=utf-8' }
-                            }
-                        );
+                        return new Response(OFFLINE_FALLBACK_HTML, {
+                            status: 200,
+                            headers: { 'Content-Type': 'text/html; charset=utf-8' }
+                        });
                     }
                     return new Response('', { status: 503, statusText: 'Offline' });
                 });
