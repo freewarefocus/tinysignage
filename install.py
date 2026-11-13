@@ -144,6 +144,7 @@ def _build_player_unit(lite, standalone, install_dir, user, memory_max_mb=1152):
             StandardError=journal
 
             Environment=DISPLAY=:0
+            Environment=XDG_RUNTIME_DIR=/run/user/%U
 
             ExecStartPre=/bin/sleep 5
             ExecStart=/usr/bin/xinit {install_dir}/scripts/kiosk-x11.sh {python_bin} -- :0 vt1
@@ -169,6 +170,7 @@ def _build_player_unit(lite, standalone, install_dir, user, memory_max_mb=1152):
             User={user}
             WorkingDirectory={install_dir}
             Environment=DISPLAY=:0
+            Environment=XDG_RUNTIME_DIR=/run/user/%U
             Environment=XCURSOR_THEME=hidden
             Environment=XCURSOR_SIZE=1
             ExecStartPre=/bin/sleep 5
@@ -1110,7 +1112,8 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
             info("Detected Pi OS Lite — will install X11 kiosk (matchbox)")
             packages.extend(["xserver-xorg", "xinit",
                              "matchbox-window-manager",
-                             "x11-xserver-utils", "unclutter"])
+                             "x11-xserver-utils", "unclutter",
+                             "pipewire", "pipewire-pulse", "wireplumber"])
         else:
             # Cursor-hiding tools for desktop Wayland sessions (labwc)
             packages.extend(["wtype", "swayidle"])
@@ -1139,7 +1142,7 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
         run_cmd(["usermod", "-aG", "video", SERVICE_USER])
         info(f"Created user '{SERVICE_USER}'")
     if lite:
-        run_cmd(["usermod", "-aG", "input,render", SERVICE_USER])
+        run_cmd(["usermod", "-aG", "audio,input,render", SERVICE_USER])
 
     # --- [3] Hostname & mDNS ---
     step(3, total, "Configuring hostname and mDNS...")
@@ -2279,6 +2282,24 @@ def do_update(plat, install_dir, skip_pull=False):
                     f.write(new_unit)
                 run_cmd(["systemctl", "daemon-reload"])
                 info("Removed WatchdogSec from Lite player unit (xinit can't send keepalives)")
+
+        # Self-heal: install PipeWire audio stack on existing Lite installs
+        # so Chromium can output audio (e.g. to USB DACs).
+        if os.path.isfile(player_unit_path):
+            with open(player_unit_path) as f:
+                unit_text = f.read()
+            if "xinit" in unit_text and not shutil.which("pipewire"):
+                info("Installing PipeWire audio stack for kiosk audio support...")
+                run_cmd(
+                    ["apt-get", "install", "-y", "-qq",
+                     "pipewire", "pipewire-pulse", "wireplumber"],
+                    env={"DEBIAN_FRONTEND": "noninteractive"},
+                )
+            # Ensure tinysignage user is in audio group
+            r = run_cmd(["id", "-nG", SERVICE_USER], capture=True, check=False)
+            if r and r.returncode == 0 and "audio" not in r.stdout.split():
+                run_cmd(["usermod", "-aG", "audio", SERVICE_USER])
+                info(f"Added {SERVICE_USER} to audio group")
 
         # Self-heal: scale MemoryMax to system RAM (existing installs may
         # have the old hardcoded 1024M which is too low for 4GB+ or too

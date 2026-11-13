@@ -97,6 +97,10 @@ def get_kiosk_flags(is_pi: bool = False) -> list[str]:
 
         flags.extend([
             "--disable-background-timer-throttling",
+            # Keep the audio service in-process so it inherits the
+            # PipeWire/PulseAudio connection from the browser process.
+            # Out-of-process audio often fails on headless Pi sessions.
+            "--disable-features=AudioServiceOutOfProcess",
             # Real tmpfs path — /dev/null is a char device and Chromium's
             # mkdir of /dev/null/Default/Code Cache/* fails noisily and on
             # cold boots can delay/suppress the kiosk window.
