@@ -1113,6 +1113,7 @@ def pi_system_setup(install_dir, display_name, hostname, lite, mode="both", port
             packages.extend(["xserver-xorg", "xinit",
                              "matchbox-window-manager",
                              "x11-xserver-utils", "unclutter",
+                             "dbus-x11",
                              "pipewire", "pipewire-pulse", "wireplumber"])
         else:
             # Cursor-hiding tools for desktop Wayland sessions (labwc)
@@ -2292,7 +2293,7 @@ def do_update(plat, install_dir, skip_pull=False):
                 info("Installing PipeWire audio stack for kiosk audio support...")
                 run_cmd(
                     ["apt-get", "install", "-y", "-qq",
-                     "pipewire", "pipewire-pulse", "wireplumber"],
+                     "dbus-x11", "pipewire", "pipewire-pulse", "wireplumber"],
                     env={"DEBIAN_FRONTEND": "noninteractive"},
                 )
             # Ensure tinysignage user is in audio group

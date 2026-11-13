@@ -24,8 +24,17 @@ else
     mkdir -p "$XDG_RUNTIME_DIR"
 fi
 
-eval $(dbus-launch --sh-syntax)
-export DBUS_SESSION_BUS_ADDRESS
+# Start a session D-Bus daemon. dbus-launch (from dbus-x11) is unreliable
+# in service contexts — it often exits without setting the address, leaving
+# PipeWire and Chromium unable to find D-Bus. Start dbus-daemon directly
+# with a known socket path instead.
+_dbus_sock="unix:path=$XDG_RUNTIME_DIR/bus"
+if dbus-daemon --session --address="$_dbus_sock" --fork --nopidfile 2>/dev/null; then
+    export DBUS_SESSION_BUS_ADDRESS="$_dbus_sock"
+elif command -v dbus-launch >/dev/null 2>&1; then
+    eval $(dbus-launch --sh-syntax 2>/dev/null)
+    export DBUS_SESSION_BUS_ADDRESS
+fi
 
 # Start PipeWire audio stack for this user
 if command -v pipewire >/dev/null 2>&1; then
