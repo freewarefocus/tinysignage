@@ -137,8 +137,15 @@ Use the browser's fullscreen shortcut: **F11** (most browsers), **Ctrl+Cmd+F** (
 chrome --kiosk https://127.0.0.1:8080/player
 ```
 
-**Video plays but no sound:**
-Most browsers require user interaction before autoplaying video with sound. For digital signage, content is typically silent. If you need audio, ensure the user has interacted with the page at least once.
+**Video plays but no sound (Raspberry Pi):**
+On Pi OS Lite, the installer sets up PipeWire for audio and auto-detects USB audio devices. If you don't hear audio through a USB DAC:
+1. Verify the DAC is detected: `aplay -l`
+2. Check PipeWire is running: `sudo -u tinysignage XDG_RUNTIME_DIR=/tmp/tinysignage-runtime DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/tinysignage-runtime/bus wpctl status`
+3. Test PipeWire→DAC directly: use the same env vars prefix with `paplay /usr/share/sounds/alsa/Front_Center.wav`
+4. If PipeWire is missing, run `sudo python3 install.py --update` to install it
+
+**Video plays but no sound (desktop browser):**
+Desktop browsers require user interaction before autoplaying video with sound. The Chromium kiosk on Pi bypasses this with `--autoplay-policy=no-user-gesture-required`. For desktop browsers used as players, interact with the page once (click anywhere) to unlock audio.
 
 ---
 
