@@ -853,7 +853,15 @@
                 }
             }, 10000);
             nextLayer._videoLoadTimer = videoLoadTimeout;
-            element.oncanplay = () => { if (gen !== ctrl.loadGeneration) return; element.oncanplay = null; clearTimeout(videoLoadTimeout); nextLayer._doTxTimer = setTimeout(doTx, 300); };
+            element.oncanplay = () => {
+                if (gen !== ctrl.loadGeneration) return;
+                element.oncanplay = null;
+                clearTimeout(videoLoadTimeout);
+                // Unmute now that the browser has committed to playing.
+                // Autoplay requires muted; kiosk --autoplay-policy allows unmute.
+                element.muted = false;
+                nextLayer._doTxTimer = setTimeout(doTx, 300);
+            };
             element.onerror = () => { if (gen !== ctrl.loadGeneration) return; clearTimeout(videoLoadTimeout); zoneAdvance(ctrl); };
             element.onended = () => { if (gen !== ctrl.loadGeneration) return; zoneAdvance(ctrl); };
             element.src = `${baseUrl}/media/${asset.uri}`;
@@ -1167,7 +1175,13 @@
             }, 10000);
             pendingVideoTimeout = videoLoadTimeout;
 
-            element.oncanplay = () => { if (gen !== loadGeneration) return; element.oncanplay = null; clearTimeout(videoLoadTimeout); pendingDoTxTimer = setTimeout(doTx, 300); };
+            element.oncanplay = () => {
+                if (gen !== loadGeneration) return;
+                element.oncanplay = null;
+                clearTimeout(videoLoadTimeout);
+                element.muted = false;
+                pendingDoTxTimer = setTimeout(doTx, 300);
+            };
 
             element.onerror = () => {
                 if (gen !== loadGeneration) return;

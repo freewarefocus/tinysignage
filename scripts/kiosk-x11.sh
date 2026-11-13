@@ -44,20 +44,20 @@ if command -v pipewire >/dev/null 2>&1; then
     wireplumber &
     sleep 1
 
-    # Auto-select USB audio DAC if one is connected.
-    # WirePlumber gives USB sinks a default priority (~1000) which loses to
-    # built-in audio. Find the first USB audio sink and promote it.
+    # Auto-select external audio device if one is connected.
+    # WirePlumber may default to built-in HDMI audio. Find the first
+    # non-built-in sink (USB DAC, etc.) and promote it.
     if command -v wpctl >/dev/null 2>&1; then
-        # Parse wpctl status: extract Sinks section, find USB device,
-        # pull the numeric sink ID (e.g. "47" from "  47. USB Audio ...").
-        _usb_sink=$(wpctl status 2>/dev/null | \
-            sed -n '/Sinks/,/endpoint\|Source\|Stream/p' | \
-            grep -i usb | \
+        # Extract Sinks section, skip "Built-in" entries, take first remaining.
+        _ext_sink=$(wpctl status 2>/dev/null | \
+            sed -n '/Audio/,/Video/{ /Sinks/,/Sources\|Filters\|Streams/p }' | \
+            grep -v -i 'built-in\|Sinks:\|Sources' | \
+            grep '[0-9]\.' | \
             head -1 | \
             sed 's/[^0-9]*\([0-9][0-9]*\)\..*/\1/')
-        if [ -n "$_usb_sink" ]; then
-            wpctl set-default "$_usb_sink" 2>/dev/null && \
-                echo "Audio: USB DAC (sink $_usb_sink) set as default"
+        if [ -n "$_ext_sink" ]; then
+            wpctl set-default "$_ext_sink" 2>/dev/null && \
+                echo "Audio: external sink $_ext_sink set as default"
         fi
     fi
 fi
