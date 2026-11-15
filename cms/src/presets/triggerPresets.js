@@ -1,15 +1,15 @@
 /**
  * Trigger flow preset templates.
- * Client-side only — these are JSON blueprints that pre-populate the branch form.
- * User still selects source/target playlists manually.
+ * Each preset batch-creates all its branches when applied.
  */
 
 export const TRIGGER_PRESETS = [
   {
-    id: 'museum-button',
-    name: 'Museum Button',
+    id: 'gpio-button',
+    name: 'GPIO Button',
     icon: 'pi pi-microchip',
-    description: 'Idle loop with GPIO buttons branching to exhibit playlists. Each button triggers a different exhibit, with timeout return to idle.',
+    description: 'A GPIO button press switches to another playlist. Timeout returns to this one.',
+    summary: '1 GPIO branch + timeout return',
     branches: [
       {
         trigger_type: 'gpio',
@@ -27,7 +27,8 @@ export const TRIGGER_PRESETS = [
     id: 'kiosk-touch',
     name: 'Kiosk Touch',
     icon: 'pi pi-th-large',
-    description: 'Welcome screen with touch zones branching to content playlists. Timeout returns to welcome.',
+    description: 'Two touch zones on a welcome screen branch to different content. Timeout returns here.',
+    summary: '2 touch zones + timeout return',
     branches: [
       {
         trigger_type: 'touch_zone',
@@ -50,7 +51,8 @@ export const TRIGGER_PRESETS = [
     id: 'wayfinding',
     name: 'Wayfinding',
     icon: 'pi pi-map',
-    description: 'Directory screen with 3 touch zones for destinations. Timeout returns to directory.',
+    description: 'Three touch zones for destinations on a directory screen. Timeout returns to directory.',
+    summary: '3 touch zones + timeout return',
     branches: [
       {
         trigger_type: 'touch_zone',
@@ -78,7 +80,8 @@ export const TRIGGER_PRESETS = [
     id: 'emergency-alert',
     name: 'Emergency Alert',
     icon: 'pi pi-exclamation-triangle',
-    description: 'Normal content interrupted by webhook-triggered emergency playlist. No automatic return — requires manual reset.',
+    description: 'A webhook call interrupts normal content with an emergency playlist. No automatic return.',
+    summary: '1 webhook branch, no return',
     branches: [
       {
         trigger_type: 'webhook',
@@ -89,10 +92,11 @@ export const TRIGGER_PRESETS = [
     return_branch: null,
   },
   {
-    id: 'arcade-joystick',
-    name: 'Arcade Joystick',
+    id: 'arcade-controller',
+    name: 'Arcade Controller',
     icon: 'pi pi-sliders-h',
-    description: 'Idle screen with joystick/gamepad buttons branching to content playlists. Timeout returns to idle.',
+    description: 'Two gamepad buttons branch to different content playlists. Timeout returns to idle.',
+    summary: '2 gamepad buttons + timeout return',
     branches: [
       {
         trigger_type: 'joystick',
@@ -112,10 +116,11 @@ export const TRIGGER_PRESETS = [
     },
   },
   {
-    id: 'scheduled-interrupt',
-    name: 'Scheduled Interrupt',
+    id: 'timed-interrupt',
+    name: 'Timed Interrupt',
     icon: 'pi pi-clock',
-    description: 'Normal content with timeout-triggered interrupt playlist. Returns to normal after a set number of loops.',
+    description: 'After a timeout, switches to an interrupt playlist. Returns here after a set number of loops.',
+    summary: '1 timeout branch + loop-count return',
     branches: [
       {
         trigger_type: 'timeout',

@@ -227,7 +227,12 @@
                 <i :class="triggerIcon(branch.trigger_type)" class="branch-trigger-icon" :title="branch.trigger_type"></i>
                 <span class="branch-type-label">{{ triggerLabel(branch.trigger_type, branch.trigger_config) }}</span>
                 <i class="pi pi-arrow-right branch-arrow"></i>
-                <span class="branch-playlist">{{ branch.target_playlist_name || 'Unknown' }}</span>
+                <span
+                  v-if="branchNeedsTarget(branch)"
+                  class="branch-needs-target"
+                  @click.stop="startEditBranch(branch)"
+                >Assign a playlist</span>
+                <span v-else class="branch-playlist">{{ branch.target_playlist_name || 'Unknown' }}</span>
                 <span v-if="branch.priority" class="branch-priority" v-tooltip="'Higher priority branches are evaluated first'">P{{ branch.priority }}</span>
               </div>
               <div v-if="canEdit" class="branch-actions">
@@ -244,22 +249,30 @@
                 v-for="preset in triggerPresets"
                 :key="preset.id"
                 class="preset-card"
+                :class="{ disabled: applyingPreset, active: applyingPreset === preset.id }"
                 @click="applyPreset(preset)"
               >
-                <i :class="preset.icon" class="preset-icon"></i>
+                <i v-if="applyingPreset === preset.id" class="pi pi-spin pi-spinner preset-icon"></i>
+                <i v-else :class="preset.icon" class="preset-icon"></i>
                 <div class="preset-name">{{ preset.name }}</div>
                 <div class="preset-desc">{{ preset.description }}</div>
+                <div v-if="preset.summary" class="preset-summary">{{ preset.summary }}</div>
               </div>
             </div>
           </div>
 
           <!-- Add / Edit branch form -->
           <div v-if="canEdit && !showBranchForm" class="branch-action-row">
+            <button
+              v-if="hasTouchZones"
+              class="btn-add-branch visual-editor primary"
+              @click="showTouchZoneEditor = true"
+              title="Visually draw and manage touch zones"
+            >
+              <i class="pi pi-th-large"></i> Visual Zone Editor
+            </button>
             <button class="btn-add-branch" @click="startAddBranch">
               <i class="pi pi-plus"></i> Add Branch
-            </button>
-            <button class="btn-add-branch visual-editor" @click="showTouchZoneEditor = true" title="Visually draw and manage touch zones">
-              <i class="pi pi-th-large"></i> Visual Zone Editor
             </button>
           </div>
 
@@ -611,6 +624,7 @@ const deleteFlowTarget = ref(null)
 const keyModifiers = ref({ shift: false, ctrl: false, alt: false })
 const branchForm = ref(getDefaultBranchForm())
 const showTouchZoneEditor = ref(false)
+const applyingPreset = ref(null)
 
 const availableAssets = computed(() => {
   if (!nameSearch.value) return allAssets.value
@@ -623,6 +637,10 @@ const playlistId = computed(() => route.params.id)
 const sortedBranches = computed(() => {
   if (!currentFlow.value?.branches) return []
   return [...currentFlow.value.branches].sort((a, b) => (b.priority || 0) - (a.priority || 0))
+})
+
+const hasTouchZones = computed(() => {
+  return currentFlow.value?.branches?.some(b => b.trigger_type === 'touch_zone') || false
 })
 
 function getDefaultBranchForm() {
@@ -713,6 +731,9 @@ async function loadPlaylist() {
       selectedFlowId.value = full.trigger_flow_id || ''
       if (full.trigger_flow_id) {
         await loadFlow(full.trigger_flow_id)
+        if (currentFlow.value?.branches?.some(b => b.trigger_type === 'touch_zone')) {
+          showTriggerPanel.value = true
+        }
       } else {
         currentFlow.value = null
       }
@@ -850,32 +871,62 @@ async function createFlow() {
 }
 
 async function applyPreset(preset) {
-  // Create a flow if none assigned
-  if (!currentFlow.value) {
-    const flowName = preset.name + ' Flow'
-    const flow = await api.post('/trigger-flows', { name: flowName })
+  if (applyingPreset.value) return
+  applyingPreset.value = preset.id
+  try {
+    // Create a flow if none assigned
+    if (!currentFlow.value) {
+      const flowName = preset.name + ' Flow'
+      const flow = await api.post('/trigger-flows', { name: flowName })
+      await loadFlows()
+      selectedFlowId.value = flow.id
+      await assignFlow()
+    }
+    const flowId = currentFlow.value.id
+    const plId = playlist.value?.id
+    if (!flowId || !plId) return
+
+    // Create all action branches (priority 1+)
+    for (let i = 0; i < preset.branches.length; i++) {
+      const b = preset.branches[i]
+      const config = { ...b.trigger_config }
+      if (b.trigger_type === 'webhook' && !config.token) {
+        config.token = generateToken()
+      }
+      await api.post(`/trigger-flows/${flowId}/branches`, {
+        source_playlist_id: plId,
+        target_playlist_id: plId,
+        trigger_type: b.trigger_type,
+        trigger_config: config,
+        priority: i + 1,
+      })
+    }
+
+    // Create return branch if defined (priority 0, target = source)
+    if (preset.return_branch) {
+      const rb = preset.return_branch
+      const config = { ...rb.trigger_config }
+      await api.post(`/trigger-flows/${flowId}/branches`, {
+        source_playlist_id: plId,
+        target_playlist_id: plId,
+        trigger_type: rb.trigger_type,
+        trigger_config: config,
+        priority: 0,
+      })
+    }
+
+    // Reload to show the new branches
+    await loadFlow(flowId)
     await loadFlows()
-    selectedFlowId.value = flow.id
-    await assignFlow()
+  } finally {
+    applyingPreset.value = null
   }
-  // Pre-fill branch form with the first preset branch
-  const firstBranch = preset.branches[0]
-  if (!firstBranch) return
-  editingBranchId.value = null
-  const config = { ...firstBranch.trigger_config }
-  // Auto-generate webhook token if needed
-  if (firstBranch.trigger_type === 'webhook' && !config.token) {
-    config.token = generateToken()
-  }
-  branchForm.value = {
-    source_playlist_id: playlist.value?.id || '',
-    target_playlist_id: '',
-    trigger_type: firstBranch.trigger_type,
-    priority: 0,
-    trigger_config: config,
-  }
-  keyModifiers.value = { shift: false, ctrl: false, alt: false }
-  showBranchForm.value = true
+}
+
+function branchNeedsTarget(branch) {
+  // Return branches (timeout/loop_count) intentionally self-target — not a placeholder
+  if (branch.trigger_type === 'timeout' || branch.trigger_type === 'loop_count') return false
+  return branch.source_playlist_id === branch.target_playlist_id
 }
 
 function onTriggerTypeChange() {
@@ -1536,6 +1587,34 @@ h3 { margin-bottom: 0.8rem; color: var(--text); font-size: 1rem; }
   line-height: 1.4;
 }
 
+.preset-summary {
+  color: var(--accent-soft);
+  font-size: 0.65rem;
+  margin-top: 0.3rem;
+}
+
+.preset-card.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.preset-card.active {
+  opacity: 1;
+  border-color: var(--accent-soft);
+}
+
+.branch-needs-target {
+  color: #f0a020;
+  font-size: 0.82rem;
+  font-style: italic;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.branch-needs-target:hover {
+  text-decoration: underline;
+}
+
 /* Flow selector */
 .flow-selector {
   display: flex;
@@ -1697,6 +1776,15 @@ h3 { margin-bottom: 0.8rem; color: var(--text); font-size: 1rem; }
 .btn-add-branch.visual-editor:hover {
   color: var(--accent-soft);
   background: var(--bg-accent);
+}
+
+.btn-add-branch.visual-editor.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-add-branch.visual-editor.primary:hover {
+  background: var(--accent-hover);
 }
 
 /* Branch form */
