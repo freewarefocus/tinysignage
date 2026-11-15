@@ -8,12 +8,8 @@
           <label class="tze-bg-label">Background:</label>
           <select v-model="bgAssetId" class="tze-bg-select" @change="onBgAssetChange">
             <option value="">None</option>
-            <option v-for="a in visualAssets" :key="a.id" :value="a.id">{{ a.name }}</option>
+            <option v-for="a in visualAssets" :key="a.asset_id || a.id" :value="a.asset_id || a.id">{{ a.asset?.name || a.name }}</option>
           </select>
-          <button class="tze-btn upload" @click="triggerUploadBg" title="Upload an image from your computer to use as background">
-            <i class="pi pi-upload"></i>
-          </button>
-          <input type="file" ref="bgFileInput" accept="image/*" class="tze-hidden-input" @change="onBgFileUpload" />
           <button
             class="tze-btn"
             :class="{ active: interactionMode === 'draw' }"
@@ -22,6 +18,27 @@
           >
             <i class="pi pi-plus"></i> Add Zone
           </button>
+          <div class="tze-snap-group">
+            <button
+              class="tze-btn"
+              :class="{ active: snapEnabled }"
+              @click="snapEnabled = !snapEnabled"
+              title="Snap to grid"
+            >
+              <i class="pi pi-th-large"></i> Snap
+            </button>
+            <select
+              v-if="snapEnabled"
+              v-model.number="snapGridSize"
+              class="tze-snap-select"
+            >
+              <option :value="1">1%</option>
+              <option :value="2">2%</option>
+              <option :value="3">3%</option>
+              <option :value="4">4%</option>
+              <option :value="5">5%</option>
+            </select>
+          </div>
           <button class="tze-btn close" @click="$emit('close')" title="Close editor">
             <i class="pi pi-times"></i>
           </button>
@@ -61,12 +78,19 @@
               <span class="tze-bg-hint">Zones still work — pick a background above to see placement</span>
             </div>
 
+            <!-- Grid overlay -->
+            <div
+              v-if="snapEnabled"
+              class="tze-grid-overlay"
+              :style="gridOverlayStyle"
+            ></div>
+
             <!-- Existing zones -->
             <div
               v-for="(zone, idx) in zones"
               :key="zone.id"
               class="tze-zone"
-              :class="{ selected: selectedZoneId === zone.id }"
+              :class="{ selected: selectedZoneId === zone.id, overlapping: dragState && dragState.zoneId === zone.id && dragOverlapping }"
               :style="zoneStyle(zone, idx)"
               @mousedown.stop="onZoneMouseDown($event, zone)"
             >
@@ -84,8 +108,14 @@
             <div
               v-if="drawPreview"
               class="tze-draw-preview"
+              :class="{ overlapping: drawOverlapping }"
               :style="drawPreviewStyle"
             ></div>
+
+            <!-- Overlap warning toast -->
+            <div v-if="overlapWarning" class="tze-overlap-toast">
+              Zones cannot overlap
+            </div>
           </div>
           <!-- Video frame scrubber -->
           <div v-if="selectedIsVideo" class="tze-video-scrub">
@@ -206,11 +236,10 @@ function zoneColor(idx) {
 // State
 const canvasEl = ref(null)
 const bgVideoEl = ref(null)
-const bgFileInput = ref(null)
 const interactionMode = ref('select') // 'select' | 'draw'
 const selectedZoneId = ref(null)
 const bgAssetId = ref('')
-const bgOverrideUrl = ref(null) // data URL from uploaded image or video frame capture
+const videoCaptureUrl = ref(null) // data URL from captured video frame
 const deleteTarget = ref(null)
 const flowData = ref(null)
 const videoDuration = ref(0)
@@ -222,11 +251,53 @@ const dragState = ref(null)
 const drawStart = ref(null)
 const drawPreview = ref(null)
 
+// Overlap state
+const overlapWarning = ref(false)
+let overlapTimer = null
+const dragOverlapping = ref(false)
+
+// Snap state
+const snapEnabled = ref(false)
+const snapGridSize = ref(1)
+
+// Overlap helper — checks if two percentage rects intersect
+function rectsOverlap(a, b) {
+  return (
+    a.x < b.x + b.w &&
+    a.x + a.w > b.x &&
+    a.y < b.y + b.h &&
+    a.y + a.h > b.y
+  )
+}
+
+function rectFromConfig(cfg) {
+  return { x: cfg.x_percent || 0, y: cfg.y_percent || 0, w: cfg.width_percent || 10, h: cfg.height_percent || 10 }
+}
+
+function overlapsAny(rect, excludeId) {
+  return zones.value.some(z => {
+    if (z.id === excludeId) return false
+    return rectsOverlap(rect, rectFromConfig(getConfig(z)))
+  })
+}
+
+function showOverlapToast() {
+  overlapWarning.value = true
+  if (overlapTimer) clearTimeout(overlapTimer)
+  overlapTimer = setTimeout(() => { overlapWarning.value = false }, 2000)
+}
+
+// Snap helper
+function snapToGrid(value) {
+  if (!snapEnabled.value) return value
+  return Math.round(value / snapGridSize.value) * snapGridSize.value
+}
+
 // Computed
 const visualAssets = computed(() => {
   if (!props.items) return []
   return props.items.filter(it => {
-    const t = it.asset_type || ''
+    const t = it.asset?.asset_type || ''
     return t === 'image' || t === 'video'
   })
 })
@@ -237,27 +308,27 @@ const selectedBgItem = computed(() => {
 })
 
 const selectedIsVideo = computed(() => {
-  return selectedBgItem.value?.asset_type === 'video'
+  return selectedBgItem.value?.asset?.asset_type === 'video'
 })
 
 const videoSrc = computed(() => {
   if (!selectedIsVideo.value) return null
   const item = selectedBgItem.value
-  if (item.file_path) return `/media/${item.file_path}`
+  if (item.asset?.uri) return `/media/${item.asset.uri}`
   return null
 })
 
 const bgSrc = computed(() => {
-  // Custom upload or captured video frame takes priority
-  if (bgOverrideUrl.value) return bgOverrideUrl.value
+  // Captured video frame takes priority (from scrubbing playlist video)
+  if (videoCaptureUrl.value) return videoCaptureUrl.value
   if (!bgAssetId.value) return null
   const item = selectedBgItem.value
   if (!item) return null
-  if (item.asset_type === 'video' && item.thumbnail_path) {
-    return `/media/thumbs/${item.thumbnail_path}`
+  if (item.asset?.asset_type === 'video' && item.asset?.thumbnail_path) {
+    return `/media/thumbs/${item.asset.thumbnail_path}`
   }
-  if (item.file_path) return `/media/${item.file_path}`
-  if (item.thumbnail_path) return `/media/thumbs/${item.thumbnail_path}`
+  if (item.asset?.uri) return `/media/${item.asset.uri}`
+  if (item.asset?.thumbnail_path) return `/media/thumbs/${item.asset.thumbnail_path}`
   return null
 })
 
@@ -293,6 +364,21 @@ const drawPreviewStyle = computed(() => {
   }
 })
 
+const drawOverlapping = computed(() => {
+  if (!drawPreview.value) return false
+  const d = drawPreview.value
+  if (d.w < 2 || d.h < 2) return false
+  return overlapsAny({ x: d.x, y: d.y, w: d.w, h: d.h }, null)
+})
+
+const gridOverlayStyle = computed(() => {
+  if (!snapEnabled.value) return null
+  const g = 5
+  return {
+    backgroundImage: `repeating-linear-gradient(0deg, rgba(var(--accent-rgb), 0.15) 0 1px, transparent 1px ${g}%), repeating-linear-gradient(90deg, rgba(var(--accent-rgb), 0.15) 0 1px, transparent 1px ${g}%)`,
+  }
+})
+
 // Helpers
 function targetName(playlistId) {
   const pl = props.allPlaylists?.find(p => p.id === playlistId)
@@ -324,27 +410,8 @@ function autoSelectBg() {
   }
 }
 
-// Background: upload custom image
-function triggerUploadBg() {
-  bgFileInput.value?.click()
-}
-
-function onBgFileUpload(e) {
-  const file = e.target.files?.[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = () => {
-    bgAssetId.value = '' // clear asset selection
-    bgOverrideUrl.value = reader.result
-  }
-  reader.readAsDataURL(file)
-  // Reset input so same file can be re-selected
-  e.target.value = ''
-}
-
 function onBgAssetChange() {
-  // When user picks an asset from dropdown, clear any custom upload
-  bgOverrideUrl.value = null
+  videoCaptureUrl.value = null
   videoDuration.value = 0
   videoTime.value = 0
 }
@@ -374,7 +441,7 @@ function captureVideoFrame() {
   canvas.height = video.videoHeight
   const ctx = canvas.getContext('2d')
   ctx.drawImage(video, 0, 0)
-  bgOverrideUrl.value = canvas.toDataURL('image/jpeg', 0.92)
+  videoCaptureUrl.value = canvas.toDataURL('image/jpeg', 0.92)
   videoTime.value = video.currentTime
 }
 
@@ -409,6 +476,8 @@ function onCanvasMouseDown(e) {
   if (e.button !== 0) return
   if (interactionMode.value === 'draw') {
     const pt = canvasPercent(e)
+    pt.x = snapToGrid(pt.x)
+    pt.y = snapToGrid(pt.y)
     drawStart.value = pt
     drawPreview.value = { x: pt.x, y: pt.y, w: 0, h: 0 }
   } else {
@@ -460,6 +529,8 @@ function onWindowMouseMove(e) {
   // Draw mode
   if (drawStart.value && drawPreview.value) {
     const pt = canvasPercent(e)
+    pt.x = snapToGrid(pt.x)
+    pt.y = snapToGrid(pt.y)
     const x1 = Math.min(drawStart.value.x, pt.x)
     const y1 = Math.min(drawStart.value.y, pt.y)
     const x2 = Math.max(drawStart.value.x, pt.x)
@@ -484,12 +555,16 @@ function onWindowMouseMove(e) {
   const dy = ((e.clientY - ds.startY) / ds.screenH) * 100
 
   if (ds.mode === 'move') {
-    cfg.x_percent = Math.max(0, Math.min(100 - ds.origW, Math.round((ds.origX + dx) * 10) / 10))
-    cfg.y_percent = Math.max(0, Math.min(100 - ds.origH, Math.round((ds.origY + dy) * 10) / 10))
+    cfg.x_percent = snapToGrid(Math.max(0, Math.min(100 - ds.origW, Math.round((ds.origX + dx) * 10) / 10)))
+    cfg.y_percent = snapToGrid(Math.max(0, Math.min(100 - ds.origH, Math.round((ds.origY + dy) * 10) / 10)))
   } else if (ds.mode === 'resize') {
-    cfg.width_percent = Math.max(2, Math.min(100 - ds.origX, Math.round((ds.origW + dx) * 10) / 10))
-    cfg.height_percent = Math.max(2, Math.min(100 - ds.origY, Math.round((ds.origH + dy) * 10) / 10))
+    cfg.width_percent = snapToGrid(Math.max(2, Math.min(100 - ds.origX, Math.round((ds.origW + dx) * 10) / 10)))
+    cfg.height_percent = snapToGrid(Math.max(2, Math.min(100 - ds.origY, Math.round((ds.origH + dy) * 10) / 10)))
   }
+
+  // Check overlap for live feedback
+  const rect = rectFromConfig(cfg)
+  dragOverlapping.value = overlapsAny(rect, ds.zoneId)
 
   // Update in-place for live preview
   branch.trigger_config = cfg
@@ -504,6 +579,12 @@ async function onWindowMouseUp() {
 
     // Enforce minimum size
     if (d.w < 2 || d.h < 2) {
+      return
+    }
+
+    const rect = { x: d.x, y: d.y, w: d.w, h: d.h }
+    if (overlapsAny(rect, null)) {
+      showOverlapToast()
       return
     }
 
@@ -529,13 +610,27 @@ async function onWindowMouseUp() {
     return
   }
 
-  // Drag/resize — commit
+  // Drag/resize — commit (revert if overlapping)
   if (dragState.value) {
     const ds = dragState.value
     dragState.value = null
+    dragOverlapping.value = false
     const branch = flowData.value?.branches?.find(b => b.id === ds.zoneId)
     if (!branch) return
     const cfg = getConfig(branch)
+    const rect = rectFromConfig(cfg)
+
+    if (overlapsAny(rect, ds.zoneId)) {
+      // Revert to original position
+      cfg.x_percent = ds.origX
+      cfg.y_percent = ds.origY
+      cfg.width_percent = ds.origW
+      cfg.height_percent = ds.origH
+      branch.trigger_config = cfg
+      showOverlapToast()
+      return
+    }
+
     await api.patch(`/trigger-branches/${ds.zoneId}`, {
       trigger_config: cfg,
     })
@@ -576,6 +671,12 @@ async function updateConfig(field, event) {
   const val = parseFloat(event.target.value)
   if (isNaN(val)) return
   const cfg = { ...selectedConfig.value, [field]: val }
+  const rect = rectFromConfig(cfg)
+  if (overlapsAny(rect, selectedZone.value.id)) {
+    showOverlapToast()
+    event.target.value = selectedConfig.value[field]
+    return
+  }
   await api.patch(`/trigger-branches/${selectedZone.value.id}`, {
     trigger_config: cfg,
   })
@@ -716,8 +817,6 @@ onUnmounted(() => {
 
 .tze-btn:hover { background: var(--accent-soft-hover); }
 .tze-btn.active { background: var(--accent); color: #fff; }
-.tze-btn.upload { background: var(--bg-raised); color: var(--text-tertiary); padding: 0.35rem 0.5rem; }
-.tze-btn.upload:hover { color: var(--accent-soft); background: var(--bg-accent); }
 .tze-btn.close { background: var(--bg-raised); color: var(--text-tertiary); }
 .tze-btn.close:hover { color: var(--text-primary); background: var(--border-strong); }
 .tze-btn.danger { background: #dc3545; color: #fff; }
@@ -880,10 +979,15 @@ onUnmounted(() => {
 /* Draw preview */
 .tze-draw-preview {
   position: absolute;
-  border: 2px dashed #fff;
-  background: rgba(255, 255, 255, 0.1);
+  border: 2px dashed var(--accent);
+  background: rgba(var(--accent-rgb), 0.15);
   pointer-events: none;
   border-radius: 2px;
+}
+
+.tze-draw-preview.overlapping {
+  border-color: #dc3545;
+  background: rgba(220, 53, 69, 0.2);
 }
 
 /* Sidebar */
@@ -1063,5 +1167,56 @@ onUnmounted(() => {
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
+}
+
+/* Overlap feedback */
+.tze-zone.overlapping {
+  border-color: #dc3545 !important;
+  background: rgba(220, 53, 69, 0.25) !important;
+}
+
+.tze-overlap-toast {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #dc3545;
+  color: #fff;
+  padding: 0.4rem 1rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 10;
+  animation: tze-fade-in 0.2s ease;
+}
+
+@keyframes tze-fade-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Snap controls */
+.tze-snap-group {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.tze-snap-select {
+  background: var(--bg-page);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  padding: 0.3rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+/* Grid overlay */
+.tze-grid-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
 }
 </style>
