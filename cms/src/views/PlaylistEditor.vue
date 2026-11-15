@@ -263,16 +263,15 @@
 
           <!-- Add / Edit branch form -->
           <div v-if="canEdit && !showBranchForm" class="branch-action-row">
-            <button
-              v-if="hasTouchZones"
-              class="btn-add-branch visual-editor primary"
-              @click="showTouchZoneEditor = true"
-              title="Visually draw and manage touch zones"
-            >
-              <i class="pi pi-th-large"></i> Visual Zone Editor
-            </button>
             <button class="btn-add-branch" @click="startAddBranch">
-              <i class="pi pi-plus"></i> Add Branch
+              <i class="pi pi-plus"></i> Add Branch Manually
+            </button>
+            <button
+              class="btn-add-branch visual-editor"
+              @click="showTouchZoneEditor = true"
+              title="Draw and manage touch zones visually on a video frame"
+            >
+              <i class="pi pi-th-large"></i> Visual Touch Zone Editor
             </button>
           </div>
 
@@ -637,10 +636,6 @@ const playlistId = computed(() => route.params.id)
 const sortedBranches = computed(() => {
   if (!currentFlow.value?.branches) return []
   return [...currentFlow.value.branches].sort((a, b) => (b.priority || 0) - (a.priority || 0))
-})
-
-const hasTouchZones = computed(() => {
-  return currentFlow.value?.branches?.some(b => b.trigger_type === 'touch_zone') || false
 })
 
 function getDefaultBranchForm() {
@@ -1776,15 +1771,6 @@ h3 { margin-bottom: 0.8rem; color: var(--text); font-size: 1rem; }
 .btn-add-branch.visual-editor:hover {
   color: var(--accent-soft);
   background: var(--bg-accent);
-}
-
-.btn-add-branch.visual-editor.primary {
-  background: var(--accent);
-  color: #fff;
-}
-
-.btn-add-branch.visual-editor.primary:hover {
-  background: var(--accent-hover);
 }
 
 /* Branch form */
