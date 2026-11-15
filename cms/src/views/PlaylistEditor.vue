@@ -254,9 +254,14 @@
           </div>
 
           <!-- Add / Edit branch form -->
-          <button v-if="canEdit && !showBranchForm" class="btn-add-branch" @click="startAddBranch">
-            <i class="pi pi-plus"></i> Add Branch
-          </button>
+          <div v-if="canEdit && !showBranchForm" class="branch-action-row">
+            <button class="btn-add-branch" @click="startAddBranch">
+              <i class="pi pi-plus"></i> Add Branch
+            </button>
+            <button class="btn-add-branch visual-editor" @click="showTouchZoneEditor = true" title="Visually draw and manage touch zones">
+              <i class="pi pi-th-large"></i> Visual Zone Editor
+            </button>
+          </div>
 
           <div v-if="showBranchForm" class="branch-form">
             <h4>{{ editingBranchId ? 'Edit Branch' : 'Add Branch' }}</h4>
@@ -540,6 +545,16 @@
         </div>
       </div>
     </template>
+
+    <TouchZoneEditor
+      v-if="showTouchZoneEditor"
+      :flow-id="currentFlow.id"
+      :source-playlist-id="playlist.id"
+      :items="items"
+      :all-playlists="allPlaylists"
+      @close="showTouchZoneEditor = false"
+      @updated="loadFlow(currentFlow.id)"
+    />
   </div>
 </template>
 
@@ -549,6 +564,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client.js'
 import PlaylistRow from '../components/PlaylistRow.vue'
 import MiniPlayer from '../components/MiniPlayer.vue'
+import TouchZoneEditor from '../components/TouchZoneEditor.vue'
 import { TRIGGER_PRESETS } from '../presets/triggerPresets.js'
 
 const triggerPresets = TRIGGER_PRESETS
@@ -594,6 +610,7 @@ const renameFlowName = ref('')
 const deleteFlowTarget = ref(null)
 const keyModifiers = ref({ shift: false, ctrl: false, alt: false })
 const branchForm = ref(getDefaultBranchForm())
+const showTouchZoneEditor = ref(false)
 
 const availableAssets = computed(() => {
   if (!nameSearch.value) return allAssets.value
@@ -1665,6 +1682,22 @@ h3 { margin-bottom: 0.8rem; color: var(--text); font-size: 1rem; }
 }
 
 .btn-add-branch:hover { background: var(--accent-soft-hover); }
+
+.branch-action-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-add-branch.visual-editor {
+  background: var(--bg-raised);
+  color: var(--text-tertiary);
+}
+
+.btn-add-branch.visual-editor:hover {
+  color: var(--accent-soft);
+  background: var(--bg-accent);
+}
 
 /* Branch form */
 .branch-form {
