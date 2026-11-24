@@ -1,5 +1,7 @@
 """Cross-platform kiosk browser launcher for TinySignage."""
 import argparse
+import base64
+import hashlib
 import os
 import subprocess
 import platform
@@ -191,21 +193,77 @@ def _wait_for_url(url: str, timeout: int = 60) -> None:
     print(f"WARN: {url} did not become ready within {timeout}s; launching anyway")
 
 
+def _fetch_remote_spki_hash(server_url: str) -> str | None:
+    """Fetch a remote server's TLS cert and compute its SPKI hash.
+
+    Player-only Pis lack the ``cryptography`` library, so we use the
+    ``openssl`` CLI (standard on Pi OS) to extract the public key and
+    compute base64(SHA-256(SubjectPublicKeyInfo)) — the format Chromium
+    expects for ``--ignore-certificate-errors-spki-list``.
+    """
+    parsed = urllib.parse.urlparse(server_url)
+    host = parsed.hostname
+    port = parsed.port or 443
+    if not host:
+        return None
+
+    try:
+        # Step 1: fetch the server's PEM certificate
+        p1 = subprocess.run(
+            ["openssl", "s_client", "-connect", f"{host}:{port}",
+             "-servername", host],
+            input=b"",
+            capture_output=True,
+            timeout=10,
+        )
+        if not p1.stdout:
+            return None
+
+        # Step 2: extract the public key in PEM format
+        p2 = subprocess.run(
+            ["openssl", "x509", "-pubkey", "-noout"],
+            input=p1.stdout,
+            capture_output=True,
+            timeout=5,
+        )
+        if p2.returncode != 0 or not p2.stdout:
+            return None
+
+        # Step 3: convert PEM public key to DER
+        p3 = subprocess.run(
+            ["openssl", "pkey", "-pubin", "-outform", "DER"],
+            input=p2.stdout,
+            capture_output=True,
+            timeout=5,
+        )
+        if p3.returncode != 0 or not p3.stdout:
+            return None
+
+        # Step 4: SHA-256 + base64
+        digest = hashlib.sha256(p3.stdout).digest()
+        return base64.b64encode(digest).decode("ascii")
+    except FileNotFoundError:
+        print("WARN: openssl CLI not found — cannot compute remote SPKI hash")
+    except subprocess.TimeoutExpired:
+        print(f"WARN: timeout connecting to {host}:{port} for SPKI hash")
+    except Exception as e:
+        print(f"WARN: could not fetch SPKI hash from {host}:{port}: {e}")
+    return None
+
+
 def _compute_https_kiosk_flags(config: dict, server_url: str) -> list[str]:
-    """Return Chromium flags needed to accept the local self-signed cert.
+    """Return Chromium flags needed to accept a self-signed cert.
 
-    If we can read the cert file locally (co-located player+CMS), compute
-    the SPKI hash and pass it via --ignore-certificate-errors-spki-list
-    which scopes the override to just this one cert.
-
-    Otherwise (remote CMS) fall back to --ignore-certificate-errors which
-    is blunter but still works in kiosk mode where --disable-infobars
-    hides the warning banner.
+    Three-tier approach:
+    1. Local cert file (co-located CMS) → compute SPKI via cryptography lib.
+    2. Remote CMS → fetch cert via openssl CLI and compute SPKI hash.
+    3. Fall back to --ignore-certificate-errors (unreliable on recent Chromium).
     """
     parsed = urllib.parse.urlparse(server_url)
     if parsed.scheme.lower() != "https":
         return []
 
+    # Tier 1: local cert file (co-located player+CMS)
     https_cfg = (config.get("server", {}) or {}).get("https", {}) or {}
     cert_file = https_cfg.get("cert_file", "./certs/cert.pem")
     cert_path = Path(cert_file)
@@ -222,8 +280,14 @@ def _compute_https_kiosk_flags(config: dict, server_url: str) -> list[str]:
         except Exception as e:
             print(f"WARN: could not compute SPKI hash for {cert_path}: {e}")
 
-    # Fall back: accept all cert errors. Safe in kiosk mode because
-    # --disable-infobars + --kiosk hide the warning banner.
+    # Tier 2: fetch cert from remote server using openssl CLI
+    spki = _fetch_remote_spki_hash(server_url)
+    if spki:
+        print(f"Remote SPKI hash: {spki}")
+        return [f"--ignore-certificate-errors-spki-list={spki}"]
+
+    # Tier 3: blanket ignore (last resort — unreliable on recent Chromium)
+    print("WARN: could not pin server cert, falling back to --ignore-certificate-errors")
     return ["--ignore-certificate-errors", "--test-type"]
 
 
